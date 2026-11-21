@@ -23,6 +23,8 @@ WASI calls and host imports run through provider futures. The host runtime has t
 
 An empty capability set provides no preopen paths, guest environment or network access. Preopens open link-free directory paths component by component by descriptor. Wasmtime's capability handles resolve guest paths relative to that directory. Read-only is the default. Set `Preopen.writable` to grant filesystem mutation inside that directory. Up to 32 paths can be mounted per tenant.
 
+The Linux preopen adapter passes its retained directory descriptor through `/proc/self/fd`. A Linux deployment that supplies preopens must expose this procfs path. Failure to resolve a retained descriptor returns a capability error.
+
 Set `PluginOptions.environment` to supply up to 64 explicit names and values, with up to 64 KiB across the entries. Names use ASCII letters, digits, and underscores and must start with a letter or underscore. Values are UTF-8 without NUL. The compatibility flag `inheritEnvironment=true` requires explicit entries. The runtime uses only those entries. Set `allowNetwork=true` to grant WASI network and name lookup capability.
 
 Standard output and error share a bounded capture per operation. An oversized write retains its prefix and returns a resource limit error. `copyOutput` copies the latest capture to the supplied request arena. Its handle lasts for that arena's epoch.
