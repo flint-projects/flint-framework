@@ -30,6 +30,7 @@ version (linux)
     import flint.reactor.sys.completion : CompletionPort, KernelEvent, cancelKernel, closeCompletionPort,
         openCompletionPort, pollCompletion, submitAccept, submitRead, submitReadable, submitWrite;
     import flint.reactor.sys.nativewatch : NativeWatches;
+    import flint.reactor.sys.scratch : Scratch;
 }
 else version (OSX)
     version = ReactorReadinessOnly;
@@ -125,15 +126,21 @@ struct Reactor
         auto runtime = new Runtime;
         runtime.options = options;
         runtime.workers = new Worker[count];
+        bool ready;
+        scope (exit)
+            if (!ready)
+                runtime.release();
         foreach (index, ref worker; runtime.workers)
-            worker.initialize(runtime, cast(uint) index, cpus[index]);
+        {
+            const status = worker.initialize(runtime, cast(uint) index, cpus[index]);
+            if (status != Status.ok)
+                return Result!Reactor(Reactor.init, Error(status, "could not reserve reactor I/O scratch"));
+        }
         const result = runtime.prepareBackend(options.backend);
         if (result.code != Status.ok)
-        {
-            runtime.release();
             return Result!Reactor(Reactor.init, result);
-        }
 
+        ready = true;
         Result!Reactor created;
         created.value.runtime = runtime;
         created.value.owner = true;
@@ -645,7 +652,10 @@ private struct Worker
     uint nextFree;
     OperationTable operations;
     IoWork[] workItems;
-    ubyte[] buffers;
+    version (linux)
+        Scratch buffers;
+    else
+        ubyte[] buffers;
     uint liveOperations;
     Mailbox mailbox;
     Timers timers;
@@ -676,7 +686,7 @@ private struct Worker
 
     @disable this(this);
 
-    void initialize(Runtime* runtime, uint index, uint cpu)
+    Status initialize(Runtime* runtime, uint index, uint cpu)
     {
         this.runtime = runtime;
         this.index = index;
@@ -689,11 +699,19 @@ private struct Worker
         connections[$ - 1].next = noSlot;
         operations = OperationTable(options.maxPendingIoPerCore);
         workItems = new IoWork[options.maxPendingIoPerCore];
-        buffers = new ubyte[cast(size_t) options.ioBufferBytes * options.maxPendingIoPerCore];
         mailbox.initialize(options.mailboxCapacity);
         timers.initialize(options.maxTimersPerCore);
+        const bytes = cast(size_t) options.ioBufferBytes * options.maxPendingIoPerCore;
         version (linux)
+        {
             nativeWatches.reserve(options.maxNativeWatchesPerCore);
+            return buffers.reserve(bytes);
+        }
+        else
+        {
+            buffers = new ubyte[bytes];
+            return Status.ok;
+        }
     }
 
     void preallocateFibers()
@@ -876,7 +894,10 @@ private struct Worker
             closeCompletionPort(completions);
         }
         version (linux)
+        {
             nativeWatches.release();
+            buffers.release();
+        }
     }
 
     version (linux)
@@ -1085,7 +1106,10 @@ private struct Worker
     {
         const length = runtime.options.ioBufferBytes;
         const offset = cast(size_t) slot * length;
-        return buffers[offset .. offset + length];
+        version (linux)
+            return buffers.slice(offset, offset + length);
+        else
+            return buffers[offset .. offset + length];
     }
 
     private void advanceOperations() nothrow @nogc
