@@ -27,7 +27,10 @@ private string decoded(ref scope RequestArena arena, Buffer input)
 @("metric series reject conflicting names, invalid bounds, and cardinality overflow")
 unittest
 {
-    Registry registry;
+    // Keep the startup registry rooted throughout the allocation-heavy registration loop.
+    static Registry registry;
+    scope (exit)
+        registry = Registry.init;
     Context context;
     assert(registry.open(ActuatorOptions.init).code == Status.ok);
     assert(registry.histogram("duration", [0.5, 1.0]).ok);
