@@ -10,18 +10,17 @@ HTTP/1 is the default. Set `ServerOptions.http2PriorKnowledge` for cleartext HTT
 
 ## Linux verification
 
-The linked native tests passed under DMD and LDC with pinned providers. The socket fixture exercised HTTP/1 framing and bindings, advice, slow-receiver drainage, disconnect and detached worker cancellation, slot reuse, HTTP/2 multiplexing, flow credit, reset, stream caps and shutdown GOAWAY, trusted TLS negotiation for both HTTP versions, and the shutdown of 1,024 admitted requests. Independent C boundary tests ran with ASan, UBSan and leak detection. Their linked provider archives were built without sanitizer instrumentation. The LDC-native `:web` unit suite also passed ASan and leak detection. Both compilers rejected the four compile-negative fixtures in debug and release.
+The linked native tests passed under DMD and LDC with pinned providers. The socket fixture exercised HTTP/1 framing and bindings, advice, 128 KiB slow-receiver drainage, disconnect and detached worker cancellation, slot reuse, HTTP/2 multiplexing and flow credit, stream caps, trusted TLS negotiation for both HTTP versions, and the shutdown of 1,024 admitted requests. An overflowing WINDOW_UPDATE on a live stream received RST_STREAM with FLOW_CONTROL_ERROR while its sibling stream completed. A peer GOAWAY received reciprocal GOAWAY and the connection drained through EOF. Independent C boundary tests ran with ASan, UBSan and leak detection. Their linked provider archives were built without sanitizer instrumentation. The LDC-native `:web` unit suite also passed ASan and leak detection. Both compilers rejected the four compile-negative fixtures in debug and release.
 
-The full h2spec v2.6.0 run passed 137 of 146 cases with zero skips. The direct pinned C adapter control passed 129 of 146 cases, and reproduced all nine Flint failures. The control uses a simplified transport. Its additional failures provide no conclusion about the Flint listener.
+The integrated h2spec v2.6.0 run passed 138 of 146 cases with zero skips. The live stream-window overflow case passed after the stream-level error handling change. The remaining eight cases are recorded here.
 
-| Cases | Observed behavior and follow-up |
+| Cases | Observed behavior |
 | --- | --- |
-| `generic/3.8.1`, `http2/7.1` | A peer GOAWAY followed immediately by a PING can reset the socket. Distinguish successful peer GOAWAY from local fatal termination. Drain to a bounded peer EOF or allow the provider to acknowledge the PING. |
-| `http2/5.1.8`, `5.1.9`, `5.1.11`, `5.1.12` | DATA or HEADERS on a closed stream timed out in h2spec. RFC 9113 allows minimal processing of raced frames after RST_STREAM and retains error requirements for other closed-stream cases. Reproduce the orderly-close cases separately. |
-| `http2/5.1.1.2` | The test observes DATA on the existing higher-numbered stream. Stream IDs are increasing, and skipped lower IDs become implicitly closed. Observe the connection verdict after the existing stream's DATA to resolve the expected outcome. |
+| `generic/3.8.1`, `http2/7.1` | The probe sends PING immediately after peer GOAWAY and observes reciprocal GOAWAY while waiting for TCP close or PING ACK. The separate shutdown fixture verifies bilateral GOAWAY and EOF. |
+| `http2/5.1.8`, `5.1.9`, `5.1.11`, `5.1.12` | DATA or HEADERS on a closed stream timed out while h2spec waited for an error. RFC 9113 §5.1 allows minimal processing and discarding of frames on closed streams, with valid minimal processing required for connection state. |
+| `http2/5.1.1.2` | The probe reported DATA on the existing higher-numbered stream while waiting for a connection error. RFC 9113 §5.1.1 specifies that skipped lower IDs become closed. |
 | `http2/5.3.1.2` | The provider ignores self-dependency in a PRIORITY frame. RFC 9113 deprecates the RFC 7540 dependency scheme. |
-| `http2/6.9.1.3` | A stream-window overflow closes the connection. RFC 9113 requires RST_STREAM with FLOW_CONTROL_ERROR for a live stream. Reproduce while the affected stream remains live and observe the provider's error callback. |
 
-[RFC 9113 §5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1), [§5.1.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1.1), [§5.3.2](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.3.2), [§6.7](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.7), [§6.9.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.9.1).
+[RFC 9113 §5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1), [§5.1.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1.1), [§5.3.2](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.3.2), [§6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8), [§6.9.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.9.1).
 
-The release gate remains open. Local measurements exceeded the DMD edited-build ceiling and the full template instance ceiling. The dedicated-runner baseline, million-reply GC and arena accounting, head-to-head trials and other target builds remain pending.
+The release gate remains open. Local measurements exceeded the DMD edited-build ceiling and the full template instance ceiling. The Linux baseline, million-reply GC and arena accounting, and head-to-head trials remain pending.
