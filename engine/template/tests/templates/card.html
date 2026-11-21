@@ -1,0 +1,1 @@
+<div title="{{model.title}}"><a href="{{model.url}}">{{model.title}}</a>{% if model.active %}{% for item in model.items %}{{item.name}}={{item.count}}{% end %}{% else %}OFF{% end %}{% include "footer.html" %}</div>
