@@ -1,0 +1,78 @@
+module flint.reactor.fiber_pool_test;
+
+import core.atomic : atomicLoad, atomicOp, atomicStore;
+import flint.arena : Status;
+import flint.conc : Deadline;
+import flint.reactor : Reactor, ReactorOptions;
+
+private enum uint poolSize = 1024;
+private enum uint tasks = 300;
+
+private size_t residentBefore;
+private shared size_t residentInside;
+private shared uint finished;
+
+private size_t residentBytes() @trusted nothrow @nogc
+{
+    version (linux)
+    {
+        import core.stdc.stdio : fclose, fopen, fscanf;
+        import core.memory : pageSize;
+
+        auto file = fopen("/proc/self/statm", "r");
+        if (file is null)
+            return 0;
+        scope (exit)
+            fclose(file);
+        ulong size, resident;
+        if (fscanf(file, "%llu %llu", &size, &resident) != 2)
+            return 0;
+        return cast(size_t) resident * pageSize;
+    }
+    else
+        return 0;
+}
+
+private void measure() @safe nothrow @nogc
+{
+    atomicStore(residentInside, residentBytes());
+    auto reactor = Reactor.current();
+    foreach (i; 0 .. tasks)
+        assert(reactor.post(0, &yieldOnce).code == Status.ok);
+}
+
+private void yieldOnce() @safe nothrow @nogc
+{
+    auto reactor = Reactor.current();
+    assert(reactor.yieldUntil(Deadline.afterMillis(1)).code == Status.ok);
+    if (atomicOp!"+="(finished, 1) == tasks)
+        reactor.stop();
+}
+
+@("a preallocated fiber pool keeps unused stacks out of resident memory and still runs every task")
+unittest
+{
+    import core.memory : pageSize;
+
+    ReactorOptions options;
+    options.cores = 1;
+    options.fiberPoolSize = poolSize;
+    options.maxTimersPerCore = tasks;
+    options.mailboxCapacity = tasks + 4;
+    auto server = Reactor.create(options);
+    assert(server.ok, server.error.message);
+    residentBefore = residentBytes();
+    assert(server.value.post(0, &measure).code == Status.ok);
+    const status = server.value.run();
+    assert(status.code == Status.ok, status.message);
+    assert(atomicLoad(finished) == tasks);
+    const stats = server.value.workerStats(0);
+    assert(stats.ok && stats.value.gcAllocated == 0);
+    version (linux)
+    {
+        // Eagerly written initial frames made one page per pooled fiber resident.
+        const inside = atomicLoad(residentInside);
+        assert(inside > residentBefore);
+        assert(inside - residentBefore < poolSize * pageSize / 2);
+    }
+}

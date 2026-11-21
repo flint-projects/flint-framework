@@ -10,7 +10,7 @@ import flint.conc : Context, Deadline;
 import flint.conc.wait : replaceWaitHook;
 import flint.reactor.internal.operations : OperationId, OperationTable;
 import flint.reactor.internal.queues : Mailbox, Message, Timers;
-import flint.reactor.sys.fibers : createFiber, releaseFiber, resetFiber, resumeFiber, yieldFiber;
+import flint.reactor.sys.fibers : createFiber, PoolFiber, releaseFiber, resetFiber, resumeFiber, yieldFiber;
 import flint.reactor.sys.workers : availableCpus, joinWorker, pinWorker, startWorker, workerUsage, yieldWorker;
 
 public import flint.reactor.types : AcceptDelegate, AcceptFn, Backend, Completion, CompletionDelegate, CompletionFn,
@@ -624,7 +624,7 @@ private struct IoWork
 
 private struct FiberTask
 {
-    Fiber fiber;
+    PoolFiber fiber;
     TaskFn task;
     TaskDelegate boundTask;
     TaskContext context;
