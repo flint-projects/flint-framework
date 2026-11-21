@@ -1,8 +1,8 @@
 # storage exercised probe
 
-The implementation task creates `source/app.d` and `baseline/source/app.d` in this directory. The recipes resolve the local implementation root. Source is intentionally absent until real behavior exists; the measurement tool rejects missing probes.
-
-`source/app.d` must instantiate and execute the required workload in `handoff/specs/tier-6/storage.md`. Preserve an observable checksum derived from actual results and check correctness through code that remains active in the release build. A bare import, constant-only substitute or discarded operation is invalid. Use the pinned input sizes/seeds from the specification; microbenchmark timing, where applicable, must exceed 100 ms per trial.
+`source/app.d` exercises the public Storage client and `baseline/source/app.d`
+calls the pinned libcurl C ABI. Both consume the shared 1 GiB workload and check its
+observable SHA-256 in release builds.
 
 ## Equivalent provider baseline
 
@@ -19,3 +19,28 @@ Build both variants under O3 and Oz with the same compiler and native profile. R
 The complete feature binary is the deployed-size observation for this fixture. The baseline's full bytes are the common provider/dependency/harness footprint, not an exact isolated C-only byte count. Native archive inventories are diagnostic and are not subtracted from executables. Report these absolute sizes beside the wrapper delta; never describe a small delta as the full package deployment size.
 
 The fixed 3,000,000-byte CLI, 8,000,000-byte REST, 300,000-byte raw browser WASM and 100,000-byte gzip WASM application caps remain unchanged and include their actual selected dependency closure. A large provider cannot bypass an application cap through this per-package control. Freeze both source workloads and selected provider profile before collecting the first baseline; changing them requires a separately reviewed baseline experiment. All ceilings are unmeasured engineering targets until actual implementations produce evidence.
+
+## Local replay
+
+Prepare the pinned curl and OpenSSL archives with the native HTTP profile. Build `bench` and
+`bench/baseline` with DUB and the same compiler flags, then run each linked executable through
+`python3 packages/storage/bench/loopback.py /path/to/executable`. The harness binds a numeric
+loopback address, supplies fixture-only credentials through compile-time constants and verifies
+each SigV4 request independently. Four initial part responses wait for all four signed uploads,
+which proves the selected concurrency was exercised.
+
+Both probes write 128 full 8 MiB parts, download the complete object into an incremental
+OpenSSL SHA-256 context, and remove the object. The peer checks each uploaded stripe against
+the deterministic fixture pattern. It retains part digests and regenerates each part for
+the download, checking those digests again. The peer's memory stays bounded independently of
+object length.
+
+The SDK producer uses one 64 KiB input stripe and its configured four 8 MiB owner buffers.
+The reference fills four owned part buffers and submits through the pinned libcurl multi and
+SigV4 APIs. Both use the fixture's canonical path, method and query parameters. The reference
+uses libcurl's ordinary path setting because its built-in SigV4 rejects `PATH_AS_IS`.
+
+Report actual bytes, the matching download digest, upload/download elapsed time,
+same-thread D GC bytes, and independent high-water RSS for the client and the fixture process.
+Total RSS includes code, allocator metadata and fixed transport costs. Compare its observation
+alongside the measured workload's fixed payload reservation.
