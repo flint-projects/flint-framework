@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>FLNT browser fixture</title>
+<div id="mount"></div>
+<output id="result">pending</output>
+<script type="module">
+import {createDriver, Status} from "../../../benchmarks/bench-wasm/driver.mjs";
+
+function check(condition, message) {
+    if (!condition) throw new Error(message);
+}
+
+const result = document.querySelector("#result");
+try {
+    const path = new URL(location.href).searchParams.get("wasm");
+    check(path !== null, "missing compiled fixture path");
+    const url = new URL(path, location.origin);
+    check(url.origin === location.origin, "fixture WASM must share the origin");
+    const module = await fetch(url);
+    const {instance} = await WebAssembly.instantiate(await module.arrayBuffer(), {});
+    const guest = instance.exports;
+    const length = guest.fixture_write();
+    const pointer = guest.fixture_ptr();
+    const mount = document.querySelector("#mount");
+    const driver = createDriver(mount, {epoch:19});
+    const observer = new MutationObserver(() => {});
+    observer.observe(mount, {subtree:true, childList:true, attributes:true});
+    check(driver.apply(guest.memory, pointer, length) === 7, "frame command count differs");
+    check(observer.takeRecords().length === 2, "expected exactly two mounted nodes");
+    const [label, canvas] = mount.children;
+    check(label.getAttribute("data-fixture") === "1", "attribute absent");
+    check(label.textContent === "<script id='fixture'>ignored<\/script> 🦊", "text was altered");
+    check(!mount.querySelector("script"), "text was interpreted as markup");
+    check(canvas.width === 300 && canvas.height === 150, "surface dimensions differ");
+    const pixel = canvas.getContext("2d").getImageData(299, 149, 1, 1).data;
+    check(pixel.join(",") === "255,0,0,255", "canvas boundary pixel differs");
+
+    guest.memory.grow(1);
+    const view = new DataView(guest.memory.buffer, pointer, length);
+    view.setUint32(16, 2, true);
+    view.setUint32(24, 1, true);
+    let rejected = false;
+    try {
+        driver.apply(guest.memory, pointer, length);
+    } catch (error) {
+        rejected = error.status === Status.invalidArgument;
+    }
+    check(rejected && observer.takeRecords().length === 0, "invalid frame mutated the host");
+    driver.reset(20);
+    check(mount.childNodes.length === 0, "reset retained old nodes");
+    rejected = false;
+    view.setUint32(24, 0, true);
+    try {
+        driver.apply(guest.memory, pointer, length);
+    } catch (error) {
+        rejected = error.status === Status.invalidArgument;
+    }
+    check(rejected && mount.childNodes.length === 0, "reset accepted a stale epoch");
+    observer.disconnect();
+    result.textContent = "PASS: FLNT DOM, canvas, memory growth, and reset";
+} catch (error) {
+    result.textContent = `FAIL: ${error.message}`;
+}
+</script>
+</html>
