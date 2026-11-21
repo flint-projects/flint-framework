@@ -1,6 +1,7 @@
 module flint.reactor;
 
 import core.atomic : atomicLoad, atomicStore, cas;
+import core.bitop : bsf;
 import core.lifetime : move;
 import core.memory : GC;
 import core.thread : Fiber, Thread;
@@ -60,6 +61,7 @@ private Error waitOnOwner(Deadline deadline) nothrow @nogc
 private Runtime* currentRuntime;
 private uint currentWorkerIndex = uint.max;
 private enum noSlot = uint.max;
+private enum ioWordBits = ulong.sizeof * 8;
 private enum listenToken = 1UL;
 private enum nativeWatchToken = 2UL;
 private enum waitBudgetMillis = 5;
@@ -652,6 +654,7 @@ private struct Worker
     uint nextFree;
     OperationTable operations;
     IoWork[] workItems;
+    ulong[] activeIo;
     version (linux)
         Scratch buffers;
     else
@@ -699,6 +702,7 @@ private struct Worker
         connections[$ - 1].next = noSlot;
         operations = OperationTable(options.maxPendingIoPerCore);
         workItems = new IoWork[options.maxPendingIoPerCore];
+        activeIo = new ulong[(options.maxPendingIoPerCore + ioWordBits - 1) / ioWordBits];
         mailbox.initialize(options.mailboxCapacity);
         timers.initialize(options.maxTimersPerCore);
         const bytes = cast(size_t) options.ioBufferBytes * options.maxPendingIoPerCore;
@@ -1080,6 +1084,7 @@ private struct Worker
             connection.write = operation;
             operationBuffer(operation.slot)[0 .. length] = input;
         }
+        activeIo[operation.slot / ioWordBits] |= 1UL << (operation.slot % ioWordBits);
         ++liveOperations;
         return Result!IoId(IoId(id, operation.slot, operation.generation));
     }
@@ -1114,11 +1119,16 @@ private struct Worker
 
     private void advanceOperations() nothrow @nogc
     {
-        foreach (ref work; workItems)
+        foreach (index, ref word; activeIo)
         {
-            if (work.id.generation == 0)
-                continue;
-            advanceOperation(work.id);
+            ulong unvisited = ulong.max;
+            // Read the live word again after each callback, which can queue later slots.
+            while (const available = word & unvisited)
+            {
+                const bit = bsf(available);
+                unvisited = (ulong.max << bit) << 1;
+                advanceOperation(workItems[index * ioWordBits + bit].id);
+            }
         }
     }
 
@@ -1217,6 +1227,7 @@ private struct Worker
         const retired = operations.retire(id);
         assert(retired == Status.ok);
         *work = IoWork.init;
+        activeIo[id.slot / ioWordBits] &= ~(1UL << (id.slot % ioWordBits));
         --liveOperations;
         closeIdle(slot);
 
