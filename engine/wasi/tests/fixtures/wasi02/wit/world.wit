@@ -1,0 +1,11 @@
+package flint:plugin@0.2.0;
+
+world plugin {
+    import wasi:random/insecure@0.2.12;
+    import wasi:sockets/instance-network@0.2.12;
+    import wasi:sockets/ip-name-lookup@0.2.12;
+
+    export answer: func() -> s32;
+    export add: func(left: s32, right: s32) -> s32;
+    export resolve: func() -> s32;
+}

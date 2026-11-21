@@ -1,0 +1,10 @@
+module copy_plugin;
+
+import flint.wasi : Plugin;
+
+@safe:
+
+void duplicate(ref Plugin source)
+{
+    Plugin destination = source;
+}

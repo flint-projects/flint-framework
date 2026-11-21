@@ -1,0 +1,8 @@
+package flint:plugin@0.3.0;
+
+world plugin {
+    import wasi:random/insecure@0.3.0;
+
+    export answer: func() -> s32;
+    export add: func(left: s32, right: s32) -> s32;
+}

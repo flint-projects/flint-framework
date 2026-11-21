@@ -1,0 +1,11 @@
+(module
+  (import "wasi:random/insecure@0.2.12" "get-insecure-random-u64" (func $random (result i64)))
+  (import "wasi:sockets/instance-network@0.2.12" "instance-network" (func $net (result i32)))
+  (import "wasi:sockets/ip-name-lookup@0.2.12" "resolve-addresses" (func $resolve (param i32 i32 i32 i32)))
+  (memory (export "memory") 1)
+  (data (i32.const 64) "localhost")
+  (func (export "answer") (result i32) call $random drop i32.const 42)
+  (func (export "add") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add)
+  (func (export "resolve") (result i32)
+    (call $resolve (call $net) (i32.const 64) (i32.const 9) (i32.const 24))
+    (i32.load8_u (i32.const 24))))
