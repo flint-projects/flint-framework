@@ -48,6 +48,7 @@ int flint_proto_unpack_fields(const flint_proto_descriptor *descriptor, const ui
                               size_t capacity, size_t *count);
 
 /* A canonical version 13 request key has 24 bytes. Success writes 28 accept bytes. */
+int flint_rpc_websocket_key(char *output, size_t capacity);
 int flint_rpc_websocket_accept(const char *key, size_t key_length, char *output, size_t capacity);
 
 #ifdef __cplusplus

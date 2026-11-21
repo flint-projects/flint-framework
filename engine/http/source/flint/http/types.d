@@ -116,3 +116,40 @@ struct HttpResponse
 
 /// Called on the request fiber with scoped response bytes. Return an error to stop.
 alias ChunkConsumer = Error delegate(scope const(ubyte)[] chunk) @safe nothrow @nogc;
+
+/// Select the transport behavior of an explicit incremental request.
+enum HttpStreamMode : ubyte
+{
+    /// GET with an incremental entity and no outgoing body.
+    download = 1,
+    /// POST with independently paced request and response bodies over HTTP/2.
+    duplex,
+    /// A verified HTTP/1.1 WebSocket upgrade exposing raw protocol bytes.
+    upgradedBytes
+}
+
+/// One incremental request field. The provider copies both spans during setup.
+struct HttpStreamField
+{
+    /// Field name.
+    const(char)[] name;
+    /// Field value.
+    const(char)[] value;
+}
+
+/// Options for a single incremental transfer.
+struct HttpStreamOptions
+{
+    /// Absolute HTTPS or WSS URL, or an explicitly allowed numeric loopback URL.
+    const(char)[] url;
+    /// Request and response transport mode.
+    HttpStreamMode mode = HttpStreamMode.download;
+    /// Permit cleartext on numeric Linux loopback addresses.
+    bool allowLoopbackCleartext;
+    /// Extra fields copied before the request starts.
+    const(HttpStreamField)[] headers;
+    /// Duplex receive-rate target (32–256 KiB/s). Pinned curl also uses it to pace stream credit.
+    uint duplexReceiveBytesPerSecond = 256 * 1024;
+    /// A separately borrowed generated field, supplied after headers when its name is nonempty.
+    HttpStreamField finalField;
+}

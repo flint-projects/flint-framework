@@ -85,7 +85,7 @@ unittest
     assert(decoder.feed(unmasked[], arena).complete);
     auto header = serverHeader(WsOpcode.binary, 65_536);
     assert(header.ok() && header.value.length == 10);
-    assert(header.value.bytes == [0x82, 127, 0, 0, 0, 0, 0, 1, 0, 0]);
+    assert(header.value.bytes[0 .. header.value.length] == [0x82, 127, 0, 0, 0, 0, 0, 1, 0, 0]);
     assert(serverHeader(WsOpcode.ping, 126).error.code == Status.invalidArgument);
 }
 

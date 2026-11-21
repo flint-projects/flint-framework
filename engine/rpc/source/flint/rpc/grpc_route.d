@@ -4,6 +4,7 @@ module flint.rpc.grpc_route;
 import flint.arena : Error, RequestArena, Result, Status;
 import flint.conc : Context;
 import flint.rpc.grpc : RpcCode, RpcStatus, StreamLimits, grpcDeadline, maximumMessageBytes;
+import flint.rpc.metadata : asciiEqual, mediaValue, trimField;
 import flint.rpc.session : CallState, GrpcService, RpcHandler, RpcStream;
 import flint.web : Method, Request, RequestContext, Server, StreamField, StreamMode, StreamRoute, StreamToken;
 
@@ -23,7 +24,7 @@ Error registerGrpc(ref Server server, GrpcService service, string method, RpcHan
             StreamMode.duplex, &route.run));
 }
 
-private bool identifier(scope const(char)[] spelling, bool qualified) pure nothrow @nogc
+package(flint.rpc) bool identifier(scope const(char)[] spelling, bool qualified) pure nothrow @nogc
 {
     bool first = true;
     foreach (byteValue; spelling)
@@ -99,50 +100,25 @@ private bool headerMatches(ref scope Request request, ref scope RequestArena are
     const field = request.header(name);
     bool matched;
     return field.ok() && arena.read(field.value, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
-        matched = check(trim(cast(const(char)[]) bytes));
+        matched = check(trimField(cast(const(char)[]) bytes));
     }) == Status.ok && matched;
 }
 // dfmt on
 
-private const(char)[] trim(return scope const(char)[] value) pure nothrow @nogc
+package(flint.rpc) bool grpcMedia(scope const(char)[] field) pure nothrow @nogc
 {
-    while (value.length != 0 && (value[0] == ' ' || value[0] == '\t'))
-        value = value[1 .. $];
-    while (value.length != 0 && (value[$ - 1] == ' ' || value[$ - 1] == '\t'))
-        value = value[0 .. $ - 1];
-    return value;
-}
-
-private bool grpcMedia(scope const(char)[] field) pure nothrow @nogc
-{
-    size_t end;
-    while (end < field.length && field[end] != ';')
-        ++end;
-    const media = trim(field[0 .. end]);
-    return media == "application/grpc" || media == "application/grpc+proto";
+    const media = mediaValue(field);
+    return asciiEqual(media, "application/grpc") || asciiEqual(media, "application/grpc+proto");
 }
 
 private bool trailers(scope const(char)[] value) pure nothrow @nogc
 {
-    return equalAscii(value, "trailers");
+    return asciiEqual(value, "trailers");
 }
 
 private bool identity(scope const(char)[] value) pure nothrow @nogc
 {
-    return equalAscii(value, "identity");
-}
-
-private bool equalAscii(scope const(char)[] value, string lowercase) pure nothrow @nogc
-{
-    if (value.length != lowercase.length)
-        return false;
-    foreach (index, byteValue; value)
-    {
-        const candidate = byteValue >= 'A' && byteValue <= 'Z' ? byteValue + ('a' - 'A') : byteValue;
-        if (candidate != lowercase[index])
-            return false;
-    }
-    return true;
+    return asciiEqual(value, "identity");
 }
 
 // dfmt off
@@ -159,12 +135,13 @@ private Result!Context deadline(ref scope Request request, ref scope RequestAren
         return Result!Context(Context.init, field.error);
     Result!Context result;
     const read = arena.read(field.value, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
-        result = grpcDeadline(trim(cast(const(char)[]) bytes), parent);
+        result = grpcDeadline(trimField(cast(const(char)[]) bytes), parent);
     });
     if (read != Status.ok)
         return Result!Context(Context.init, Error(read, "gRPC timeout is unavailable"));
     return Result!Context(result.value, result.error);
 }
+// dfmt on
 // dfmt on
 
 private RpcCode mapped(Status status) pure nothrow @nogc

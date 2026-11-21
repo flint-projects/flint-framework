@@ -7,6 +7,7 @@ import flint.arena : Error, Result, Status;
 
 version (FlintNativeOpenssl)
 {
+    private extern (C) int flint_rpc_websocket_key(char*, size_t) @system nothrow @nogc;
     private extern (C) int flint_rpc_websocket_accept(const(char)*, size_t, char*, size_t) @system nothrow @nogc;
 }
 
@@ -27,4 +28,19 @@ version (FlintNativeOpenssl)
     else
         return Result!(char[28])(Result!(char[28]).init.value, Error(Status.unsupported,
                 "pinned OpenSSL is unavailable"));
+}
+
+/// Generate the outbound upgrade nonce from the provider's cryptographic random source.
+// SAFETY: The synchronous shim copies 24 bytes into this local array, retains no pointer and calls no D code.
+@trusted package(flint.rpc) Result!(char[24]) websocketKey() nothrow @nogc
+{
+    char[24] key;
+    version (FlintNativeOpenssl)
+    {
+        if (flint_rpc_websocket_key(key.ptr, key.length) == 0)
+            return Result!(char[24])(key);
+        return Result!(char[24])(key, Error(Status.unavailable, "WebSocket random key generation failed"));
+    }
+    else
+        return Result!(char[24])(key, Error(Status.unsupported, "pinned OpenSSL is unavailable"));
 }

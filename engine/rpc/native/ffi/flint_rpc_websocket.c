@@ -4,6 +4,17 @@
 
 #ifdef FLINT_HAS_OPENSSL
 #include <openssl/evp.h>
+#include <openssl/rand.h>
+
+int flint_rpc_websocket_key(char *output, size_t capacity) {
+    unsigned char nonce[16], encoded[25];
+    if (!output || capacity < 24)
+        return -1;
+    if (RAND_bytes(nonce, sizeof(nonce)) != 1 || EVP_EncodeBlock(encoded, nonce, sizeof(nonce)) != 24)
+        return -2;
+    memcpy(output, encoded, 24);
+    return 0;
+}
 
 int flint_rpc_websocket_accept(const char *key, size_t key_length, char *output, size_t capacity) {
     static const char guid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";

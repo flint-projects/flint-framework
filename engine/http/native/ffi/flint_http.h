@@ -83,6 +83,38 @@ typedef struct flint_http_view {
     uint32_t paused;
 } flint_http_view;
 
+enum flint_http_stream_mode {
+    FLINT_HTTP_DOWNLOAD = 1,
+    FLINT_HTTP_DUPLEX,
+    FLINT_HTTP_UPGRADED_BYTES
+};
+
+enum flint_http_stream_flags {
+    FLINT_HTTP_STREAM_HEAD = 1,
+    FLINT_HTTP_STREAM_DONE = 2
+};
+
+typedef struct flint_http_stream_view {
+    const uint8_t *head;
+    size_t head_length;
+    const uint8_t *trailers;
+    size_t trailer_length;
+    uint32_t flags;
+    uint32_t status;
+    uint32_t version;
+    uint32_t error;
+} flint_http_stream_view;
+
+/* Incremental stream bytes copy synchronously. UNAVAILABLE means operation pacing, not EOF. */
+int flint_http_stream_begin(flint_curl_loop *loop, const char *url, size_t length, uint32_t mode,
+                            uint8_t loopback_cleartext, uint32_t receive_rate, uint64_t *request_id);
+int flint_http_stream_view_request(flint_curl_loop *loop, uint64_t request_id, flint_http_stream_view *view);
+int flint_http_stream_write(flint_curl_loop *loop, uint64_t request_id, const uint8_t *input,
+                            size_t length, size_t *written);
+int flint_http_stream_read(flint_curl_loop *loop, uint64_t request_id, uint8_t *output,
+                           size_t capacity, size_t *received);
+int flint_http_stream_finish_send(flint_curl_loop *loop, uint64_t request_id);
+
 /* Base socket-driven ABI. The loop binds to its first operating thread. */
 flint_curl_loop *flint_curl_new(void);
 int flint_curl_start(flint_curl_loop *loop, const char *url, const char *method,

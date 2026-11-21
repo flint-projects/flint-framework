@@ -3,7 +3,7 @@ module flint.http.ffi.shim;
 
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.http.types : ChunkConsumer, ClientOptions, DestinationPolicy, Header, HttpMethod,
-    HttpResponse, HttpVersion;
+    HttpResponse, HttpStreamOptions, HttpVersion;
 
 @safe:
 
@@ -45,6 +45,18 @@ private struct NativeView
     uint paused;
 }
 
+private struct NativeStreamView
+{
+    const(ubyte)* head;
+    size_t headLength;
+    const(ubyte)* trailers;
+    size_t trailerLength;
+    uint flags;
+    uint status;
+    uint protocol;
+    uint error;
+}
+
 private struct NativeLoop;
 
 extern (C) private @system nothrow @nogc
@@ -52,6 +64,13 @@ extern (C) private @system nothrow @nogc
     int flint_http_initialize();
     int flint_http_new(const(NativeOptions)* options, NativeLoop** output);
     int flint_http_begin(NativeLoop* loop, const(char)* url, size_t length, uint method, uint stream, ulong* output);
+    int flint_http_stream_begin(NativeLoop* loop, scope const(char)* url, size_t length, uint mode,
+            ubyte allowCleartext, uint receiveRate, scope ulong* output);
+    int flint_http_stream_view_request(NativeLoop* loop, ulong id, scope NativeStreamView* output);
+    int flint_http_stream_write(NativeLoop* loop, ulong id, scope const(ubyte)* input,
+            size_t length, scope size_t* written);
+    int flint_http_stream_read(NativeLoop* loop, ulong id, scope ubyte* output, size_t length, scope size_t* received);
+    int flint_http_stream_finish_send(NativeLoop* loop, ulong id);
     int flint_http_header(NativeLoop* loop, ulong id, const(char)* key, size_t keyLength,
             const(char)* value, size_t valueLength);
     int flint_http_body(NativeLoop* loop, ulong id, const(ubyte)* bytes, size_t length);
@@ -120,6 +139,15 @@ package(flint.http) struct TransferView
     Error error;
 }
 
+package(flint.http) struct StreamView
+{
+    bool headReady;
+    bool complete;
+    ushort status;
+    HttpVersion protocol;
+    Error error;
+}
+
 package(flint.http) struct Bridge
 {
     private NativeLoop* loop;
@@ -155,11 +183,25 @@ package(flint.http) struct Bridge
         return Result!ulong(id, nativeError(status));
     }
 
+    package(flint.http) Result!ulong beginStream(scope const ref HttpStreamOptions options) nothrow @nogc
+    {
+        ulong id;
+        scope url = options.url;
+        const status = invoke!flint_http_stream_begin(loop, url.length ? &url[0] : null, url.length,
+                cast(uint) options.mode, cast(ubyte) options.allowLoopbackCleartext,
+                options.duplexReceiveBytesPerSecond, &id);
+        return Result!ulong(id, nativeError(status));
+    }
+
     package(flint.http) Error header(ulong id, scope const ref Header field) nothrow @nogc
     {
-        return nativeError(invoke!flint_http_header(loop, id, field.name.length
-                ? &field.name[0] : null, field.name.length, field.value.length
-                ? &field.value[0] : null, field.value.length));
+        return header(id, field.name, field.value);
+    }
+
+    package(flint.http) Error header(ulong id, scope const(char)[] name, scope const(char)[] value) nothrow @nogc
+    {
+        return nativeError(invoke!flint_http_header(loop, id, name.length ? &name[0] : null,
+                name.length, value.length ? &value[0] : null, value.length));
     }
 
     package(flint.http) Error upload(ulong id, scope const(ubyte)[] bytes) nothrow @nogc
@@ -188,6 +230,63 @@ package(flint.http) struct Bridge
                 snapshot.redirectLength != 0, cast(ushort) snapshot.status,
                 cast(HttpVersion) snapshot.protocol, nativeError(cast(Status) snapshot.error));
     }
+
+    package(flint.http) StreamView streamView(ulong id) nothrow @nogc
+    {
+        NativeStreamView snapshot;
+        const status = invoke!flint_http_stream_view_request(loop, id, &snapshot);
+        if (status != Status.ok || snapshot.error > Status.max || snapshot.protocol > HttpVersion.max)
+        {
+            StreamView failed;
+            failed.error = nativeError(status != Status.ok ? status : Status.ioError);
+            return failed;
+        }
+        return StreamView((snapshot.flags & 1) != 0, (snapshot.flags & 2) != 0,
+                cast(ushort) snapshot.status, cast(HttpVersion) snapshot.protocol,
+                nativeError(cast(Status) snapshot.error));
+    }
+
+    package(flint.http) Result!size_t streamWrite(ulong id, scope const(ubyte)[] input) nothrow @nogc
+    {
+        size_t written;
+        const status = invoke!flint_http_stream_write(loop, id, input.length ? &input[0] : null,
+                input.length, &written);
+        if (written > input.length)
+            return Result!size_t(0, nativeError(Status.ioError));
+        return Result!size_t(written, nativeError(status));
+    }
+
+    package(flint.http) Result!size_t streamRead(ulong id, scope ubyte[] output) nothrow @nogc
+    {
+        size_t read;
+        const status = invoke!flint_http_stream_read(loop, id, output.length ? &output[0] : null,
+                output.length, &read);
+        if (read > output.length)
+            return Result!size_t(0, nativeError(Status.ioError));
+        return Result!size_t(read, nativeError(status));
+    }
+
+    package(flint.http) Error finishStreamSend(ulong id) nothrow @nogc
+    {
+        return nativeError(invoke!flint_http_stream_finish_send(loop, id));
+    }
+
+    // dfmt off
+    // SAFETY: The owner holds the bounded metadata through a synchronous arena copy with no callback or pointer escape.
+    package(flint.http) Result!Buffer copyStreamFields(ulong id, bool trailers,
+            ref scope RequestArena arena) @trusted nothrow @nogc
+    {
+        NativeStreamView snapshot;
+        const status = invoke!flint_http_stream_view_request(loop, id, &snapshot);
+        if (status != Status.ok)
+            return Result!Buffer(Buffer.init, nativeError(status));
+        const data = trailers ? snapshot.trailers : snapshot.head;
+        const length = trailers ? snapshot.trailerLength : snapshot.headLength;
+        if (data is null && length != 0)
+            return Result!Buffer(Buffer.init, nativeError(Status.ioError));
+        return copyBytes(arena, length == 0 ? null : data[0 .. length]);
+    }
+    // dfmt on
 
     // SAFETY: The owner fiber holds both bounded URLs through follow or release, including while suspended.
     // The scope callback cannot retain them or throw.
@@ -258,6 +357,11 @@ package(flint.http) struct Bridge
         const released = invoke!flint_http_release(loop, id);
         if (released != Status.ok)
             assert(0, "native HTTP transfer could not be released");
+    }
+
+    package(flint.http) Error retireStream(ulong id) nothrow @nogc
+    {
+        return nativeError(invoke!flint_http_release(loop, id));
     }
 
     package(flint.http) Result!size_t watches(scope NativeWatch[] output, ref ulong revision) nothrow @nogc

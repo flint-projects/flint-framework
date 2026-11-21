@@ -309,7 +309,7 @@ private WsProgress badHeader(string diagnostic) pure nothrow @nogc
 
 struct WsHeader
 {
-    ubyte[10] bytes;
+    ubyte[14] bytes;
     ubyte length;
 }
 
@@ -341,4 +341,18 @@ Result!WsHeader serverHeader(WsOpcode opcode, size_t length, bool finalFrame = t
         result.length = 10;
     }
     return Result!WsHeader(result);
+}
+
+/// Encode client frame metadata with the independently selected frame mask.
+Result!WsHeader clientHeader(WsOpcode opcode, size_t length, ubyte[4] mask) pure nothrow @nogc
+{
+    auto frame = serverHeader(opcode, length);
+    if (frame.ok())
+    {
+        frame.value.bytes[1] |= 0x80;
+        const end = frame.value.length;
+        frame.value.bytes[end .. end + mask.length] = mask[];
+        frame.value.length += mask.length;
+    }
+    return frame;
 }

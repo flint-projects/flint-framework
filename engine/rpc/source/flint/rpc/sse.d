@@ -154,15 +154,19 @@ private struct EventWriter
     }
 }
 
-enum SseNotice : ubyte
+/// A decoded event-stream notification kind.
+public enum SseNotice : ubyte
 {
+    /// A complete event with its data and the last event id.
     event,
+    /// A comment line, including a server heartbeat.
     comment,
+    /// A new reconnect delay in milliseconds.
     retry
 }
 
 /// Called synchronously with temporary spans for event, last id, data or a comment.
-alias SseVisitor = void delegate(SseNotice, scope const(char)[] event, scope const(char)[] id,
+public alias SseVisitor = void delegate(SseNotice, scope const(char)[] event, scope const(char)[] id,
         scope const(char)[] value, uint retryMillis) @safe nothrow @nogc;
 
 /// A byte-fed parser with independent line and event budgets.

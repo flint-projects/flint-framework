@@ -4,9 +4,9 @@ module flint.http.client;
 import core.atomic : atomicLoad, atomicOp, cas;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Context, Deadline;
-import flint.http.ffi.shim : Bridge, NativeWatch;
+import flint.http.ffi.shim : Bridge, NativeWatch, StreamView;
 import flint.http.types : ChunkConsumer, ClientOptions, DestinationPolicy, Header, HttpMethod,
-    HttpRequest, HttpResponse;
+    HttpRequest, HttpResponse, HttpStreamOptions;
 import flint.reactor : NativeInterest, NativeReadyFn, Reactor;
 
 @safe:
@@ -56,6 +56,49 @@ nothrow @nogc:
             return Result!ushort(0, Error(Status.invalidArgument, "missing HTTP chunk consumer"));
         const response = exchange(request.url, request.method, request.headers, request.body, arena, context, consume);
         return Result!ushort(response.value.status, response.error);
+    }
+
+    /// Begin an incremental transfer. The client owns the provider until the stream closes.
+    Result!HttpStream openStream(scope const ref HttpStreamOptions options, ref scope const Context context)
+    {
+        auto client = state;
+        if (client is null)
+            return Result!HttpStream(HttpStream.init, Error(Status.conflict, "HTTP client is closed"));
+        const current = client.streamOwner(context);
+        if (current.code != Status.ok)
+            return Result!HttpStream(HttpStream.init, current);
+
+        const opened = client.bridge.beginStream(options);
+        if (!opened.ok())
+            return Result!HttpStream(HttpStream.init, opened.error);
+        const id = opened.value;
+        bool published;
+        scope (exit)
+        {
+            if (!published)
+                client.bridge.retireStream(id);
+        }
+        foreach (ref field; options.headers)
+        {
+            const added = client.bridge.header(id, field.name, field.value);
+            if (added.code != Status.ok)
+                return Result!HttpStream(HttpStream.init, added);
+        }
+        if (options.finalField.name.length)
+        {
+            const added = client.bridge.header(id, options.finalField.name, options.finalField.value);
+            if (added.code != Status.ok)
+                return Result!HttpStream(HttpStream.init, added);
+        }
+        const allowed = client.bridge.allow(id, client.policy, false);
+        if (allowed.code != Status.ok)
+            return Result!HttpStream(HttpStream.init, allowed);
+        const started = client.bridge.activate(id);
+        if (started.code != Status.ok)
+            return Result!HttpStream(HttpStream.init, started);
+        published = true;
+        ++client.inFlight;
+        return Result!HttpStream(HttpStream(client, id, context));
     }
 
     /// Release the pool after all in-flight requests settle, on its owner thread.
@@ -127,6 +170,166 @@ nothrow @nogc:
     }
 }
 
+/// An owner-confined incremental transfer with an opaque generation.
+struct HttpStream
+{
+    private ClientState state;
+    private ulong id;
+    private Context lifetime;
+
+    @disable this(this);
+
+    private this(ClientState state, ulong id, Context lifetime) nothrow @nogc
+    {
+        this.state = state;
+        this.id = id;
+        this.lifetime = lifetime;
+    }
+
+nothrow @nogc:
+
+    /// Return the final response head while its body remains live.
+    Result!HttpResponse head(ref scope RequestArena arena, ref scope const Context context) scope
+    {
+        const ready = fields(false, context);
+        if (!ready.ok())
+            return failed(ready.error);
+        const copied = state.bridge.copyStreamFields(id, false, arena);
+        if (!copied.ok())
+            return failed(copied.error);
+        return Result!HttpResponse(HttpResponse(ready.value.status, copied.value, Buffer.init, ready.value.protocol));
+    }
+
+    /// Return the terminal fields after the provider finishes the response.
+    Result!Buffer trailers(ref scope RequestArena arena, ref scope const Context context) scope
+    {
+        const ready = fields(true, context);
+        if (!ready.ok())
+            return Result!Buffer(Buffer.init, ready.error);
+        return state.bridge.copyStreamFields(id, true, arena);
+    }
+
+    /// Copy out the next available response bytes. A successful zero count is peer EOF.
+    Result!size_t receive(scope ubyte[] output, ref scope const Context context) scope
+    {
+        if (output.length == 0)
+            return Result!size_t(0, Error(Status.invalidArgument, "HTTP stream receive buffer is empty"));
+        for (;;)
+        {
+            const live = progress(context);
+            if (live.code != Status.ok)
+                return Result!size_t(0, live);
+            const read = state.bridge.streamRead(id, output);
+            if (read.error.code != Status.unavailable)
+                return read;
+            const waited = state.wait();
+            if (waited.code != Status.ok)
+                return Result!size_t(0, waited);
+        }
+    }
+
+    /// Copy the entire input to curl-owned storage or resolve the operation with an error.
+    Error send(scope const(ubyte)[] input, ref scope const Context context) scope
+    {
+        size_t first;
+        do
+        {
+            const live = progress(context);
+            if (live.code != Status.ok || first == input.length)
+                return live;
+            const sent = state.bridge.streamWrite(id, input[first .. $]);
+            if (sent.ok())
+            {
+                if (sent.value == 0)
+                    return Error(Status.ioError, "HTTP stream returned an empty write");
+                first += sent.value;
+            }
+            else if (sent.error.code != Status.unavailable)
+                return sent.error;
+            if (first < input.length)
+            {
+                const waited = state.wait();
+                if (waited.code != Status.ok)
+                    return waited;
+            }
+        }
+        while (first < input.length);
+        return Error.init;
+    }
+
+    /// Signal HTTP/2 upload EOF while leaving the incoming response available.
+    Error finishSend(ref scope const Context context) scope
+    {
+        const live = progress(context);
+        return live.code == Status.ok ? state.bridge.finishStreamSend(id) : live;
+    }
+
+    /// Cancel an unfinished transfer or release a completed one on its owner.
+    Error close() scope
+    {
+        if (state is null)
+            return Error.init;
+        const owner = state.claim();
+        if (owner.code != Status.ok)
+            return owner;
+        if (!state.bridge.isOpen())
+        {
+            state = null;
+            id = 0;
+            lifetime = Context.init;
+            return Error.init;
+        }
+        const retired = state.bridge.retireStream(id);
+        if (retired.code != Status.ok && retired.code != Status.notFound)
+            return retired;
+        if (retired.code == Status.ok)
+        {
+            --state.inFlight;
+            if (state.inFlight == 0)
+                state.clearWatches();
+            else
+                state.refreshWatches();
+        }
+        state = null;
+        id = 0;
+        lifetime = Context.init;
+        return Error.init;
+    }
+
+    private Error progress(ref scope const Context context) scope
+    {
+        if (state is null)
+            return Error(Status.conflict, "HTTP stream is closed");
+        const active = lifetime.check();
+        if (active.code != Status.ok)
+            return active;
+        const owned = state.streamOwner(context);
+        if (owned.code != Status.ok)
+            return owned;
+        const driven = state.drive(context);
+        return driven.code == Status.ok ? state.bridge.streamView(id).error : driven;
+    }
+
+    private Result!StreamView fields(bool terminal, ref scope const Context context) scope
+    {
+        for (;;)
+        {
+            const live = progress(context);
+            if (live.code != Status.ok)
+                return Result!StreamView(StreamView.init, live);
+            const snapshot = state.bridge.streamView(id);
+            if (terminal ? snapshot.complete : snapshot.headReady)
+                return Result!StreamView(snapshot);
+            if (snapshot.complete)
+                return Result!StreamView(StreamView.init, Error(Status.unavailable,
+                        "HTTP peer omitted the response head"));
+            const waited = state.wait();
+            if (waited.code != Status.ok)
+                return Result!StreamView(StreamView.init, waited);
+        }
+    }
+}
+
 private shared ulong threadSerial;
 private ulong threadGeneration;
 
@@ -145,7 +348,7 @@ private final class ClientState
 
 nothrow @nogc:
 
-    Error claim()
+    Error claim() scope
     {
         if (threadGeneration == 0)
             threadGeneration = atomicOp!"+="(threadSerial, 1UL);
@@ -153,6 +356,19 @@ nothrow @nogc:
         if (threadGeneration == 0 || (observed != threadGeneration && !cas(&owner, 0UL, threadGeneration)))
             return Error(Status.conflict, "HTTP transport belongs to another owner thread");
         return Error.init;
+    }
+
+    Error streamOwner(ref scope const Context context) scope
+    {
+        const owned = claim();
+        if (owned.code != Status.ok)
+            return owned;
+        if (!bridge.isOpen())
+            return Error(Status.conflict, "HTTP client is closed");
+        const reactor = Reactor.current();
+        if (reactor.currentCore() != uint.max && !reactor.currentTask().ok())
+            return Error(Status.conflict, "HTTP transfer on a reactor requires an active fiber");
+        return context.check();
     }
 
     Error prepare(ulong id, scope const Header[] fields, Buffer body, ref scope RequestArena arena, ref Context ctx)
@@ -219,7 +435,7 @@ nothrow @nogc:
         }
     }
 
-    private Error drive(ref Context context)
+    Error drive(ref scope const Context context) scope
     {
         const valid = context.check();
         if (valid.code != Status.ok)
@@ -251,7 +467,7 @@ nothrow @nogc:
         return live.code == Status.ok ? bridge.follow(id) : live;
     }
 
-    private Error wait()
+    Error wait() scope
     {
         auto reactor = Reactor.current();
         if (reactor.currentCore() == uint.max)
@@ -262,7 +478,7 @@ nothrow @nogc:
         return slept;
     }
 
-    void refreshWatches()
+    void refreshWatches() scope
     {
         auto reactor = Reactor.current();
         if (reactor.currentCore() == uint.max || driverFault.code != Status.ok)
@@ -318,7 +534,7 @@ nothrow @nogc:
         refreshWatches();
     }
 
-    void clearWatches()
+    void clearWatches() scope
     {
         auto reactor = Reactor.current();
         foreach (item; applied[0 .. appliedCount])

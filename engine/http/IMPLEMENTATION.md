@@ -2,6 +2,12 @@
 
 The Linux client uses the pinned libcurl, nghttp2, OpenSSL, and zlib provider. D module startup initializes libcurl before Reactor starts its workers. Open a client pool before posting the first task to its owner. The first operation binds the pool to the calling thread. Each owning Reactor core can have its own pool and an ordinary thread can also drive a client. Copies share the pool and its lifetime. Close it on its owner after all requests have settled.
 
+## Incremental transfers
+
+`HttpClient.openStream` returns an owner-confined `HttpStream` for incremental response downloads, independently paced HTTP/2 POST bodies, or raw bytes after an HTTP/1.1 WebSocket upgrade. The protocol adapter verifies its response semantics before exposing the stream to callers. The pool copies request fields during setup. `head` and `trailers` copy metadata separately into the supplied arena. `receive` copies bytes into a caller-owned buffer and returns zero at peer EOF. `finishSend` half-closes a duplex upload. `close` removes the native transfer and retires its generation on the owner.
+
+Incremental transfers verify TLS and use an explicit numeric-loopback cleartext option for local testing. They never follow redirects. HTTP/2 duplex mode caps receive credit through the pinned provider's rate limiter, whose configured 32–256 KiB/s target also governs sustained throughput. Legacy responses and streaming callbacks retain their existing behavior.
+
 ## Transfer lifetime
 
 Each pool reserves twice its connection limit in transfer slots. It reuses a native easy handle per slot and keeps a bounded connection cache in one multi handle. The default limits are 64 connections with up to 16 connections per origin, 8 MiB of decoded response bytes, 64 KiB of received headers per hop, and a five-second connection timeout. Configuration accepts 1 through 128 connections. Each request also observes the caller's monotonic Context deadline.

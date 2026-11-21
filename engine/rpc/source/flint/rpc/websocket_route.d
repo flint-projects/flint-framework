@@ -1,11 +1,15 @@
 /// WebSocket upgrade, owner-fiber messages and the closing handshake.
 module flint.rpc.websocket_route;
 
+import core.lifetime : move;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
-import flint.conc : Context, Deadline;
+import flint.conc : Context, Deadline, fillSecureRandom;
+import flint.http : HttpStream;
 import flint.rpc.ffi.websocket : websocketAccept;
+import flint.rpc.metadata : asciiEqual, containsToken, trimField;
 import flint.rpc.utf8 : utf8Valid;
-import flint.rpc.websocket : WebSocket, WsDecoder, WsOpcode, maximumControlBytes, serverHeader, validCloseCode;
+import flint.rpc.websocket : WebSocket, WsDecoder, WsOpcode, clientHeader, maximumControlBytes,
+    serverHeader, validCloseCode;
 import flint.web : Method, Request, RequestContext, Server, StreamField, StreamMode, StreamRoute, StreamToken;
 
 @safe:
@@ -26,7 +30,7 @@ struct WebSocketPeer
     private ulong generation;
     private PeerState* state;
 
-    private this(return scope PeerState* state) nothrow @nogc
+    package(flint.rpc) this(return scope PeerState* state) nothrow @nogc
     {
         this.state = state;
         slot = state.identity;
@@ -166,7 +170,7 @@ private final class WebSocketRoute
             return reject(token, context.cancellation, 400, null);
         Result!(char[28]) accept;
         const read = context.arena.read(key.value, (scope const(ubyte)[] source) @safe nothrow @nogc {
-            accept = websocketAccept(trim(cast(const(char)[]) source));
+            accept = websocketAccept(trimField(cast(const(char)[]) source));
         });
         if (read != Status.ok || !accept.ok())
             return reject(token, context.cancellation, accept.error.code == Status.invalidArgument ? 400 : 503, null);
@@ -179,9 +183,11 @@ private final class WebSocketRoute
     // dfmt on
 }
 
-private struct PeerState
+package(flint.rpc) struct PeerState
 {
-    StreamToken token;
+    private StreamToken token;
+    private HttpStream stream;
+    private bool outbound;
     Context transport;
     ulong identity;
     Deadline closeDeadline;
@@ -200,22 +206,76 @@ private struct PeerState
         this.identity = identity;
     }
 
+    this(HttpStream stream, Context transport) nothrow @nogc
+    {
+        this.stream = move(stream);
+        this.transport = transport;
+        identity = 1;
+        outbound = true;
+        decoder.expectMasked = false;
+    }
+
+    Error abort() scope nothrow @nogc
+    {
+        const stopped = outbound ? stream.close() : token.cancel();
+        if (stopped.code == Status.ok)
+            identity = 0;
+        return stopped;
+    }
+
     Error frame(WsOpcode opcode, scope const(ubyte)[] payload, ref scope const Context context) scope nothrow @nogc
     {
-        const header = serverHeader(opcode, payload.length);
+        ubyte[4] mask;
+        if (outbound)
+        {
+            const random = fillSecureRandom(mask[]);
+            if (random.code != Status.ok)
+                return random;
+        }
+        const header = outbound ? clientHeader(opcode, payload.length, mask) : serverHeader(opcode, payload.length);
         if (!header.ok())
             return header.error;
-        const started = token.send(header.value.bytes[0 .. header.value.length], context);
-        if (started.code != Status.ok || payload.length == 0)
-            return started;
-        const sent = token.send(payload, context);
+        auto sent = writeWire(header.value.bytes[0 .. header.value.length], context);
+        if (sent.code == Status.ok && payload.length != 0)
+            sent = outbound ? writeMasked(payload, mask, context) : writeWire(payload, context);
         if (sent.code != Status.ok)
         {
             failed = true;
-            token.cancel();
+            abort();
         }
         return sent;
     }
+
+    private Error writeWire(scope const(ubyte)[] bytes, ref scope const Context context) scope nothrow @nogc
+    {
+        return outbound ? stream.send(bytes, context) : token.send(bytes, context);
+    }
+
+    private Result!size_t readWire(ref scope const Context context) scope nothrow @nogc
+    {
+        return outbound ? stream.receive(input[], context) : token.receive(input[], context);
+    }
+
+    // dfmt off
+    private Error writeMasked(scope const(ubyte)[] payload, ubyte[4] mask,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        ubyte[4096] chunk;
+        size_t offset;
+        while (offset < payload.length)
+        {
+            const remaining = payload.length - offset;
+            const count = remaining < chunk.length ? remaining : chunk.length;
+            foreach (index; 0 .. count)
+                chunk[index] = payload[offset + index] ^ mask[(offset + index) & 3];
+            const sent = writeWire(chunk[0 .. count], context);
+            if (sent.code != Status.ok)
+                return sent;
+            offset += count;
+        }
+        return Error.init;
+    }
+    // dfmt on
 
     Error sendClose(scope const(ubyte)[] payload) scope nothrow @nogc
     {
@@ -236,7 +296,7 @@ private struct PeerState
         {
             if (position == available)
             {
-                const bytes = token.receive(input[], current);
+                const bytes = readWire(current);
                 if (!bytes.ok())
                     return Result!WebSocketMessage(WebSocketMessage.init, bytes.error);
                 if (bytes.value == 0)
@@ -316,44 +376,7 @@ private bool matchHeader(ref scope Request request, ref scope RequestArena arena
     const header = request.header(name);
     bool found;
     return header.ok() && arena.read(header.value, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
-        found = list ? containsToken(cast(const(char)[]) bytes, token) : asciiEqual(trim(cast(const(char)[]) bytes),
-            token);
+        const value = cast(const(char)[]) bytes;
+        found = list ? containsToken(value, token) : asciiEqual(trimField(value), token);
     }) == Status.ok && found;
-}
-
-private const(char)[] trim(return scope const(char)[] value) pure nothrow @nogc
-{
-    while (value.length != 0 && (value[0] == '\t' || value[0] == ' '))
-        value = value[1 .. $];
-    while (value.length != 0 && (value[$ - 1] == '\t' || value[$ - 1] == ' '))
-        value = value[0 .. $ - 1];
-    return value;
-}
-
-private bool containsToken(scope const(char)[] list, string wanted) pure nothrow @nogc
-{
-    size_t first;
-    foreach (index, value; list)
-    {
-        if (value == ',')
-        {
-            if (asciiEqual(trim(list[first .. index]), wanted))
-                return true;
-            first = index + 1;
-        }
-    }
-    return asciiEqual(trim(list[first .. $]), wanted);
-}
-
-private bool asciiEqual(scope const(char)[] raw, string lowercase) pure nothrow @nogc
-{
-    if (raw.length != lowercase.length)
-        return false;
-    foreach (index, value; raw)
-    {
-        const decoded = value >= 'A' && value <= 'Z' ? value + 'a' - 'A' : value;
-        if (decoded != lowercase[index])
-            return false;
-    }
-    return true;
 }
