@@ -257,6 +257,58 @@ package(flint.style) struct Scanner
     }
 }
 
+package(flint.style) void visitText(scope const(char)[] text, scope bool delegate(scope const(char)[],
+        uint, bool) @safe visit)
+{
+    if (visit is null || text.length > maximumBytes)
+        return;
+    scope scanner = Scanner(text, false);
+    Token token;
+    while (scanner.next(token))
+    {
+        const bytes = text[token.start .. token.end];
+        final switch (token.kind)
+        {
+        case Kind.replaced:
+            if (!visit("\uFFFD", 1, false))
+                return;
+            break;
+        case Kind.lineEnd:
+            if (!visit(null, 0, true))
+                return;
+            break;
+        case Kind.grapheme:
+            if (!visit(token.dotted ? "\u25CC" ~ bytes : bytes, token.width, false))
+                return;
+            break;
+        case Kind.markup:
+            assert(0, "display-only grapheme walker cannot consume markup");
+        }
+    }
+}
+
+package(flint.style) void visitRanges(scope const(char)[] text, scope bool delegate(scope const(char)[],
+        bool, bool) @safe visit)
+{
+    if (visit is null || text.length > maximumBytes)
+        return;
+    scope scanner = Scanner(text, false);
+    Token token;
+    while (scanner.next(token))
+    {
+        const raw = text[token.start .. token.end];
+        if (raw == "\r")
+        {
+            if (token.end < text.length && text[token.end] == '\n')
+                ++scanner.cursor;
+            if (!visit(text[token.start .. scanner.cursor], true, false))
+                return;
+        }
+        else if (!visit(raw, token.newline(), token.kind == Kind.replaced && raw != "\uFFFD"))
+            return;
+    }
+}
+
 package(flint.style) struct Row
 {
     string text;

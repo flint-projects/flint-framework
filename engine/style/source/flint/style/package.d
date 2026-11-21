@@ -1,6 +1,8 @@
 module flint.style;
 
 import flint.style.internal.layout : horizontal, metrics, renderBlock, truncate, vertical;
+import flint.style.internal.text : maximumBytes, visitText, visitRanges;
+import flint.style.ffi.unicode : caseFold;
 public import flint.style.types : Alignment, Border, Color, Insets, Style, TextMetrics;
 
 @safe:
@@ -39,4 +41,24 @@ string joinVertical(scope const(char[])[] blocks, uint gap)
 string truncateCells(scope const(char)[] utf8, uint maxCells, scope const(char)[] ellipsis = "…")
 {
     return truncate(utf8, maxCells, ellipsis);
+}
+
+/// Visit sanitized terminal graphemes. The callback can stop by returning false.
+package(flint) void visitGraphemes(scope const(char)[] utf8,
+        scope bool delegate(scope const(char)[] text, uint cells, bool lineBreak) @safe visit)
+{
+    visitText(utf8, visit);
+}
+
+/// Visit original grapheme bytes, including one logical break for CRLF and a flag for damaged text.
+package(flint) void visitGraphemeRanges(scope const(char)[] utf8,
+        scope bool delegate(scope const(char)[] original, bool lineBreak, bool replacement) @safe visit)
+{
+    visitRanges(utf8, visit);
+}
+
+/// Normalize and fold bounded UTF-8 using the pinned Unicode provider.
+package(flint) bool foldGraphemes(scope const(char)[] utf8, out string folded)
+{
+    return utf8.length <= maximumBytes && caseFold(utf8, folded);
 }

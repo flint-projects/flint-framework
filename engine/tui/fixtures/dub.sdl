@@ -1,0 +1,8 @@
+name "test-tui-pty"
+targetType "executable"
+sourceFiles "interactive.d"
+targetPath "build"
+targetName "test-tui-pty"
+dflags "-preview=dip1000"
+dependency "flint:arena" path="../../.."
+dependency "flint:tui" path="../../.."
