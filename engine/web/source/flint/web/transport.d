@@ -305,6 +305,11 @@ final class TlsTransport
         if (socket.receive is null)
             return false;
         const checked = socket.readContext.check();
+        if (checked.code == Status.cancelled)
+        {
+            completeRead(socket, Status.cancelled, null);
+            return true;
+        }
         if (checked.code != Status.ok)
         {
             abort(socket, checked.code);
@@ -315,10 +320,7 @@ final class TlsTransport
         final switch (result.progress)
         {
         case TlsProgress.ready:
-            const receiver = socket.receive;
-            socket.receive = null;
-            socket.readContext = Context.init;
-            receiver(Completion(socket.id, Status.ok, result.bytes), bytes[0 .. result.bytes]);
+            completeRead(socket, Status.ok, bytes[0 .. result.bytes]);
             return true;
         case TlsProgress.waiting:
             awaitInput(socket, socket.readContext);
@@ -333,6 +335,14 @@ final class TlsTransport
             flushFailure(socket, Status.ioError);
             return false;
         }
+    }
+
+    private void completeRead(SecureSocket* socket, Status status, scope const(ubyte)[] bytes) nothrow @nogc
+    {
+        const receiver = socket.receive;
+        socket.receive = null;
+        socket.readContext = Context.init;
+        receiver(Completion(socket.id, status, bytes.length), bytes);
     }
 
     private void awaitInput(SecureSocket* socket, Context context) nothrow @nogc
@@ -357,12 +367,10 @@ final class TlsTransport
             closeWhenDrained(socket);
             return;
         }
-        if (completion.status == Status.cancelled && socket.phase == Phase.plaintext && socket.receive !is null)
+        if (completion.status == Status.cancelled && socket.phase == Phase.plaintext)
         {
-            const receiver = socket.receive;
-            socket.receive = null;
-            socket.readContext = Context.init;
-            receiver(Completion(socket.id, Status.cancelled, 0), null);
+            if (socket.receive !is null)
+                completeRead(socket, Status.cancelled, null);
             drive(socket);
             return;
         }
@@ -405,11 +413,9 @@ final class TlsTransport
     {
         if (socket.phase == Phase.handshake)
             return root.withDeadline(socket.handshakeDeadline);
-        if (socket.phase == Phase.flushing)
-            return Context.init.withDeadline(following(limits.idleTimeoutNanos));
-        if (socket.send !is null)
+        if (socket.phase == Phase.plaintext && socket.send !is null)
             return socket.writeContext;
-        return root.withDeadline(following(limits.idleTimeoutNanos));
+        return Context.init.withDeadline(following(limits.idleTimeoutNanos));
     }
 
     private void sentCiphertext(Completion completion) nothrow @nogc

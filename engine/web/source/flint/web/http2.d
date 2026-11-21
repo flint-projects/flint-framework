@@ -6,7 +6,7 @@ import core.lifetime : move;
 import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Completion, CompletionDelegate, ConnectionId, Reactor, TaskContext, TaskDelegate;
+import flint.reactor : Completion, CompletionDelegate, ConnectionId, IoId, Reactor, TaskContext, TaskDelegate;
 import flint.web.dispatch : executeMatched, executeStream, failureResponse, liveBody, lookupRoute;
 import flint.web.ffi.http2 : H2Chunk, H2Event, H2Output, H2Session, deferOutput, holdStreamCredit;
 import flint.web.http1 : Http1Reader;
@@ -14,7 +14,7 @@ import flint.web.router : Match, RouteTable;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamToken;
 import flint.web.stream_queues : StreamQueues;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
-import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
+import flint.web.transport : TlsTransport, closePlain, readPlain;
 import flint.web.types : HeaderRecord, Method, RequestContext, Response, ServerOptions, maximumFields;
 import flint.web.wire : responseCode, validMediaType;
 
@@ -52,6 +52,7 @@ private struct Session
     uint[streamLimit] streams;
     bool readActive;
     bool writeActive;
+    IoId writeTicket;
     bool closing;
     bool draining;
     bool peerClosing;
@@ -800,10 +801,18 @@ package(flint.web) final class H2Runtime : StreamEndpoint
             return;
         }
 
-        const deadline = following(options.idleTimeoutNanos);
-        auto context = connection.draining
-            ? Context.init.withDeadline(deadline) : connection.transfer.context().withDeadline(deadline);
-        const write = writePlain(tls, connection.id, bytes[0 .. count], context, writeDone);
+        // Finish any partially transmitted frame before appending GOAWAY. The idle
+        // deadline and explicit connection abort still bound this owned write.
+        auto context = Context.init.withDeadline(following(options.idleTimeoutNanos));
+        Status write;
+        if (tls is null)
+        {
+            const queued = Reactor.current().writeWith(connection.id, bytes[0 .. count], context, writeDone);
+            connection.writeTicket = queued.value;
+            write = queued.error.code;
+        }
+        else
+            write = tls.write(connection.id, bytes[0 .. count], context, writeDone);
         if (write != Status.ok)
         {
             abort(connection);
@@ -833,6 +842,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         if (connection is null)
             return;
         connection.writeActive = false;
+        connection.writeTicket = IoId.init;
         if (connection.closing || completion.status != Status.ok || completion.bytes != connection.sent)
         {
             abort(connection);
@@ -888,8 +898,10 @@ package(flint.web) final class H2Runtime : StreamEndpoint
                 if (index != 0)
                     streams[index - 1].cancel.cancel();
             }
-            if (connection.draining)
+            if (connection.draining || (tls !is null && connection.writeActive))
                 closePlain(tls, connection.id);
+            else if (connection.writeActive)
+                Reactor.current().cancel(connection.writeTicket);
         }
         finishClose(connection);
     }

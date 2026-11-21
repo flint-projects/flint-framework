@@ -307,6 +307,36 @@ def tls(binary, certificate, key, unrelated_key):
             process.kill()
             process.wait()
 
+    tls_h2_shutdown(binary, certificate, key)
+
+def tls_h2_shutdown(binary, certificate, key):
+    process, port = listener(binary, 'tls', certificate, key)
+    try:
+        context = ssl.create_default_context(cafile=certificate)
+        context.set_alpn_protocols(['h2'])
+        peer = H2Peer(port, context)
+        with peer.socket:
+            assert peer.socket.selected_alpn_protocol() == 'h2'
+            first_credit = 4096
+            active = peer.get('/large', credit=first_credit)
+            peer.through(lambda: len(peer.messages[active][1]) >= first_credit)
+            assert peer.messages[active][1] == PAYLOAD[:first_credit]
+            remaining = len(PAYLOAD) - first_credit
+            peer.engine.increment_flow_control_window(remaining)
+            peer.engine.increment_flow_control_window(remaining, stream_id=active)
+            # Flush new DATA credit and the shutdown request together on this session.
+            peer.get('/shutdown')
+            peer.through(lambda: peer.goaway is not None)
+            assert peer.goaway == 0
+            received = peer.messages[active][1]
+            assert received == PAYLOAD[:len(received)]
+        assert process.wait(5) == 0
+        print('TLS HTTP/2 shutdown drained frames in order and delivered GOAWAY')
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
 if __name__ == '__main__':
     h1(sys.argv[1])
     h2(sys.argv[1])
