@@ -11,7 +11,7 @@ import flint.reactor : AcceptDelegate, Completion, CompletionDelegate, Connectio
     ReadDelegate, Reactor, ReactorOptions, TaskContext, TaskDelegate;
 import flint.web.dispatch : executeMatched, executeStream, failureResponse, lookupRoute;
 import flint.web.http2 : H2Runtime;
-import flint.web.http1 : Http1Reader, ReadOutcome;
+import flint.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
 import flint.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
 import flint.web.sys.ownership : launchDriver, releaseBytes, reserveBytes;
@@ -24,6 +24,7 @@ import flint.web.wire : responseCode, validMediaType, writeChunk, writeHeader, w
 
 private enum ioBytes = 4096;
 private enum maxBody = 1_048_576;
+private enum maxStreamingBody = 4 * 1024 * 1024;
 private enum maxQueue = 262_144;
 private enum maxConnections = 4096;
 
@@ -256,7 +257,9 @@ private bool validOptions(ServerOptions options) pure nothrow @nogc
     return options.cores >= 1 && options.cores <= 16 && options.maxConnectionsPerCore >= 1
         && options.maxConnectionsPerCore <= maxConnections && options.maxHeaderBytes > 0
         && options.maxHeaderBytes <= maximumTargetBytes
-        && options.maxBodyBytes <= maxBody && options.writeQueueBytes > 0 && options.writeQueueBytes <= maxQueue
+        && options.maxBodyBytes <= maxBody
+        && options.maxStreamingRequestBytes <= maxStreamingBody && options.writeQueueBytes > 0
+        && options.writeQueueBytes <= maxQueue
         && supportedStreamCount(options.maxStreamsPerConnection) && options.headerTimeoutNanos > 0
         && options.idleTimeoutNanos > 0 && validTransport(options);
 }
@@ -318,7 +321,9 @@ private final class Runtime : StreamEndpoint
         this.limits = limits;
         readDone = &read;
         writeDone = &written;
-        arenaBytes = limits.maxHeaderBytes + limits.maxBodyBytes + limits.writeQueueBytes + 1024;
+        const bodyCapacity = limits.maxBodyBytes > limits.maxStreamingRequestBytes
+            ? limits.maxBodyBytes : limits.maxStreamingRequestBytes;
+        arenaBytes = limits.maxHeaderBytes + bodyCapacity + limits.writeQueueBytes + 1024;
         routes = new RouteTable;
         if (!limits.http2PriorKnowledge)
             connections = new Connection[cast(size_t) limits.cores * limits.maxConnectionsPerCore];
@@ -586,7 +591,8 @@ private final class Runtime : StreamEndpoint
         }
 
         size_t consumed;
-        const read = connection.parser.feed(bytes, connection.request.arena, consumed);
+        scope BodyLimit choose = limits.maxStreamingRequestBytes ? &bodyLimitForRoute : null;
+        const read = connection.parser.feed(bytes, connection.request.arena, consumed, choose);
         connection.pendingCount = 0;
         final switch (read)
         {
@@ -627,6 +633,17 @@ private final class Runtime : StreamEndpoint
             connection.taskActive = true;
             readMore(connection);
         }
+    }
+
+    private size_t bodyLimitForRoute(Method method, Buffer path, ref scope RequestArena arena) nothrow @nogc
+    {
+        size_t result = limits.maxBodyBytes;
+        const checked = arena.read(path, (scope const(ubyte)[] target) @safe nothrow @nogc {
+            const matched = routes.find(method, target);
+            if (matched.stream !is null && matched.mode == StreamMode.response)
+                result = limits.maxStreamingRequestBytes;
+        });
+        return checked == Status.ok ? result : limits.maxBodyBytes;
     }
 
     private void dispatch(ConnectionId id) nothrow @nogc

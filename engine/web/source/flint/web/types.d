@@ -123,6 +123,8 @@ struct ServerOptions
     size_t maxHeaderBytes = 16_384;
     /// Largest nonstreamed request body.
     size_t maxBodyBytes = 1_048_576;
+    /// Optional body cap for matched response-stream routes. Zero uses maxBodyBytes.
+    size_t maxStreamingRequestBytes;
     /// Maximum queued response body bytes per connection.
     size_t writeQueueBytes = 262_144;
     /// Time permitted to receive request headers, measured monotonically.

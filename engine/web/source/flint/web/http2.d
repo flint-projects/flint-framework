@@ -111,7 +111,9 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         writeDone = &written;
         this.routes = routes;
         this.root = root;
-        arenaBytes = options.maxHeaderBytes + options.maxBodyBytes + options.writeQueueBytes + 1024;
+        const bodyCapacity = options.maxBodyBytes > options.maxStreamingRequestBytes
+            ? options.maxBodyBytes : options.maxStreamingRequestBytes;
+        arenaBytes = options.maxHeaderBytes + bodyCapacity + options.writeQueueBytes + 1024;
         const capacity = options.maxConnectionsPerCore * options.maxStreamsPerConnection;
         workerStreams = capacity < streamsPerCore ? capacity : streamsPerCore;
         connections = new Session[options.cores * options.maxConnectionsPerCore];
@@ -322,12 +324,17 @@ package(flint.web) final class H2Runtime : StreamEndpoint
 
     private int receivedHeaders(scope Stream* stream) scope nothrow @nogc
     {
-        if (!routes.hasDuplex())
+        const duplexRoutes = routes.hasDuplex();
+        if (!duplexRoutes && options.maxStreamingRequestBytes == 0)
             return Protocol.ok;
-        if (!stream.assembly.finishH2(stream.request.arena))
+        if (duplexRoutes && !stream.assembly.finishH2(stream.request.arena))
             return Protocol.protocolError;
         const matched = lookupRoute(routes, &stream.assembly.metadata, stream.request.arena);
-        if (matched.stream is null || matched.mode != StreamMode.duplex)
+        if (matched.stream is null)
+            return Protocol.ok;
+        if (matched.mode == StreamMode.response && options.maxStreamingRequestBytes != 0)
+            stream.assembly.setBodyLimit(options.maxStreamingRequestBytes);
+        if (matched.mode != StreamMode.duplex)
             return Protocol.ok;
         if (!openQueues(stream, true))
             return Protocol.exhausted;

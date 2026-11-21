@@ -15,6 +15,12 @@ package(flint.web) enum ReadOutcome
     rejected
 }
 
+/// Optional limit selector after the request headers determine the route.
+// dfmt off
+package(flint.web) alias BodyLimit = size_t delegate(Method, Buffer,
+        ref scope RequestArena) @safe nothrow @nogc;
+// dfmt on
+
 /// The parser instance and request scratch remain on their owning connection.
 package(flint.web) struct Http1Reader
 {
@@ -27,6 +33,7 @@ package(flint.web) struct Http1Reader
     private Http1Parser parser;
     private size_t headerLimit;
     private size_t bodyLimit;
+    private size_t defaultBodyLimit;
     private size_t wireHeaderBytes;
     private size_t trailerBytes;
     private size_t nameBytes;
@@ -53,7 +60,12 @@ package(flint.web) struct Http1Reader
     {
         metadata.names = names;
         headerLimit = maxHeaderBytes;
-        bodyLimit = maxBodyBytes;
+        defaultBodyLimit = maxBodyBytes;
+    }
+
+    void setBodyLimit(size_t cap) nothrow @nogc
+    {
+        bodyLimit = cap;
     }
 
     Status receiveH2Header(scope const(ubyte)[] name, scope const(ubyte)[] bytes, bool trailer,
@@ -124,6 +136,7 @@ package(flint.web) struct Http1Reader
     bool begin() nothrow @nogc
     {
         metadata.reset();
+        bodyLimit = defaultBodyLimit;
         if (metadata.generation == ulong.max)
             return false;
         ++metadata.generation;
@@ -157,7 +170,9 @@ package(flint.web) struct Http1Reader
         parser.close();
     }
 
-    ReadOutcome feed(scope const(ubyte)[] input, ref scope RequestArena arena, out size_t position) nothrow @nogc
+    // dfmt off
+    ReadOutcome feed(scope const(ubyte)[] input, ref scope RequestArena arena, out size_t position,
+            scope BodyLimit selectLimit = null) nothrow @nogc
     {
         do
         {
@@ -172,7 +187,7 @@ package(flint.web) struct Http1Reader
                     return reject(503);
                 return reject(responseStatus);
             case HttpProgress.headers:
-                const status = acceptHeaders();
+                const status = acceptHeaders(arena, selectLimit);
                 if (status != 0)
                     return reject(status);
                 if (!upgradeRequested)
@@ -184,6 +199,7 @@ package(flint.web) struct Http1Reader
         }
         while (true);
     }
+    // dfmt on
 
     private ReadOutcome finishRequest(ref scope RequestArena arena) nothrow @nogc
     {
@@ -223,7 +239,7 @@ package(flint.web) struct Http1Reader
         return ReadOutcome.rejected;
     }
 
-    private ushort acceptHeaders() nothrow @nogc
+    private ushort acceptHeaders(ref scope RequestArena arena, scope BodyLimit selectLimit) nothrow @nogc
     {
         Http1Info info;
         if (!parser.headers(info) || info.major != 1 || info.minor > 1)
@@ -233,12 +249,14 @@ package(flint.web) struct Http1Reader
             return 400;
         if (info.method > Method.options)
             return 501;
+        metadata.method = cast(Method) info.method;
+        if (selectLimit !is null)
+            bodyLimit = selectLimit(metadata.method, metadata.path, arena);
         if (info.contentLength > bodyLimit)
             return 413;
         upgradeRequested = info.upgrade != 0;
         if (upgradeRequested && !validUpgrade(info))
             return 400;
-        metadata.method = cast(Method) info.method;
         keepAlive = info.keepAlive != 0 && !upgradeRequested;
         readingHeaders = false;
         return 0;
