@@ -180,7 +180,7 @@ package(flint.web) struct RequestMetadata
     Buffer query;
     Buffer body;
     ubyte[] names;
-    HeaderRecord[maximumFields] headers;
+    HeaderRecord[] headers;
     size_t fieldCount;
 
     void reset() nothrow @nogc

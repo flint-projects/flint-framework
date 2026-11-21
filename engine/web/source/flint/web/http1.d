@@ -3,7 +3,7 @@ module flint.web.http1;
 
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.web.ffi.shim : Http1Info, Http1Parser, HttpEvent, HttpProgress;
-import flint.web.types : Method, RequestMetadata, lower, maximumFields, sameName;
+import flint.web.types : HeaderRecord, Method, RequestMetadata, lower, maximumFields, sameName;
 
 @safe:
 
@@ -48,7 +48,8 @@ package(flint.web) struct Http1Reader
 
     Error open(ulong token, ubyte[] names, size_t maxHeaderBytes, size_t maxBodyBytes) nothrow @nogc
     {
-        if (maxHeaderBytes == 0 || maxHeaderBytes > uint.max || names.length < maxHeaderBytes)
+        if (maxHeaderBytes == 0 || maxHeaderBytes > uint.max || names.length < maxHeaderBytes
+                || metadata.headers.length != maximumFields)
             return Error(Status.invalidArgument, "invalid HTTP header scratch capacity");
         const result = parser.open(token);
         if (result.code == Status.ok)
@@ -137,7 +138,7 @@ package(flint.web) struct Http1Reader
     {
         metadata.reset();
         bodyLimit = defaultBodyLimit;
-        if (metadata.generation == ulong.max)
+        if (metadata.generation == ulong.max || metadata.headers.length != maximumFields)
             return false;
         ++metadata.generation;
         responseStatus = 400;
@@ -360,10 +361,8 @@ package(flint.web) struct Http1Reader
         if (framing != Status.ok)
             return framing;
 
-        ref field = metadata.headers[metadata.fieldCount++];
-        field.start = nameStart;
-        field.end = cast(uint) nameBytes;
-        field.value = value;
+        metadata.headers[metadata.fieldCount] = HeaderRecord(nameStart, cast(uint) nameBytes, value);
+        ++metadata.fieldCount;
         nameStart = cast(uint) nameBytes;
         value = Buffer.init;
         return Status.ok;
