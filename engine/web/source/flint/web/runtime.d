@@ -2,7 +2,7 @@
 module flint.web.runtime;
 
 import core.atomic : atomicLoad, atomicStore, cas;
-import core.lifetime : move;
+import core.lifetime : emplace, move;
 import core.thread : Thread;
 import core.time : MonoTime, dur, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
@@ -14,7 +14,8 @@ import flint.web.http2 : H2Runtime;
 import flint.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
 import flint.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
-import flint.web.sys.ownership : launchDriver, releaseBytes, reserveH1;
+import flint.web.sys.ownership : launchDriver, releaseBytes, releaseConnectionSlots,
+    reserveConnectionSlots, reserveH1;
 import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
 import flint.web.types : ErrorAdvice, Handler, Method, RequestContext, Response, RouteRegistration, ServerOptions;
 import flint.web.worker : WorkerLifecycle;
@@ -325,13 +326,6 @@ private final class Runtime : StreamEndpoint
             ? limits.maxBodyBytes : limits.maxStreamingRequestBytes;
         arenaBytes = limits.maxHeaderBytes + bodyCapacity + limits.writeQueueBytes + 1024;
         routes = new RouteTable;
-        if (!limits.http2PriorKnowledge)
-            connections = new Connection[cast(size_t) limits.cores * limits.maxConnectionsPerCore];
-        foreach (ref connection; connections)
-        {
-            connection.owner = this;
-            connection.handlerTask = &connection.runHandler;
-        }
     }
 
     Error prepare()
@@ -357,6 +351,16 @@ private final class Runtime : StreamEndpoint
         reactor = move(created.value);
         scope (failure)
             release();
+
+        if (!limits.http2PriorKnowledge)
+        {
+            connections = reserveConnectionSlots!Connection(cast(size_t) limits.cores * limits.maxConnectionsPerCore);
+            if (connections is null)
+            {
+                release();
+                return Error(Status.outOfMemory, "unable to reserve HTTP/1 connection slots");
+            }
+        }
 
         auto source = CancelSource.create(Context.init, Deadline.none());
         if (!source.ok())
@@ -470,6 +474,7 @@ private final class Runtime : StreamEndpoint
             if (connection.phase != ConnectionPhase.free)
                 retire(&connection);
         }
+        releaseConnectionSlots(connections);
         if (http2 !is null)
             http2.release();
         if (tls !is null)
@@ -483,7 +488,8 @@ private final class Runtime : StreamEndpoint
     {
         if (id.ownerCore >= limits.cores || id.slot >= limits.maxConnectionsPerCore)
             return null;
-        return &connections[cast(size_t) id.ownerCore * limits.maxConnectionsPerCore + id.slot];
+        const index = cast(size_t) id.ownerCore * limits.maxConnectionsPerCore + id.slot;
+        return index < connections.length ? &connections[index] : null;
     }
 
     private Connection* checked(ConnectionId id, ConnectionPhase expected) nothrow @nogc
@@ -499,6 +505,13 @@ private final class Runtime : StreamEndpoint
         {
             closePlain(tls, id);
             return;
+        }
+        static assert(ConnectionPhase.free == 0 && Connection.init.owner is null);
+        if (connection.owner is null)
+        {
+            emplace(connection);
+            connection.owner = this;
+            connection.handlerTask = &connection.runHandler;
         }
         connection.id = id;
         connection.phase = ConnectionPhase.reading;
