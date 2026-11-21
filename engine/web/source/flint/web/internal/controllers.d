@@ -141,7 +141,8 @@ private Action[] routes(C)()
                     const action = route!(C, member)(location, name, index);
                     if (action.label.length != 0)
                     {
-                        appendRoute(output, action);
+                        checkRoute(output, action);
+                        output ~= action;
                         assert(output.length <= 1024, "too many HTTP controller methods");
                     }
                 }
@@ -150,6 +151,8 @@ private Action[] routes(C)()
     }
     return output;
 }
+
+private enum controllerRoutes(C) = routes!C();
 
 private Action route(C, alias member)(RoutePrefix location, string name, size_t index)
 {
@@ -219,20 +222,19 @@ private string joinPath(string first, string suffix)
     return first == "/" && suffix.length != 0 ? suffix : first ~ suffix;
 }
 
-private void appendRoute(ref Action[] actions, Action candidate)
+private void checkRoute(scope const Action[] actions, Action candidate)
 {
     foreach (ref action; actions)
     {
         assert(action.method != candidate.method || action.canonical != candidate.canonical,
                 "duplicate HTTP route between " ~ action.label ~ " and " ~ candidate.label);
     }
-    actions ~= candidate;
 }
 
-private Action[] applicationRoutes(App)()
+private size_t applicationRouteCount(App)()
 {
     static if (isController!App())
-        return routes!App();
+        return controllerRoutes!App.length;
     else
     {
         Action[] output;
@@ -240,11 +242,13 @@ private Action[] applicationRoutes(App)()
         {
             static if (isController!Field())
             {
-                foreach (action; routes!Field())
-                    appendRoute(output, action);
+                // Routes in this controller have already been checked against each other.
+                foreach (action; controllerRoutes!Field)
+                    checkRoute(output, action);
+                output ~= controllerRoutes!Field;
             }
         }
-        return output;
+        return output.length;
     }
 }
 
@@ -482,7 +486,7 @@ private auto invokeMember(C, string name, size_t index, Method method, string pa
 Error registerController(C)(ref Server server, ref C controller)
 {
     static assert(isController!C(), "HTTP controller requires @RestController: " ~ C.stringof);
-    enum methods = routes!C();
+    enum methods = controllerRoutes!C;
     static assert(methods.length != 0, "HTTP controller has no routes: " ~ C.stringof);
     static if (is(C == class))
     {
@@ -549,8 +553,7 @@ Error registerAdvice(A)(ref Server server, ref A advice)
 /// Register the application's explicit controller fields and run until cancellation or a terminal error.
 int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init)
 {
-    enum descriptors = applicationRoutes!App();
-    static assert(descriptors.length != 0, "HTTP application requires explicit controller fields");
+    static assert(applicationRouteCount!App() != 0, "HTTP application requires explicit controller fields");
     static assert(adviceCount!App() <= 1, "HTTP application has more than one @ControllerAdvice");
 
     Server server;
