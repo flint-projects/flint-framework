@@ -1,0 +1,8 @@
+name "probe-cache-redis"
+targetType "executable"
+sourcePaths "source" "harness"
+importPaths "source" "harness"
+targetPath "build"
+targetName "probe-cache-redis"
+dflags "-preview=dip1000"
+dependency "flint:cache" path="../../../.."

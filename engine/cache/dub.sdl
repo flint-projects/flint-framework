@@ -13,6 +13,10 @@ dependency "flint:serde" version="*"
 configuration "library" {
     targetType "library"
 }
+configuration "local" {
+    targetType "library"
+    versions "FlintCacheLocal"
+}
 configuration "unittest" {
     targetType "library"
     sourcePaths "source" "tests"
