@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <liburing.h>
+#include <poll.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -22,6 +23,7 @@ static int required_operations_supported(struct io_uring *ring)
     int supported = io_uring_opcode_supported(probe, IORING_OP_ACCEPT)
         && io_uring_opcode_supported(probe, IORING_OP_RECV)
         && io_uring_opcode_supported(probe, IORING_OP_SEND)
+        && io_uring_opcode_supported(probe, IORING_OP_POLL_ADD)
         && io_uring_opcode_supported(probe, IORING_OP_ASYNC_CANCEL);
     io_uring_free_probe(probe);
     return supported;
@@ -107,6 +109,18 @@ int flint_uring_send(void *ring, int fd, const uint8_t *buffer, unsigned length,
     if (sqe == NULL)
         return -EAGAIN;
     io_uring_prep_send(sqe, fd, buffer, length, MSG_NOSIGNAL);
+    io_uring_sqe_set_data64(sqe, token);
+    return 0;
+}
+
+int flint_uring_poll_readable(void *ring, int fd, uint64_t token)
+{
+    if (ring == NULL || fd < 0 || token == 0)
+        return -EINVAL;
+    struct io_uring_sqe *sqe = reserve(ring);
+    if (sqe == NULL)
+        return -EAGAIN;
+    io_uring_prep_poll_add(sqe, fd, POLLIN);
     io_uring_sqe_set_data64(sqe, token);
     return 0;
 }

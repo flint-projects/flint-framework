@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,6 +112,26 @@ static void accept_connection(void *owner)
     CHECK(close(listener) == 0);
 }
 
+static void borrowed_readiness(void *owner)
+{
+    const uint64_t token = UINT64_C(1) << 40;
+    int ends[2];
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) == 0);
+    CHECK(flint_uring_poll_readable(owner, -1, token) == -EINVAL);
+    CHECK(flint_uring_poll_readable(owner, ends[0], 0) == -EINVAL);
+    CHECK(flint_uring_poll_readable(owner, ends[0], token) == 0);
+    uint64_t observed;
+    int state;
+    CHECK(flint_uring_wait(owner, 5, &observed, &state) == 0);
+    const char input = 42;
+    CHECK(write(ends[1], &input, 1) == 1);
+    const int outcome = wait_for(owner, token);
+    CHECK(outcome >= 0 && (outcome & POLLIN) != 0);
+    char result;
+    CHECK(read(ends[0], &result, 1) == 1 && result == input);
+    CHECK(close(ends[0]) == 0 && close(ends[1]) == 0);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc == 2 && strcmp(argv[1], "--deny-setup") == 0)
@@ -126,6 +147,7 @@ int main(int argc, char *argv[])
     CHECK(status == 0 && owner != NULL);
     round_trip(owner);
     accept_connection(owner);
+    borrowed_readiness(owner);
     flint_uring_close(owner);
     return 0;
 }

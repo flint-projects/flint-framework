@@ -5,7 +5,7 @@ import core.lifetime : move;
 import flint.reactor.sys.workers : yieldWorker;
 import flint.arena : Error, Result, Status;
 import flint.conc : Deadline;
-import flint.reactor.types : ConnectionId, TaskContext, TaskFn, TimerId;
+import flint.reactor.types : ConnectionId, TaskContext, TaskDelegate, TaskFn, TimerId;
 
 @safe:
 
@@ -14,9 +14,10 @@ package(flint.reactor) struct Message
     TaskFn task;
     ConnectionId close;
     TaskContext context;
+    TaskDelegate boundTask;
 }
 
-/// Only the ring metadata and slots are shared. Entry functions cannot capture an application context.
+/// Bound tasks enter and leave their owner worker's ring. Cross-worker messages use function pointers.
 package(flint.reactor) struct Mailbox
 {
     private shared bool held;

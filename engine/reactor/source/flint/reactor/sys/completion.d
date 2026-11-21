@@ -39,6 +39,7 @@ package(flint.reactor):
             int flint_uring_accept(void* owner, int fd, ulong token) @system nothrow @nogc;
             int flint_uring_recv(void* owner, int fd, ubyte* output, uint length, ulong token) @system nothrow @nogc;
             int flint_uring_send(void* owner, int fd, const(ubyte)* input, uint len, ulong tag) @system nothrow @nogc;
+            int flint_uring_poll_readable(void* owner, int fd, ulong token) @system nothrow @nogc;
             int flint_uring_cancel(void* owner, ulong token) @system nothrow @nogc;
             int flint_uring_wait(void* owner, uint millis, ulong* token, int* result) @system nothrow @nogc;
         }
@@ -132,6 +133,15 @@ package(flint.reactor):
                 return Status.invalidArgument;
             return completionStatus(flint_uring_send(port.owner, fd.descriptor, data.ptr, cast(uint) data.length, tag));
         }
+        else
+            return Status.unsupported;
+    }
+
+    // SAFETY: The loop retains its epoll descriptor until the poll CQE. The kernel retains no user pointer.
+    Status submitReadable(ref CompletionPort port, int fd, ulong token) @trusted nothrow @nogc
+    {
+        version (FlintNativeLiburing)
+            return completionStatus(flint_uring_poll_readable(port.owner, fd, token));
         else
             return Status.unsupported;
     }

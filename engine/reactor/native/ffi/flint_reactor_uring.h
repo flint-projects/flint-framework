@@ -13,6 +13,7 @@ void flint_uring_close(void *owner);
 int flint_uring_accept(void *owner, int listener, uint64_t token);
 int flint_uring_recv(void *owner, int fd, uint8_t *buffer, unsigned length, uint64_t token);
 int flint_uring_send(void *owner, int fd, const uint8_t *buffer, unsigned length, uint64_t token);
+int flint_uring_poll_readable(void *owner, int fd, uint64_t token);
 int flint_uring_cancel(void *owner, uint64_t target_token);
 
 /* Flush queued SQEs and consume one CQE. Token zero denotes a cancel CQE.

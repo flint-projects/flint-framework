@@ -11,8 +11,9 @@ import flint.reactor.internal.queues : Mailbox, Message, Timers;
 import flint.reactor.sys.fibers : createFiber, releaseFiber, resetFiber, resumeFiber, yieldFiber;
 import flint.reactor.sys.workers : availableCpus, joinWorker, pinWorker, startWorker, workerUsage, yieldWorker;
 
-public import flint.reactor.types : AcceptFn, Backend, Completion, CompletionFn, ConnectionId, IoId,
-    ListenOptions, ReactorOptions, ReadFn, TaskContext, TaskFn, TimerId, WorkerStats;
+public import flint.reactor.types : AcceptDelegate, AcceptFn, Backend, Completion, CompletionDelegate, CompletionFn,
+    ConnectionId, IoId, ListenOptions, NativeInterest, NativeReadyFn, ReadDelegate, ReactorOptions,
+    ReadFn, TaskContext, TaskDelegate, TaskFn, TimerId, WorkerStats;
 
 @safe:
 
@@ -24,8 +25,11 @@ version (Posix)
         directions, openReadiness, poll, setInterest;
 }
 version (linux)
-    import flint.reactor.sys.completion : CompletionPort, KernelEvent, cancelKernel,
-        closeCompletionPort, openCompletionPort, pollCompletion, submitAccept, submitRead, submitWrite;
+{
+    import flint.reactor.sys.completion : CompletionPort, KernelEvent, cancelKernel, closeCompletionPort,
+        openCompletionPort, pollCompletion, submitAccept, submitRead, submitReadable, submitWrite;
+    import flint.reactor.sys.nativewatch : NativeWatches;
+}
 else version (OSX)
     version = ReactorReadinessOnly;
 else version (Windows)
@@ -47,6 +51,7 @@ private Runtime* currentRuntime;
 private uint currentWorkerIndex = uint.max;
 private enum noSlot = uint.max;
 private enum listenToken = 1UL;
+private enum nativeWatchToken = 2UL;
 private enum waitBudgetMillis = 5;
 private enum maxIdentity = ulong.max >> 16;
 
@@ -67,7 +72,7 @@ private bool validQueueSizes(ReactorOptions options) pure nothrow @nogc
     return options.completionsPerTick != 0 && options.maxConnectionsPerCore > 0
         && options.maxConnectionsPerCore <= ushort.max && options.mailboxCapacity > 0
         && options.mailboxCapacity <= ushort.max && options.maxTimersPerCore > 0
-        && options.maxTimersPerCore <= ushort.max;
+        && options.maxTimersPerCore <= ushort.max && options.maxNativeWatchesPerCore <= ushort.max;
 }
 
 private bool validStorage(ReactorOptions options, uint workers) pure nothrow @nogc
@@ -137,7 +142,18 @@ struct Reactor
     /// Open the sole listening socket and register the owner-loop acceptance callback.
     Error listen(ListenOptions options, AcceptFn accept)
     {
-        if (!owner || runtime is null || accept is null)
+        return bindListenerCallback(options, accept, null);
+    }
+
+    /// Set up a listener with application-owned context. It must support concurrent calls on different cores.
+    Error listenWith(ListenOptions options, AcceptDelegate accept)
+    {
+        return bindListenerCallback(options, null, accept);
+    }
+
+    private Error bindListenerCallback(ListenOptions options, AcceptFn accept, AcceptDelegate bound)
+    {
+        if (!owner || runtime is null || (accept is null && bound is null))
             return Error(Status.invalidArgument, "invalid listener");
         if (atomicLoad(runtime.state) != State.configured || runtime.listener.valid)
             return Error(Status.conflict, "listener already configured or reactor started");
@@ -153,6 +169,7 @@ struct Reactor
         runtime.listener = socket.value;
         runtime.port = port.value;
         runtime.accept = accept;
+        runtime.acceptDelegate = bound;
         return Error.init;
     }
 
@@ -190,6 +207,17 @@ struct Reactor
         return Error(runtime.workers[ownerCore].mailbox.enqueue(Message(task, ConnectionId.init, move(context))));
     }
 
+    /// Retain a task delegate for dispatch as a fiber on the current owner core.
+    Error postWith(uint ownerCore, TaskDelegate task, TaskContext context = TaskContext.init) nothrow @nogc
+    {
+        if (runtime is null || currentRuntime !is runtime || ownerCore != currentWorkerIndex || task is null)
+            return Error(Status.invalidArgument, "bound task requires its owner and callback");
+        if (atomicLoad(runtime.state) != State.running)
+            return Error(Status.unavailable, "reactor is not running");
+        auto message = Message(null, ConnectionId.init, move(context), task);
+        return Error(runtime.workers[ownerCore].mailbox.enqueue(move(message)));
+    }
+
     /// Mark the connection draining on its owner or queue the request to that owner.
     Error close(ConnectionId connection) nothrow @nogc
     {
@@ -211,17 +239,39 @@ struct Reactor
     /// Reserve a single receive of at most maxBytes on the connection owner.
     Result!IoId read(ConnectionId connection, size_t maxBytes, Context context, ReadFn completion) nothrow @nogc
     {
-        if (currentCore() != connection.ownerCore || currentRuntime is null || completion is null)
+        return queueRead(connection, maxBytes, context, IoCallbacks(completion));
+    }
+
+    /// Reserve a receive and keep an owned delegate through the final completion.
+    Result!IoId readWith(ConnectionId connection, size_t maxBytes, Context context, ReadDelegate done) nothrow @nogc
+    {
+        return queueRead(connection, maxBytes, context, IoCallbacks(null, done));
+    }
+
+    private Result!IoId queueRead(ConnectionId id, size_t limit, Context context, IoCallbacks callbacks) nothrow @nogc
+    {
+        if (currentCore() != id.ownerCore || currentRuntime is null || !callbacks.reading)
             return Result!IoId(IoId.init, Error(Status.invalidArgument, "read requires its owner and callback"));
-        return runtime.workers[currentWorkerIndex].queueIo(connection, maxBytes, null, context, completion, null);
+        return runtime.workers[currentWorkerIndex].queueIo(id, limit, null, context, callbacks);
     }
 
     /// Copy a bounded write into slot-owned storage and send its bytes before completion.
     Result!IoId write(ConnectionId id, scope const(ubyte)[] bytes, Context context, CompletionFn done) nothrow @nogc
     {
-        if (currentCore() != id.ownerCore || currentRuntime is null || done is null)
+        return sendTo(id, bytes, context, IoCallbacks(null, null, done));
+    }
+
+    /// Copy a bounded write and retain its delegate through the final completion.
+    Result!IoId writeWith(ConnectionId id, scope const(ubyte)[] data, Context ctx, CompletionDelegate fn) nothrow @nogc
+    {
+        return sendTo(id, data, ctx, IoCallbacks(null, null, null, fn));
+    }
+
+    private Result!IoId sendTo(ConnectionId id, scope const(ubyte)[] data, Context ctx, IoCallbacks cb) nothrow @nogc
+    {
+        if (currentCore() != id.ownerCore || currentRuntime is null || (cb.write is null && cb.boundWrite is null))
             return Result!IoId(IoId.init, Error(Status.invalidArgument, "write requires its owner and callback"));
-        return runtime.workers[currentWorkerIndex].queueIo(id, bytes.length, bytes, context, null, done);
+        return runtime.workers[currentWorkerIndex].queueIo(id, data.length, data, ctx, cb);
     }
 
     /// Request cancellation of the ticket. Its final callback still runs exactly once.
@@ -273,6 +323,38 @@ struct Reactor
         return runtime.workers[currentWorkerIndex].yieldTask(deadline);
     }
 
+    /// Create or update a Linux watch on the current worker. The caller keeps ownership of fd and
+    /// removes the watch before releasing the descriptor or callback. Error readiness is always delivered.
+    Error watchNative(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
+    {
+        version (linux)
+        {
+            enum valid = NativeInterest.read | NativeInterest.write | NativeInterest.error;
+            if (fd < 0 || callback is null || interest == NativeInterest.none || (interest & ~valid) != 0)
+                return Error(Status.invalidArgument, "invalid native descriptor watch");
+            if (runtime is null || currentRuntime !is runtime || atomicLoad(runtime.state) != State.running)
+                return Error(Status.conflict, "native watch requires a running owner loop");
+            return runtime.workers[currentWorkerIndex].watchNative(fd, interest, callback);
+        }
+        else
+            return Error(Status.unsupported, "native descriptor watches require Linux");
+    }
+
+    /// Drop a Linux watch from its owner loop. Remains available during cancellation and shutdown.
+    Error unwatchNative(int fd) nothrow @nogc
+    {
+        version (linux)
+        {
+            if (fd < 0)
+                return Error(Status.invalidArgument, "invalid native descriptor");
+            if (runtime is null || currentRuntime !is runtime)
+                return Error(Status.conflict, "native watch removal requires its owner loop");
+            return Error(runtime.workers[currentWorkerIndex].nativeWatches.remove(fd));
+        }
+        else
+            return Error(Status.unsupported, "native descriptor watches require Linux");
+    }
+
     /// Return the port selected by a successful listen.
     Result!ushort localPort() const nothrow @nogc
     {
@@ -308,6 +390,7 @@ private struct Runtime
     Socket listener;
     ushort port;
     AcceptFn accept;
+    AcceptDelegate acceptDelegate;
 
     @disable this(this);
 
@@ -451,6 +534,7 @@ private struct Runtime
         foreach (ref worker; workers)
             worker.release();
         closeSocket(listener);
+        acceptDelegate = null;
     }
 }
 
@@ -466,13 +550,25 @@ private struct Connection
     version (Posix) Interest interest;
 }
 
+private struct IoCallbacks
+{
+    ReadFn read;
+    ReadDelegate boundRead;
+    CompletionFn write;
+    CompletionDelegate boundWrite;
+
+    bool reading() const pure nothrow @nogc
+    {
+        return read !is null || boundRead !is null;
+    }
+}
+
 private struct IoWork
 {
     OperationId id;
     ConnectionId connection;
     Context context;
-    ReadFn read;
-    CompletionFn write;
+    IoCallbacks callbacks;
     size_t length;
     size_t offset;
     bool started;
@@ -485,9 +581,15 @@ private struct FiberTask
 {
     Fiber fiber;
     TaskFn task;
+    TaskDelegate boundTask;
     TaskContext context;
     Deadline wake;
     uint next;
+
+    bool occupied() const pure nothrow @nogc
+    {
+        return task !is null || boundTask !is null;
+    }
 }
 
 private void enterTask() @safe nothrow @nogc
@@ -516,6 +618,13 @@ private struct Worker
     uint activeFiberCount;
 
     version (Posix) Readiness readiness;
+
+    version (linux)
+    {
+        NativeWatches nativeWatches;
+        bool nativePending;
+        bool nativeCancelSent;
+    }
 
     version (ReactorReadinessOnly)
     {
@@ -546,6 +655,8 @@ private struct Worker
         buffers = new ubyte[cast(size_t) options.ioBufferBytes * options.maxPendingIoPerCore];
         mailbox.initialize(options.mailboxCapacity);
         timers.initialize(options.maxTimersPerCore);
+        version (linux)
+            nativeWatches.reserve(options.maxNativeWatchesPerCore);
     }
 
     void preallocateFibers()
@@ -596,8 +707,12 @@ private struct Worker
     void executeTask() nothrow @nogc
     {
         auto task = &fibers[activeFiber];
-        if (task.context.cancellation.check().code == Status.ok)
+        if (task.context.cancellation.check().code != Status.ok)
+            return;
+        if (task.task !is null)
             task.task();
+        else
+            task.boundTask();
     }
 
     private void startTask(ref Message message) nothrow @nogc
@@ -607,6 +722,7 @@ private struct Worker
         auto task = &fibers[slot];
         freeFiber = task.next;
         task.task = message.task;
+        task.boundTask = message.boundTask;
         task.context = move(message.context);
         ++activeFiberCount;
         resumeTask(slot);
@@ -622,6 +738,7 @@ private struct Worker
         {
             resetFiber(task.fiber);
             task.task = null;
+            task.boundTask = null;
             task.context = TaskContext.init;
             task.next = freeFiber;
             freeFiber = slot;
@@ -641,7 +758,7 @@ private struct Worker
         {
             if (!stopping && used == runtime.options.completionsPerTick)
                 break;
-            if (task.task !is null && (stopping || task.wake.monotonicNanoseconds <= now.monotonicNanoseconds
+            if (task.occupied && (stopping || task.wake.monotonicNanoseconds <= now.monotonicNanoseconds
                     || task.context.cancellation.check().code != Status.ok))
             {
                 resumeTask(cast(uint) slot);
@@ -684,6 +801,8 @@ private struct Worker
                 if (completions.valid)
                 {
                     advanceAccept();
+                    version (linux)
+                        advanceNativeWatch();
                     waitForCompletions(wait);
                 }
                 else
@@ -716,6 +835,65 @@ private struct Worker
         {
             closeCompletionPort(completions);
         }
+        version (linux)
+            nativeWatches.release();
+    }
+
+    version (linux)
+    {
+        Error watchNative(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
+        {
+            if (!nativeWatches.enabled)
+                return Error(Status.resourceExhausted, "native descriptor watches are disabled");
+            if (!nativeWatches.receiver.valid)
+            {
+                auto created = openReadiness();
+                if (!created.ok)
+                    return created.error;
+                if (readiness.valid)
+                {
+                    const registered = setInterest(readiness, Socket(created.value.descriptor),
+                            nativeWatchToken, Interest.none, Interest.read);
+                    if (registered != Status.ok)
+                    {
+                        destroyReadiness(created.value);
+                        return Error(registered, "could not attach native descriptor poller");
+                    }
+                }
+                nativeWatches.receiver = created.value;
+            }
+            return Error(nativeWatches.update(fd, interest, callback));
+        }
+
+        private void advanceNativeWatch() nothrow @nogc
+        {
+            if (!nativeWatches.receiver.valid || nativePending)
+                return;
+            const outcome = submitReadable(completions, nativeWatches.receiver.descriptor, nativeWatchToken);
+            if (outcome == Status.ok)
+                nativePending = true;
+            else if (outcome != Status.unavailable)
+                fail(Error(outcome, "could not submit native descriptor readiness"));
+        }
+
+        private void notifyNativeWatches() nothrow @nogc
+        {
+            const outcome = nativeWatches.notify(runtime.options.completionsPerTick);
+            if (outcome.code != Status.ok)
+                fail(outcome);
+        }
+
+        private void completeNativeWatch(Status status) nothrow @nogc
+        {
+            nativePending = false;
+            nativeCancelSent = false;
+            if (atomicLoad(runtime.state) != State.running)
+                return;
+            if (status == Status.ok)
+                notifyNativeWatches();
+            else if (status != Status.unavailable)
+                fail(Error(status, "native descriptor readiness failed"));
+        }
     }
 
     private void processMessages() nothrow @nogc
@@ -725,7 +903,7 @@ private struct Worker
         {
             if (atomicLoad(runtime.state) != State.running || freeFiber == noSlot || !mailbox.dequeue(next))
                 break;
-            if (next.task !is null)
+            if (next.task !is null || next.boundTask !is null)
                 startTask(next);
             else
                 closeConnection(next.close);
@@ -772,7 +950,11 @@ private struct Worker
         auto connection = &connections[slot];
         nextFree = connection.next;
         *connection = Connection(incoming, generation);
-        runtime.accept(ConnectionId(index, slot, generation));
+        const id = ConnectionId(index, slot, generation);
+        if (runtime.accept !is null)
+            runtime.accept(id);
+        else
+            runtime.acceptDelegate(id);
     }
 
     private bool validConnection(ConnectionId id) const nothrow @nogc
@@ -804,7 +986,7 @@ private struct Worker
     }
 
     Result!IoId queueIo(ConnectionId id, size_t length, scope const(ubyte)[] input, Context context,
-            ReadFn read, CompletionFn write) nothrow @nogc
+            IoCallbacks callbacks) nothrow @nogc
     {
         if (atomicLoad(runtime.state) != State.running)
             return Result!IoId(IoId.init, Error(Status.unavailable, "reactor is stopping"));
@@ -816,7 +998,7 @@ private struct Worker
         auto connection = &connections[id.slot];
         if (connection.draining)
             return Result!IoId(IoId.init, Error(Status.unavailable, "connection is closing"));
-        if ((read !is null ? connection.read : connection.write).generation != 0)
+        if ((callbacks.reading ? connection.read : connection.write).generation != 0)
             return Result!IoId(IoId.init, Error(Status.conflict, "operation in this direction already active"));
 
         const reserved = operations.reserve(id);
@@ -828,10 +1010,9 @@ private struct Worker
         work.id = operation;
         work.connection = id;
         work.context = context;
-        work.read = read;
-        work.write = write;
+        work.callbacks = callbacks;
         work.length = length;
-        if (read !is null)
+        if (callbacks.reading)
             connection.read = operation;
         else
         {
@@ -949,18 +1130,24 @@ private struct Worker
         const slot = work.connection.slot;
         auto connection = &connections[slot];
         ++connection.delivering;
-        if (work.read !is null)
+        if (work.callbacks.reading)
         {
             connection.read = OperationId.init;
             scope const(ubyte)[] data;
             if (done.value.status == Status.ok)
                 data = operationBuffer(id.slot)[0 .. bytes];
-            work.read(done.value, data);
+            if (work.callbacks.read !is null)
+                work.callbacks.read(done.value, data);
+            else
+                work.callbacks.boundRead(done.value, data);
         }
         else
         {
             connection.write = OperationId.init;
-            work.write(done.value);
+            if (work.callbacks.write !is null)
+                work.callbacks.write(done.value);
+            else
+                work.callbacks.boundWrite(done.value);
         }
         --connection.delivering;
         const retired = operations.retire(id);
@@ -1010,6 +1197,14 @@ private struct Worker
             {
                 if (atomicLoad(runtime.state) != State.running)
                     return;
+                version (linux)
+                {
+                    if (event.token == nativeWatchToken)
+                    {
+                        notifyNativeWatches();
+                        continue;
+                    }
+                }
                 if (event.token == listenToken)
                 {
                     auto incoming = acceptConnection(runtime.listener);
@@ -1040,7 +1235,7 @@ private struct Worker
 
             auto socket = connections[work.connection.slot].socket;
             auto buffer = operationBuffer(id.slot);
-            const result = work.read !is null ? receive(socket,
+            const result = work.callbacks.reading ? receive(socket,
                     buffer[0 .. work.length]) : transmit(socket, buffer[work.offset .. work.length]);
             if (result.error.code == Status.unavailable)
                 return;
@@ -1059,7 +1254,8 @@ private struct Worker
         }
 
         work.offset += bytes;
-        if (work.cancellation != Status.ok || status != Status.ok || work.read !is null || work.offset == work.length)
+        if (work.cancellation != Status.ok || status != Status.ok || work.callbacks.reading || work.offset
+                == work.length)
             deliver(id, status, work.offset);
         else if (bytes == 0)
             deliver(id, Status.ioError, work.offset);
@@ -1091,7 +1287,7 @@ private struct Worker
             auto work = &workItems[id.slot];
             auto connection = &connections[work.connection.slot];
             auto buffer = operationBuffer(id.slot);
-            const status = work.read !is null ? submitRead(completions, connection.socket,
+            const status = work.callbacks.reading ? submitRead(completions, connection.socket,
                     buffer[0 .. work.length], id.token) : submitWrite(completions,
                     connection.socket, buffer[work.offset .. work.length], id.token);
             if (status == Status.ok)
@@ -1154,6 +1350,15 @@ private struct Worker
                 return;
             }
 
+            version (linux)
+            {
+                if (event.token == nativeWatchToken)
+                {
+                    completeNativeWatch(event.status);
+                    return;
+                }
+            }
+
             const id = OperationId.fromToken(event.token);
             if (id.slot >= workItems.length)
                 return;
@@ -1164,6 +1369,14 @@ private struct Worker
             observeCancellation(id);
             if (work.cancellation != Status.ok || event.status != Status.unavailable)
                 completeIo(id, event.status, event.bytes);
+        }
+
+        private bool completionsPending() const pure nothrow @nogc
+        {
+            version (linux)
+                if (nativePending)
+                    return true;
+            return liveOperations != 0 || acceptPending || cancellationAcks != 0;
         }
     }
 
@@ -1191,12 +1404,15 @@ private struct Worker
                 return;
             }
 
-            while (liveOperations != 0 || acceptPending || cancellationAcks != 0)
+            while (completionsPending())
             {
                 advanceOperations();
                 if (acceptPending && !acceptCancelSent)
                     cancelInFlight(listenToken, acceptCancelSent);
-                if (liveOperations != 0 || acceptPending || cancellationAcks != 0)
+                version (linux)
+                    if (nativePending && !nativeCancelSent)
+                        cancelInFlight(nativeWatchToken, nativeCancelSent);
+                if (completionsPending())
                     waitForCompletions(waitBudgetMillis);
             }
         }

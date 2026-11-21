@@ -39,7 +39,21 @@ struct ReactorOptions
     uint mailboxCapacity = 256;
     /// Maximum active one-shot timers per worker.
     uint maxTimersPerCore = 1024;
+    /// Maximum Linux borrowed-descriptor watches per worker. Zero disables registration.
+    uint maxNativeWatchesPerCore = 1024;
 }
+
+/// Level-triggered readiness for a descriptor owned by a native library.
+enum NativeInterest : uint
+{
+    none = 0,
+    read = 1,
+    write = 2,
+    error = 4,
+}
+
+/// Runs on the descriptor's owner loop, outside of any task fiber.
+alias NativeReadyFn = void delegate(int fd, NativeInterest events) @safe nothrow @nogc;
 
 /// A connection identity remains stable until its final operation retires.
 struct ConnectionId
@@ -93,6 +107,16 @@ alias CompletionFn = void function(Completion) @safe nothrow @nogc;
 alias TaskFn = void function() @safe nothrow @nogc;
 /// The received bytes may be used within the callback invocation. A successful empty read is EOF.
 alias ReadFn = void function(Completion, scope const(ubyte)[]) @safe nothrow @nogc;
+
+/// A listener owned by the application. It may run concurrently on different workers.
+alias AcceptDelegate = void delegate(ConnectionId) @safe nothrow @nogc;
+/// An application callback for the final outcome on the connection owner.
+alias CompletionDelegate = void delegate(Completion) @safe nothrow @nogc;
+/// A receive callback that borrows the completed bytes for the duration of the call.
+alias ReadDelegate = void delegate(Completion, scope const(ubyte)[]) @safe nothrow @nogc;
+
+/// An owned task bound to the worker that posts it.
+alias TaskDelegate = void delegate() @safe nothrow @nogc;
 
 /// A ticket for the exact lifetime of one read or write reservation.
 struct IoId

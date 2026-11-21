@@ -21,6 +21,7 @@ version (Posix)
     {
         ulong token;
         Interest directions;
+        bool fault;
     }
 
     package(flint.reactor) struct Readiness
@@ -47,8 +48,10 @@ version (Posix)
 
 version (linux)
 {
+    import core.stdc.errno : EBADF, ENOENT;
     import core.sys.linux.epoll : EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLRDHUP, EPOLLEXCLUSIVE,
         EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD, epoll_create1, epoll_ctl, epoll_event, epoll_wait;
+    import flint.reactor.types : NativeInterest;
 
     // SAFETY: epoll_create1 has no pointer input and on success returns one owned descriptor.
     package(flint.reactor) Result!Readiness openReadiness() @trusted nothrow @nogc
@@ -81,6 +84,29 @@ version (linux)
         return Status.ok;
     }
 
+    // SAFETY: epoll borrows the caller-owned descriptor and copies only an integer token and flags.
+    package(flint.reactor) Status setNativeInterest(Readiness poller, int fd, ulong token,
+            NativeInterest previous, NativeInterest desired) @trusted nothrow @nogc
+    {
+        if (previous == desired)
+            return Status.ok;
+        epoll_event event;
+        event.data.u64 = token;
+        event.events = EPOLLRDHUP;
+        if (desired & NativeInterest.read)
+            event.events |= EPOLLIN;
+        if (desired & NativeInterest.write)
+            event.events |= EPOLLOUT;
+        const change = desired == NativeInterest.none ? EPOLL_CTL_DEL
+            : (previous == NativeInterest.none ? EPOLL_CTL_ADD : EPOLL_CTL_MOD);
+        if (epoll_ctl(poller.descriptor, change, fd, change == EPOLL_CTL_DEL ? null : &event) == 0)
+            return Status.ok;
+        const failure = errno;
+        if (change == EPOLL_CTL_DEL && (failure == EBADF || failure == ENOENT))
+            return Status.ok;
+        return socketError(failure);
+    }
+
     // SAFETY: The wait uses bounded local storage and returns synchronously. Only entries reported by epoll are read.
     @trusted package(flint.reactor) Result!size_t poll(Readiness port, scope ReadyEvent[] ready, uint ms) nothrow @nogc
     {
@@ -97,7 +123,8 @@ version (linux)
             const flags = nativeEvents[i].events;
             const readable = (flags & (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0;
             const writable = (flags & (EPOLLOUT | EPOLLERR | EPOLLHUP)) != 0;
-            ready[i] = ReadyEvent(nativeEvents[i].data.u64, directions(readable, writable));
+            const fault = (flags & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0;
+            ready[i] = ReadyEvent(nativeEvents[i].data.u64, directions(readable, writable), fault);
         }
         return Result!size_t(cast(size_t) count);
     }
