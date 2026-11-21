@@ -20,6 +20,12 @@ Error hmacSha256(scope const(ubyte)[] key, scope const(ubyte)[] input, ref ubyte
     return mac(key, input, output);
 }
 
+/// Erase caller-owned mutable secret storage through the selected native provider.
+void eraseSecret(scope ubyte[] storage) nothrow @nogc
+{
+    wipe(storage);
+}
+
 /// Produce a complete interactive-cost Argon2id verifier as caller-owned bytes.
 Result!Buffer hashPassword(scope const(ubyte)[] input, ref scope RequestArena arena, ref Context context) nothrow @nogc
 {
