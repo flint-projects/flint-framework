@@ -56,6 +56,14 @@ struct Bind(Contract, Implementation)
     alias ImplementationType = Implementation;
 }
 
+/// Require a startup-supplied instance without inspecting its constructors or lifecycle hooks.
+struct Provided(T)
+{
+}
+
+/// Identify externally supplied concrete registrations.
+enum bool providedOnly(T) = is(T == Provided!Value, Value);
+
 /// Group registrations without discovering any additional types.
 struct BeanRegistrar(Bindings...)
 {
@@ -96,7 +104,7 @@ bool hasBinding(Entries...)() nothrow @nogc
     static foreach (Entry; Entries)
     {
         {
-            static if (is(Entry == Bind!(Contract, Implementation), Contract, Implementation))
+            static if (is(Entry == Bind!(Contract, Implementation), Contract, Implementation) || providedOnly!Entry)
                 return true;
         }
     }
@@ -108,6 +116,8 @@ template Key(T)
 {
     static if (is(T == Bind!(Contract, Implementation), Contract, Implementation))
         alias Key = Contract;
+    else static if (is(T == Provided!Value, Value))
+        alias Key = Value;
     else
         alias Key = T;
 }
@@ -117,6 +127,8 @@ template Concrete(T)
 {
     static if (is(T == Bind!(Contract, Implementation), Contract, Implementation))
         alias Concrete = Implementation;
+    else static if (is(T == Provided!Value, Value))
+        alias Concrete = Value;
     else
         alias Concrete = T;
 }

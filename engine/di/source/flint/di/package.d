@@ -3,6 +3,6 @@ module flint.di;
 
 public import flint.di.internal.context : AppContext;
 public import flint.di.internal.registrations : BeanRegistrar, Bind, Component, Inject, Named,
-    PostConstruct, PreDestroy, Repository, Service, Singleton;
+    PostConstruct, PreDestroy, Provided, Repository, Service, Singleton;
 
 @safe:

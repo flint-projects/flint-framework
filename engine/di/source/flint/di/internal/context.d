@@ -173,13 +173,14 @@ struct AppContext(Beans...)
     {
         private alias Keys = staticMap!(Key, Entries);
         private alias Implementations = staticMap!(Concrete, Entries);
+        private enum graph = build!(Entries.length, Keys, Implementations, Entries)();
     }
     else
     {
         private alias Keys = Entries;
         private alias Implementations = Entries;
+        private enum graph = build!(Entries.length, Keys, Implementations)();
     }
-    private enum graph = build!(Keys, Implementations)();
     private alias State = Storage!(Keys, Implementations);
     private State state;
     private Phase phase;

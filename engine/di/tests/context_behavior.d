@@ -380,3 +380,42 @@ unittest
         ++errors;
     assert(errors == 2);
 }
+
+@("explicitly provided concrete values may have private constructors")
+unittest
+{
+    import flint.di : Provided;
+
+    static struct OwnedPool
+    {
+        uint value;
+
+        private this(uint value) @safe
+        {
+            this.value = value;
+        }
+
+        static OwnedPool create(uint value) @safe
+        {
+            return OwnedPool(value);
+        }
+    }
+
+    static final class User
+    {
+        uint observed;
+
+        @safe this(ref OwnedPool pool)
+        {
+            observed = pool.value;
+        }
+    }
+
+    AppContext!(Provided!OwnedPool, User) missing;
+    assert(missing.initialize().code == Status.notFound);
+    AppContext!(User, Provided!OwnedPool) context;
+    assert(context.provide(OwnedPool.create(42)).code == Status.ok);
+    assert(context.initialize().code == Status.ok);
+    assert(context.get!User().observed == 42);
+    context.shutdown();
+}

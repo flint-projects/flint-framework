@@ -3,7 +3,7 @@ module flint.di.internal.graph;
 
 import flint.di.internal.constructors : Constructor, noConstructor;
 import flint.di.internal.lifecycle : Lifecycle, inspect;
-import flint.di.internal.registrations : missing;
+import flint.di.internal.registrations : missing, providedOnly;
 import std.traits : Unqual;
 
 @safe:
@@ -28,7 +28,7 @@ struct Graph
     uint count;
     /// A binding has both the exposed and concrete views of a bean.
     bool[maxBeans] bound;
-    /// An abstract type must be supplied by the caller.
+    /// A caller-supplied type has no generated construction or hooks.
     bool[maxBeans] external;
     /// Classes are allocated at startup.
     bool[maxBeans] classes;
@@ -41,11 +41,11 @@ struct Graph
 }
 
 /// Validate the bounded registration and compute its schedule.
-Graph build(Types...)()
+Graph build(size_t count, Types...)()
 {
-    enum count = Types.length / 2;
     alias Keys = Types[0 .. count];
-    alias Implementations = Types[count .. $];
+    alias Implementations = Types[count .. 2 * count];
+    alias Registrations = Types[2 * count .. $];
     static assert(count <= maxBeans, "DI context exceeds the 128-bean limit");
 
     Graph graph;
@@ -69,8 +69,12 @@ Graph build(Types...)()
                     "unsupported DI registration type " ~ Contract.stringof);
             static assert(is(Implementation : Contract),
                     "DI implementation does not satisfy " ~ Contract.stringof ~ ": " ~ Implementation.stringof);
-            enum external = is(Implementation == interface) || (is(Implementation == class)
-                        && __traits(isAbstractClass, Implementation));
+            static if (Registrations.length)
+                enum explicit = providedOnly!(Registrations[position]);
+            else
+                enum explicit = false;
+            enum external = explicit || is(Implementation == interface)
+                || (is(Implementation == class) && __traits(isAbstractClass, Implementation));
             static assert(is(Contract == Implementation) || !external,
                     "DI explicit binding requires a concrete implementation: " ~ Implementation.stringof);
             graph.bound[position] = !is(Contract == Implementation);
