@@ -2,7 +2,8 @@ module flint.web.http1_behavior;
 
 import flint.arena : RequestArena, Status;
 import flint.web.http1 : Http1Reader, ReadOutcome;
-import flint.web.types : Method, Request;
+import flint.web.sys.ownership : releaseBytes, reserveH1;
+import flint.web.types : HeaderRecord, Method, Request, maximumFields;
 
 @safe:
 
@@ -15,7 +16,12 @@ unittest
     ubyte[4096] storage;
     scope arena = RequestArena(storage[]);
     Http1Reader reader;
-    assert(reader.open(617, new ubyte[512], 512, 100).code == Status.ok);
+    ubyte[] payload;
+    auto owned = reserveH1(512, reader.metadata.headers, payload);
+    assert(payload.length == 512 && reader.metadata.headers.length == maximumFields);
+    scope (exit)
+        releaseBytes(owned);
+    assert(reader.open(617, payload, 512, 100).code == Status.ok);
     scope (exit)
         reader.close();
     assert(reader.begin());
@@ -59,6 +65,7 @@ private ushort rejected(scope const(char)[] input, size_t headerBytes = 256, siz
     ubyte[2048] storage;
     scope arena = RequestArena(storage[]);
     Http1Reader reader;
+    reader.metadata.headers = new HeaderRecord[maximumFields];
     assert(reader.open(23, new ubyte[headerBytes], headerBytes, bodyBytes).code == Status.ok);
     scope (exit)
         reader.close();
@@ -83,4 +90,47 @@ unittest
     foreach (index; 0 .. 65)
         longHead ~= "x: y\r\n";
     assert(rejected(longHead ~ "\r\n", 512) == 431);
+}
+
+@("HTTP/1 header tables reject overflow and stale handles survive storage retirement")
+unittest
+{
+    HeaderRecord[] headers;
+    ubyte[] payload;
+    assert(reserveH1(size_t.max, headers, payload) is null && headers is null && payload is null);
+
+    ubyte[2048] requestBytes;
+    scope arena = RequestArena(requestBytes[]);
+    Http1Reader reader;
+    auto owned = reserveH1(512, reader.metadata.headers, payload);
+    assert(owned !is null);
+    scope (exit)
+        releaseBytes(owned);
+    assert(reader.open(91, payload, 512, 64).code == Status.ok);
+    assert(reader.begin());
+    size_t consumed;
+    auto first = "GET / HTTP/1.1\r\nHost: x\r\nX-Old: yes\r\n";
+    foreach (_; 2 .. maximumFields)
+        first ~= "x: y\r\n";
+    first ~= "\r\n";
+    assert(reader.feed(cast(const(ubyte)[]) first, arena, consumed) == ReadOutcome.request);
+    assert(reader.metadata.fieldCount == maximumFields);
+    scope stale = Request.fromMetadata(&reader.metadata);
+    assert(stale.header("X-Old").ok());
+    reader.close();
+    reader.metadata.headers = null;
+    releaseBytes(owned);
+    assert(stale.header("X-Old").error.code == Status.invalidArgument);
+
+    owned = reserveH1(256, reader.metadata.headers, payload);
+    assert(owned !is null);
+    assert(reader.open(92, payload, 256, 64).code == Status.ok);
+    scope (exit)
+        reader.close();
+    assert(arena.reset() == Status.ok && reader.begin());
+    enum second = "GET / HTTP/1.1\r\nHost: y\r\n\r\n";
+    assert(reader.feed(cast(const(ubyte)[]) second, arena, consumed) == ReadOutcome.request);
+    assert(stale.header("Host").error.code == Status.invalidArgument);
+    scope current = Request.fromMetadata(&reader.metadata);
+    assert(current.header("Host").ok() && current.header("X-Old").error.code == Status.notFound);
 }

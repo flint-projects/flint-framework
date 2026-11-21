@@ -14,7 +14,7 @@ import flint.web.http2 : H2Runtime;
 import flint.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
 import flint.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
-import flint.web.sys.ownership : launchDriver, releaseBytes, reserveBytes;
+import flint.web.sys.ownership : launchDriver, releaseBytes, reserveH1;
 import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
 import flint.web.types : ErrorAdvice, Handler, Method, RequestContext, Response, RouteRegistration, ServerOptions;
 import flint.web.worker : WorkerLifecycle;
@@ -503,18 +503,19 @@ private final class Runtime : StreamEndpoint
         connection.id = id;
         connection.phase = ConnectionPhase.reading;
         const capacity = arenaBytes + limits.maxHeaderBytes + ioBytes;
-        connection.owned = reserveBytes(capacity);
-        if (connection.owned.length != capacity)
+        ubyte[] payload;
+        connection.owned = reserveH1(capacity, connection.parser.metadata.headers, payload);
+        if (connection.owned is null)
         {
             close(connection);
             return;
         }
-        auto arena = RequestArena(connection.owned[0 .. arenaBytes]);
+        auto arena = RequestArena(payload[0 .. arenaBytes]);
         move(arena, connection.request.arena);
         const nameEnd = arenaBytes + limits.maxHeaderBytes;
-        connection.pending = connection.owned[nameEnd .. $];
-        const opened = connection.parser.open(id.generation,
-                connection.owned[arenaBytes .. nameEnd], limits.maxHeaderBytes, limits.maxBodyBytes);
+        connection.pending = payload[nameEnd .. $];
+        const opened = connection.parser.open(id.generation, payload[arenaBytes .. nameEnd],
+                limits.maxHeaderBytes, limits.maxBodyBytes);
         if (opened.code != Status.ok || !newRequest(connection))
         {
             close(connection);
@@ -1025,6 +1026,7 @@ private final class Runtime : StreamEndpoint
         connection.request.cancellation = Context.init;
         connection.cancellation.close();
         connection.parser.close();
+        connection.parser.metadata.headers = null;
         destroy(connection.request.arena);
         connection.pending = null;
         connection.pendingCount = 0;

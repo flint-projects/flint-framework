@@ -9,7 +9,8 @@ import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Channel, Context, Deadline, QueueKind;
 import flint.reactor : Reactor;
 import flint.web.sys.ownership : joinDriver, launchDriver;
-import flint.web.types : Capture, Method, Request, RequestContext, RequestMetadata, Response, maximumCaptures;
+import flint.web.types : Capture, HeaderRecord, Method, Request, RequestContext, RequestMetadata,
+    Response, maximumCaptures, maximumFields;
 import flint.web.worker_packet : WorkerMedia, WorkerReply, WorkerRequest, workerMediaTypes, workerPacketBytes;
 
 @safe:
@@ -51,6 +52,7 @@ final class ControllerWorker(C)
 {
     private C instance;
     private Job!C[] packets;
+    private HeaderRecord[maximumFields] headers;
     private Channel!(uint, QueueKind.mpsc) pending;
     private shared bool stopping;
     private shared bool stopped = true;
@@ -205,6 +207,7 @@ final class ControllerWorker(C)
         context.requestId = job.request.identity;
         context.cancellation = job.cancellation;
         RequestMetadata metadata;
+        metadata.headers = headers[];
         if (!unpack(&job.request, &metadata, context.arena))
         {
             job.reply.error = Status.outOfMemory;

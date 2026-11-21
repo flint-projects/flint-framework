@@ -15,7 +15,7 @@ import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamToken;
 import flint.web.stream_queues : StreamQueues;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
 import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
-import flint.web.types : Method, RequestContext, Response, ServerOptions;
+import flint.web.types : HeaderRecord, Method, RequestContext, Response, ServerOptions, maximumFields;
 import flint.web.wire : responseCode, validMediaType;
 
 @safe:
@@ -78,6 +78,7 @@ private struct Stream
     bool finishedOutput;
     StreamQueues queues;
     Deadline headerDeadline;
+    HeaderRecord[maximumFields] headers;
     Http1Reader assembly;
     RequestContext request;
     CancelSource cancel;
@@ -123,6 +124,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
             stream.runtime = this;
             stream.index = cast(uint) index;
             stream.action = &stream.execute;
+            stream.assembly.metadata.headers = stream.headers[];
         }
     }
 

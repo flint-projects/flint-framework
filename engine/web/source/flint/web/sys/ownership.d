@@ -4,6 +4,7 @@ module flint.web.sys.ownership;
 import core.stdc.stdlib : free, malloc;
 import core.thread : Thread;
 import flint.arena : Error, Status;
+import flint.web.types : HeaderRecord, maximumFields;
 
 @safe:
 
@@ -14,6 +15,22 @@ package(flint.web) ubyte[] reserveBytes(size_t capacity) @trusted nothrow @nogc
         return null;
     auto pointer = cast(ubyte*) malloc(capacity);
     return pointer is null ? null : pointer[0 .. capacity];
+}
+
+// SAFETY: malloc aligns the pointer-free HeaderRecord prefix. The returned slice owns the entire
+// region, which keeps both views live until the final HTTP callback. Only initialized records are read.
+package(flint.web) ubyte[] reserveH1(size_t bytes, out HeaderRecord[] table, out ubyte[] data) @trusted nothrow @nogc
+{
+    enum prefix = maximumFields * HeaderRecord.sizeof;
+    static assert(prefix % 8 == 0 && HeaderRecord.alignof <= 8);
+    if (bytes == 0 || bytes > size_t.max - prefix)
+        return null;
+    auto owned = reserveBytes(prefix + bytes);
+    if (owned is null)
+        return null;
+    table = (cast(HeaderRecord*) owned.ptr)[0 .. maximumFields];
+    data = owned[prefix .. $];
+    return owned;
 }
 
 // SAFETY: Only the owner releases this exact allocation after final completion; aliases are already retired.
