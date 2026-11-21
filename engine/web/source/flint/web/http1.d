@@ -245,7 +245,7 @@ package(flint.web) struct Http1Reader
         if (!parser.headers(info) || info.major != 1 || info.minor > 1)
             return 505;
         versionMinor = info.minor;
-        if ((versionMinor == 1 && !sawHost) || (sawTransfer && (sawLength || info.chunked == 0)))
+        if (!validFraming(info))
             return 400;
         if (info.method > Method.options)
             return 501;
@@ -260,6 +260,11 @@ package(flint.web) struct Http1Reader
         keepAlive = info.keepAlive != 0 && !upgradeRequested;
         readingHeaders = false;
         return 0;
+    }
+
+    private bool validFraming(scope const ref Http1Info info) const pure nothrow @nogc
+    {
+        return (versionMinor != 1 || sawHost) && (!sawTransfer || (!sawLength && info.chunked != 0));
     }
 
     private static bool validUpgrade(scope const ref Http1Info info) pure nothrow @nogc

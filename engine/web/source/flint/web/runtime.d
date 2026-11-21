@@ -637,13 +637,13 @@ private final class Runtime : StreamEndpoint
 
     private size_t bodyLimitForRoute(Method method, Buffer path, ref scope RequestArena arena) nothrow @nogc
     {
-        size_t result = limits.maxBodyBytes;
+        size_t selected = limits.maxBodyBytes;
         const checked = arena.read(path, (scope const(ubyte)[] target) @safe nothrow @nogc {
             const matched = routes.find(method, target);
             if (matched.stream !is null && matched.mode == StreamMode.response)
-                result = limits.maxStreamingRequestBytes;
+                selected = limits.maxStreamingRequestBytes;
         });
-        return checked == Status.ok ? result : limits.maxBodyBytes;
+        return checked == Status.ok ? selected : limits.maxBodyBytes;
     }
 
     private void dispatch(ConnectionId id) nothrow @nogc
