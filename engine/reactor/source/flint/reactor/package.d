@@ -214,6 +214,21 @@ struct Reactor
             return Error(Status.invalidArgument, "bound task requires its owner and callback");
         if (atomicLoad(runtime.state) != State.running)
             return Error(Status.unavailable, "reactor is not running");
+        return queueBound(ownerCore, task, move(context));
+    }
+
+    /// Before run, the reactor owner may transfer an initialized task to one worker's startup queue.
+    Error postStartup(uint core, TaskDelegate task, TaskContext context = TaskContext.init) nothrow @nogc
+    {
+        if (!owner || runtime is null || task is null || core >= runtime.workers.length)
+            return Error(Status.invalidArgument, "invalid startup task or owner");
+        if (atomicLoad(runtime.state) != State.configured)
+            return Error(Status.conflict, "startup tasks require a configured reactor");
+        return queueBound(core, task, move(context));
+    }
+
+    private Error queueBound(uint ownerCore, TaskDelegate task, TaskContext context) nothrow @nogc
+    {
         auto message = Message(null, ConnectionId.init, move(context), task);
         return Error(runtime.workers[ownerCore].mailbox.enqueue(move(message)));
     }

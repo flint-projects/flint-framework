@@ -87,3 +87,32 @@ unittest
     const stats = server.value.workerStats(0);
     assert(stats.ok && stats.value.gcAllocated == 0);
 }
+
+private final class StartupTask
+{
+    bool entered;
+
+    @safe nothrow @nogc void run()
+    {
+        auto reactor = Reactor.current();
+        const task = reactor.currentTask();
+        assert(task.ok && task.value.requestId == 81);
+        entered = true;
+        reactor.stop();
+    }
+}
+
+@("configured owners can transfer a bound startup task before entering the run loop")
+unittest
+{
+    ReactorOptions options;
+    options.cores = 1;
+    options.fiberPoolSize = 1;
+    auto setup = Reactor.create(options);
+    assert(setup.ok);
+    auto startup = new StartupTask;
+    assert(setup.value.postWith(0, &startup.run).code == Status.invalidArgument);
+    assert(setup.value.postStartup(0, &startup.run, TaskContext(81)).code == Status.ok);
+    assert(setup.value.run().code == Status.ok && startup.entered);
+    assert(setup.value.postStartup(0, &startup.run).code == Status.conflict);
+}
