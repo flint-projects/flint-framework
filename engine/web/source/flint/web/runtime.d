@@ -63,7 +63,6 @@ private struct Connection
     bool readActive;
     bool writeActive;
     bool taskActive;
-    bool taskEntered;
     bool closing;
     StreamMode streamMode;
     bool streamStarted;
@@ -531,7 +530,6 @@ private final class Runtime : StreamEndpoint
         connection.request.requestId = 0;
         connection.hasHeaderDeadline = false;
         connection.phase = ConnectionPhase.reading;
-        connection.taskEntered = false;
         return true;
     }
 
@@ -620,8 +618,8 @@ private final class Runtime : StreamEndpoint
         }
         connection.request.requestId = identity;
         connection.phase = ConnectionPhase.handling;
-        const queued = Reactor.current().postWith(connection.id.ownerCore, connection.handlerTask,
-                TaskContext(identity, connection.request.cancellation));
+        const queued = Reactor.current().postWithCleanup(connection.id.ownerCore,
+                connection.handlerTask, TaskContext(identity, connection.request.cancellation));
         if (queued.code != Status.ok)
             reply(connection, failure(connection, 503), false, false);
         else
@@ -636,8 +634,7 @@ private final class Runtime : StreamEndpoint
         auto connection = checked(id, ConnectionPhase.handling);
         if (connection is null)
             return;
-        connection.taskEntered = true;
-        if (connection.request.cancellation.cancelled())
+        if (connection.request.cancellation.check().code != Status.ok)
         {
             connection.taskActive = false;
             close(connection);
@@ -997,9 +994,8 @@ private final class Runtime : StreamEndpoint
             connection.closing = true;
             connection.cancellation.cancel();
         }
-        // Keep the reactor slot reserved while an entered task or transport callback still owns it.
-        // Reactor discards a canceled task that has not entered.
-        if (!connection.readActive && !connection.writeActive && (!connection.taskActive || !connection.taskEntered))
+        // Keep the reactor slot reserved through the final transport or task callback.
+        if (!connection.readActive && !connection.writeActive && !connection.taskActive)
         {
             closePlain(tls, connection.id);
             retire(connection);
@@ -1020,7 +1016,6 @@ private final class Runtime : StreamEndpoint
         connection.readActive = false;
         connection.writeActive = false;
         connection.taskActive = false;
-        connection.taskEntered = false;
         connection.closing = false;
         connection.streamStarted = false;
         connection.streamEnded = false;

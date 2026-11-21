@@ -1,7 +1,7 @@
 module flint.reactor.task_test;
 
 import flint.arena : Status;
-import flint.conc : Deadline;
+import flint.conc : CancelSource, Context, Deadline;
 import flint.reactor : Reactor, ReactorOptions, TaskContext;
 
 private uint stage;
@@ -115,4 +115,50 @@ unittest
     assert(setup.value.postStartup(0, &startup.run, TaskContext(81)).code == Status.ok);
     assert(setup.value.run().code == Status.ok && startup.entered);
     assert(setup.value.postStartup(0, &startup.run).code == Status.conflict);
+}
+
+private final class CancelledTask
+{
+    uint calls;
+
+    void queue() @safe nothrow @nogc
+    {
+        auto owner = Reactor.current();
+        auto source = CancelSource.create(Context.init, Deadline.none());
+        assert(source.ok);
+        scope (exit)
+            source.value.close();
+        auto copied = TaskContext(82, source.value.context());
+        assert(owner.postWith(0, &unexpected, copied).code == Status.ok);
+        assert(owner.postWithCleanup(0, &retire, copied).code == Status.ok);
+        source.value.cancel();
+    }
+
+    void unexpected() @safe nothrow @nogc
+    {
+        assert(0, "default task ran after cancellation");
+    }
+
+    void retire() @safe nothrow @nogc
+    {
+        auto owner = Reactor.current();
+        const task = owner.currentTask();
+        assert(task.ok && task.value.requestId == 82);
+        assert(task.value.cancellation.check().code == Status.cancelled);
+        ++calls;
+        owner.stop();
+    }
+}
+
+@("owner cleanup runs once when cancellation precedes first dispatch")
+unittest
+{
+    ReactorOptions options;
+    options.cores = 1;
+    options.fiberPoolSize = 1;
+    auto setup = Reactor.create(options);
+    assert(setup.ok);
+    auto fixture = new CancelledTask;
+    assert(setup.value.postStartup(0, &fixture.queue).code == Status.ok);
+    assert(setup.value.run().code == Status.ok && fixture.calls == 1);
 }

@@ -15,6 +15,7 @@ package(flint.reactor) struct Message
     ConnectionId close;
     TaskContext context;
     TaskDelegate boundTask;
+    bool invokeIfCancelled;
 }
 
 /// Bound tasks enter and leave their owner worker's ring. Cross-worker messages use function pointers.

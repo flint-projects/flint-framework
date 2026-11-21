@@ -444,8 +444,8 @@ package(flint.web) final class H2Runtime : StreamEndpoint
 
             stream.request.requestId = requestId();
             stream.phase = StreamPhase.admitted;
-            const posted = Reactor.current().postWith(connection.id.ownerCore, stream.action,
-                    TaskContext(stream.request.requestId, stream.request.cancellation));
+            const posted = Reactor.current().postWithCleanup(connection.id.ownerCore,
+                    stream.action, TaskContext(stream.request.requestId, stream.request.cancellation));
             if (posted.code != Status.ok)
             {
                 stream.phase = StreamPhase.responding;
@@ -706,7 +706,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
     private bool discard(Session* connection, Stream* stream) nothrow @nogc
     {
         if (!connection.closing && !connection.draining && !stream.providerClosed
-                && !stream.request.cancellation.cancelled())
+                && stream.request.cancellation.check().code == Status.ok)
             return false;
         stream.phase = StreamPhase.responding;
         if (connection.closing)
@@ -860,7 +860,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
             if (index == 0)
                 continue;
             auto stream = &streams[index - 1];
-            if (stream.providerClosed && (stream.phase != StreamPhase.admitted || !stream.entered))
+            if (stream.providerClosed && stream.phase != StreamPhase.admitted)
             {
                 retire(stream);
                 index = 0;
@@ -894,7 +894,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
             if (index == 0)
                 continue;
             auto stream = &streams[index - 1];
-            if (stream.phase != StreamPhase.admitted || !stream.entered)
+            if (stream.phase != StreamPhase.admitted)
             {
                 retire(stream);
                 index = 0;

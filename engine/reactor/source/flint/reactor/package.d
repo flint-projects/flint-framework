@@ -219,11 +219,23 @@ struct Reactor
     /// Retain a task delegate for dispatch as a fiber on the current owner core.
     Error postWith(uint ownerCore, TaskDelegate task, TaskContext context = TaskContext.init) nothrow @nogc
     {
+        return queueOwner(ownerCore, task, move(context), false);
+    }
+
+    /// Dispatch a task on its owner even if the copied context is cancelled before the task enters.
+    /// The delegate checks the context before doing application work and retires its owned state.
+    Error postWithCleanup(uint ownerCore, TaskDelegate task, TaskContext context) nothrow @nogc
+    {
+        return queueOwner(ownerCore, task, move(context), true);
+    }
+
+    private Error queueOwner(uint ownerCore, TaskDelegate task, TaskContext context, bool cleanup) nothrow @nogc
+    {
         if (runtime is null || currentRuntime !is runtime || ownerCore != currentWorkerIndex || task is null)
             return Error(Status.invalidArgument, "bound task requires its owner and callback");
         if (atomicLoad(runtime.state) != State.running)
             return Error(Status.unavailable, "reactor is not running");
-        return queueBound(ownerCore, task, move(context));
+        return queueBound(ownerCore, task, move(context), cleanup);
     }
 
     /// Before run, the reactor owner may transfer an initialized task to one worker's startup queue.
@@ -236,9 +248,9 @@ struct Reactor
         return queueBound(core, task, move(context));
     }
 
-    private Error queueBound(uint ownerCore, TaskDelegate task, TaskContext context) nothrow @nogc
+    private Error queueBound(uint ownerCore, TaskDelegate task, TaskContext context, bool cleanup = false) nothrow @nogc
     {
-        auto message = Message(null, ConnectionId.init, move(context), task);
+        auto message = Message(null, ConnectionId.init, move(context), task, cleanup);
         return Error(runtime.workers[ownerCore].mailbox.enqueue(move(message)));
     }
 
@@ -609,6 +621,7 @@ private struct FiberTask
     TaskContext context;
     Deadline wake;
     uint next;
+    bool invokeIfCancelled;
 
     bool occupied() const pure nothrow @nogc
     {
@@ -731,7 +744,7 @@ private struct Worker
     void executeTask() nothrow @nogc
     {
         auto task = &fibers[activeFiber];
-        if (task.context.cancellation.check().code != Status.ok)
+        if (!task.invokeIfCancelled && task.context.cancellation.check().code != Status.ok)
             return;
         if (task.task !is null)
             task.task();
@@ -747,6 +760,7 @@ private struct Worker
         freeFiber = task.next;
         task.task = message.task;
         task.boundTask = message.boundTask;
+        task.invokeIfCancelled = message.invokeIfCancelled;
         task.context = move(message.context);
         ++activeFiberCount;
         resumeTask(slot);
