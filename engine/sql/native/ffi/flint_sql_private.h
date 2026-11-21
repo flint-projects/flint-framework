@@ -34,6 +34,7 @@ struct flint_sql_operation {
     unsigned row_index;
     int status;
     int rows;
+    int script;
     int reusable;
     int dirty;
     atomic_int cancelled;
@@ -71,6 +72,7 @@ void flint_sqlite_retire(flint_sqlite_connection *connection, flint_sql_retireme
 #endif
 
 #ifdef FLINT_HAS_LIBPQ
+int flint_pg_script_allowed(const char *sql, int ordinary_backslash);
 int flint_pg_available(void);
 flint_pg_connection *flint_pg_open(const flint_sql_backend_options *options);
 int flint_pg_drive(flint_pg_connection *connection, flint_sql_operation *operation,

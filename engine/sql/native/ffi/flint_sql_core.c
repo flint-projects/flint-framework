@@ -396,6 +396,15 @@ flint_sql_operation *flint_sql_operation_new(const char *sql, size_t length,
     return operation;
 }
 
+flint_sql_operation *flint_sql_operation_new_script(const char *sql, size_t length,
+                                                    int64_t deadline, int *status)
+{
+    flint_sql_operation *operation = flint_sql_operation_new(sql, length, 0, 0, deadline, status);
+    if (operation)
+        operation->script = 1;
+    return operation;
+}
+
 int flint_sql_operation_bind(flint_sql_operation *operation, size_t index, int kind,
                               int64_t integer, double floating, const void *data, size_t length)
 {

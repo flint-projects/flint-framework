@@ -42,6 +42,13 @@ package(flint.sql) Error admit() nothrow @nogc
     return Error.init;
 }
 
+package(flint.sql) Error admitStartup() nothrow @nogc
+{
+    auto owner = Reactor.current();
+    return owner.currentCore() == uint.max ? Error.init : Error(Status.conflict,
+            "whole SQL programs require startup outside the reactor");
+}
+
 package(flint.sql) Error pause() nothrow @nogc
 {
     auto owner = Reactor.current();

@@ -7,7 +7,7 @@ import flint.conc : CancelSource, Context, Deadline;
 import flint.sql.ffi.shim : Cell, Identity, Interest, Operation, Progress, acquirePool,
     claimTransaction, closePool, copyCell, dirtyLease, endTransaction, inspectCell, openPool,
     releasePool, retireLease, rowColumns, withdrawPool;
-import flint.sql.sys.wait : admit, pause, waitFor;
+import flint.sql.sys.wait : admit, admitStartup, pause, waitFor;
 
 @safe:
 
@@ -147,6 +147,22 @@ struct Connection
         return perform(identity(), sql, params, arena, context, null);
     }
 
+    /// Run a complete startup SQL program on this exclusive lease.
+    Error executeScript(scope const(char)[] sql, ref Context context) nothrow @nogc
+    {
+        const startup = admitStartup();
+        if (startup.code != Status.ok)
+            return startup;
+        scope RequestArena unused;
+        return perform(identity(), sql, [], unused, context, null, true).error;
+    }
+
+    /// Retire the native session when external transaction or lock cleanup cannot be verified.
+    void retire() const nothrow @nogc
+    {
+        retireLease(identity());
+    }
+
     /// Consume each result row before releasing the driver's row storage.
     Error query(scope const(char)[] sql, scope const(SqlValue)[] params, ref scope RequestArena arena,
             ref Context context, scope RowConsumer consume) nothrow @nogc
@@ -183,7 +199,7 @@ private Status bind(ref scope Operation work, scope Parameters params, ref scope
 }
 
 private Execution perform(Identity lease, scope const(char)[] sql, scope const(SqlValue)[] params,
-        ref scope RequestArena arena, ref Context context, scope RowConsumer consume) nothrow @nogc
+        ref scope RequestArena arena, ref Context context, scope RowConsumer consume, bool script = false) nothrow @nogc
 {
     const ownership = admit();
     if (ownership.code != Status.ok)
@@ -197,7 +213,9 @@ private Execution perform(Identity lease, scope const(char)[] sql, scope const(S
     scope Operation operation;
     scope (exit)
         operation.close();
-    auto status = operation.allocate(sql, params.length, consume !is null, context.deadline().monotonicNanoseconds);
+    const deadline = context.deadline().monotonicNanoseconds;
+    auto status = script ? operation.allocateScript(sql, deadline) : operation.allocate(sql,
+            params.length, consume !is null, deadline);
     if (status == Status.ok)
         status = bind(operation, params, arena);
     if (status == Status.ok)
@@ -297,6 +315,12 @@ struct Pool
         this = Pool(created, options.driver, options.acquireTimeoutNanos < maxAcquireNanos
                 ? options.acquireTimeoutNanos : maxAcquireNanos);
         return Error.init;
+    }
+
+    /// Return the configured driver. Lease acquisition still checks that the pool is live.
+    Driver driver() const pure nothrow @nogc
+    {
+        return selected;
     }
 
     /// Acquire the oldest waiting request's available lease within the deadline.

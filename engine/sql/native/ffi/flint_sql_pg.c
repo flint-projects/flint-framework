@@ -395,8 +395,22 @@ release:
     return status;
 }
 
+static int send_script(flint_pg_connection *connection, flint_sql_operation *operation)
+{
+    PGconn *database = connection->database;
+    const char *standard = PQparameterStatus(database, "standard_conforming_strings");
+    if (!flint_pg_script_allowed(operation->text, standard && !strcmp(standard, "off")))
+        return FLINT_SQL_INVALID;
+    if (!PQsendQuery(database, operation->text) || !PQsetSingleRowMode(database))
+        return FLINT_SQL_IO;
+    operation->phase = PG_QUERY;
+    return FLINT_SQL_OK;
+}
+
 static int start_query(flint_pg_connection *connection, flint_sql_operation *operation)
 {
+    if (operation->script)
+        return send_script(connection, operation);
     operation->cache = cache_index(connection, operation);
     if (operation->cache < 0)
         return send_query(connection, operation);
@@ -489,6 +503,8 @@ static void command_tuples(flint_sql_operation *operation, PGresult *result)
 static int handle_result(flint_sql_operation *operation, PGresult *result)
 {
     switch (PQresultStatus(result)) {
+    case PGRES_EMPTY_QUERY:
+        break;
     case PGRES_SINGLE_TUPLE:
     case PGRES_TUPLES_OK:
         if (operation->rows && PQntuples(result) > 0 && !atomic_load(&operation->cancelled)) {
@@ -589,7 +605,8 @@ int flint_pg_drive(flint_pg_connection *connection, flint_sql_operation *operati
     if (operation->phase == PG_UNSENT) {
         const int state = start_query(connection, operation);
         if (state != FLINT_SQL_OK) {
-            operation->reusable = 0;
+            if (state == FLINT_SQL_IO)
+                operation->reusable = 0;
             return finish(connection, operation, state);
         }
     }

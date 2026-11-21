@@ -1,0 +1,30 @@
+{
+  "migrations": [
+    {
+      "description": "bootstrap",
+      "file": "V000001__bootstrap.sql",
+      "sha256": "999c3e646fa761816818d45266e78c4943c61663ede1e99c9f659b4a9a8c3a73",
+      "size_bytes": 119,
+      "transactional": true,
+      "version": 1
+    },
+    {
+      "description": "broken change",
+      "file": "V000002__broken_change.sql",
+      "sha256": "bcf32038ec4623f1758020e2240b0df0944521150fdf6dd4876164a68a657c8a",
+      "size_bytes": 88,
+      "transactional": true,
+      "version": 2
+    },
+    {
+      "description": "concurrent start",
+      "file": "V000003__concurrent_start.sql",
+      "sha256": "567633f03f607f10d219db36367911a2516834d0b3a5184f401287cb69cbcd8b",
+      "size_bytes": 57,
+      "transactional": true,
+      "version": 3
+    }
+  ],
+  "module": "generated_plan",
+  "schema": 1
+}

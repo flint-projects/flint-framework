@@ -60,6 +60,8 @@ void flint_sql_pool_finish_transaction(uint64_t lease_slot, uint64_t lease_ident
 flint_sql_operation *flint_sql_operation_new(const char *sql, size_t length,
                                              size_t parameter_count, int rows,
                                              int64_t deadline, int *status);
+flint_sql_operation *flint_sql_operation_new_script(const char *sql, size_t length,
+                                                    int64_t deadline, int *status);
 int flint_sql_operation_bind(flint_sql_operation *operation, size_t index, int kind,
                               int64_t integer, double floating, const void *data, size_t length);
 int flint_sql_operation_start(flint_sql_operation *operation, uint64_t slot, uint64_t identity);

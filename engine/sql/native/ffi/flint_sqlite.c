@@ -40,6 +40,7 @@ struct flint_sqlite_connection {
     int flags;
     int closing;
     int startup;
+    int running_script;
 };
 
 int flint_sqlite_available(void)
@@ -291,6 +292,58 @@ static int step_rows(flint_sqlite_connection *connection, sqlite3_stmt *statemen
     }
 }
 
+static int step_script(flint_sqlite_connection *connection, flint_sql_operation *operation)
+{
+    const char *cursor = operation->text;
+    connection->running_script = 1;
+    int result = SQLITE_DONE;
+    while (*cursor) {
+        if (interrupt_requested(operation)) {
+            result = SQLITE_INTERRUPT;
+            break;
+        }
+        sqlite3_stmt *statement = NULL;
+        const char *tail = NULL;
+        result = sqlite3_prepare_v3(connection->database, cursor, -1, 0, &statement, &tail);
+        if (result == SQLITE_OK) {
+            if (!tail || tail <= cursor)
+                result = SQLITE_ERROR;
+            else if (!statement)
+                result = SQLITE_DONE;
+            else if (sqlite3_bind_parameter_count(statement) != 0)
+                result = SQLITE_RANGE;
+            else
+                result = step_rows(connection, statement, operation);
+        }
+        sqlite3_finalize(statement);
+        if (result != SQLITE_DONE)
+            break;
+        cursor = tail;
+    }
+    connection->running_script = 0;
+    return result;
+}
+
+static int step_statement(flint_sqlite_connection *connection, flint_sql_operation *operation)
+{
+    cached_statement *entry = NULL;
+    int status = FLINT_SQL_OK;
+    sqlite3_stmt *statement = prepare(connection, operation, &entry, &status);
+    if (!statement)
+        return status;
+    int result = bind_all(statement, operation);
+    if (result == SQLITE_OK)
+        result = step_rows(connection, statement, operation);
+    if (entry) {
+        sqlite3_reset(statement);
+        sqlite3_clear_bindings(statement);
+        if ((result & 0xff) == SQLITE_SCHEMA)
+            evict(entry);
+    } else
+        sqlite3_finalize(statement);
+    return sqlite_status(result);
+}
+
 static void run(flint_sqlite_connection *connection, flint_sql_operation *operation)
 {
     if (connection->startup != FLINT_SQL_OK) {
@@ -302,21 +355,10 @@ static void run(flint_sqlite_connection *connection, flint_sql_operation *operat
     sqlite3_busy_handler(database, busy, operation);
     sqlite3_progress_handler(database, 1000, interrupt_requested, operation);
 
-    cached_statement *entry = NULL;
-    sqlite3_stmt *statement = prepare(connection, operation, &entry, &operation->status);
-    if (statement) {
-        int result = bind_all(statement, operation);
-        if (result == SQLITE_OK)
-            result = step_rows(connection, statement, operation);
-        operation->status = interrupt_requested(operation) ? FLINT_SQL_CANCELLED : sqlite_status(result);
-        if (entry) {
-            sqlite3_reset(statement);
-            sqlite3_clear_bindings(statement);
-            if ((result & 0xff) == SQLITE_SCHEMA)
-                evict(entry);
-        } else
-            sqlite3_finalize(statement);
-    }
+    operation->status = operation->script ? sqlite_status(step_script(connection, operation))
+                                         : step_statement(connection, operation);
+    if (interrupt_requested(operation))
+        operation->status = FLINT_SQL_CANCELLED;
     sqlite3_busy_handler(database, NULL, NULL);
     sqlite3_progress_handler(database, 0, NULL, NULL);
     operation->dirty = !sqlite3_get_autocommit(database);
@@ -359,9 +401,12 @@ static int permit_sql(void *context, int action, const char *first, const char *
                        const char *schema, const char *origin)
 {
     (void)origin;
+    const flint_sqlite_connection *connection = context;
+    if (connection->running_script && (action == SQLITE_TRANSACTION || action == SQLITE_SAVEPOINT))
+        return SQLITE_DENY;
     if (action == SQLITE_PRAGMA && first && second &&
         !strcasecmp(first, "journal_mode") && !strcasecmp(second, "wal") &&
-        !local_database(context, schema))
+        !local_database(connection->database, schema))
         return SQLITE_DENY;
     return SQLITE_OK;
 }
@@ -385,10 +430,10 @@ static void *worker(void *input)
             sqlite3_finalize(statement);
         }
     }
-    if (result == SQLITE_DONE)
-        result = sqlite3_set_authorizer(database, permit_sql, database);
     pthread_mutex_lock(&connection->lock);
     connection->database = database;
+    if (result == SQLITE_DONE)
+        result = sqlite3_set_authorizer(database, permit_sql, connection);
     connection->startup = sqlite_status(result);
     while (!connection->closing) {
         if (!connection->pending) {

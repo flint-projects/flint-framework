@@ -63,6 +63,7 @@ version (FlintSqlNative)
         private void flint_sql_pool_finish_transaction(ulong, ulong);
 
         private FlintSqlOperation* flint_sql_operation_new(const(char)*, size_t, size_t, int, long, int*);
+        private FlintSqlOperation* flint_sql_operation_new_script(const(char)*, size_t, long, int*);
         private int flint_sql_operation_bind(FlintSqlOperation*, size_t, int, long, double, const(void)*, size_t);
         private int flint_sql_operation_start(FlintSqlOperation*, ulong, ulong);
         private int flint_sql_operation_drive(FlintSqlOperation*, int*, uint*);
@@ -174,6 +175,21 @@ package(flint.sql) struct Operation
                 return Status.conflict;
             int status;
             native = flint_sql_operation_new(sql.ptr, sql.length, count, rows, deadline, &status);
+            return cast(Status) status;
+        }
+        else
+            return Status.unsupported;
+    }
+
+    // SAFETY: The native boundary copies the scoped bytes and owns the complete program before it can enqueue.
+    Status allocateScript(scope const(char)[] sql, long deadline) scope @trusted nothrow @nogc
+    {
+        version (FlintSqlNative)
+        {
+            if (native !is null)
+                return Status.conflict;
+            int status;
+            native = flint_sql_operation_new_script(sql.ptr, sql.length, deadline, &status);
             return cast(Status) status;
         }
         else
