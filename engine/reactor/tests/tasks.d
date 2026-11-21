@@ -11,7 +11,18 @@ private void checkContext(ulong expected) @safe nothrow @nogc
     auto reactor = Reactor.current();
     const task = reactor.currentTask();
     assert(task.ok && task.value.requestId == expected);
+    assert(task.value.traceIdHigh == expected + 100);
+    assert(task.value.traceIdLow == expected + 200 && task.value.spanId == expected + 300);
     assert(reactor.currentCore == 0);
+}
+
+private TaskContext tracedTask(ulong requestId) @safe nothrow @nogc
+{
+    auto context = TaskContext(requestId);
+    context.traceIdHigh = requestId + 100;
+    context.traceIdLow = requestId + 200;
+    context.spanId = requestId + 300;
+    return context;
 }
 
 private void forbidden() @safe nothrow @nogc
@@ -69,8 +80,8 @@ unittest
     auto server = Reactor.create(options);
     assert(server.ok, server.error.message);
     assert(server.value.currentTask().error.code == Status.notFound);
-    assert(server.value.post(0, &firstTask, TaskContext(71)).code == Status.ok);
-    assert(server.value.post(0, &secondTask, TaskContext(92)).code == Status.ok);
+    assert(server.value.post(0, &firstTask, tracedTask(71)).code == Status.ok);
+    assert(server.value.post(0, &secondTask, tracedTask(92)).code == Status.ok);
     const status = server.value.run();
     assert(status.code == Status.ok, status.message);
     const stats = server.value.workerStats(0);

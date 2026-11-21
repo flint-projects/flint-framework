@@ -131,6 +131,12 @@ struct TaskContext
     ulong requestId;
     /// Cancellation and earliest deadline propagated to the task.
     Context cancellation;
+    /// High half of the caller's trace identifier.
+    ulong traceIdHigh;
+    /// Low half of the caller's trace identifier.
+    ulong traceIdLow;
+    /// Active span associated with this task.
+    ulong spanId;
 
     /// Create a context with a caller-assigned identity and optional cancellation.
     this(ulong requestId, Context cancellation = Context.init) nothrow @nogc
@@ -144,5 +150,8 @@ struct TaskContext
     {
         requestId = other.requestId;
         cancellation = other.cancellation;
+        traceIdHigh = other.traceIdHigh;
+        traceIdLow = other.traceIdLow;
+        spanId = other.spanId;
     }
 }
