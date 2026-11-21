@@ -1,8 +1,8 @@
 # di exercised probe
 
-The implementation task creates `source/app.d` and `baseline/source/app.d` in this directory. The recipes resolve the local implementation root. Source is intentionally absent until real behavior exists; the measurement tool rejects missing probes.
+The feature fixture in `source/app.d` starts, reads and closes explicitly registered contexts of 1, 16, 64 and 128 beans. Every worker receives the same supplied configuration by reference and contributes to the observed startup sum. `baseline/source/app.d` manually executes the shared constructor workload. Both programs run the same checked arena setup and independently time concrete lookup and virtual calls. The baseline accesses the concrete object directly.
 
-`source/app.d` must instantiate and execute the required workload in `handoff/specs/tier-1/di.md`. Preserve an observable checksum derived from actual results and check correctness through code that remains active in the release build. A bare import, constant-only substitute or discarded operation is invalid. Use the pinned input sizes/seeds from the specification; microbenchmark timing, where applicable, must exceed 100 ms per trial.
+The shared harness times each series for at least 150 ms, verifies every operation using changing deterministic inputs and reports the consumed checksum. The `check_value` at input 21 matches across the two programs. Timing and total checksums vary with the number of operations completed. The harness samples the difference in the executing thread's monotonic GC counter around one warmed startup operation for each graph size.
 
 ## Equivalent provider baseline
 
