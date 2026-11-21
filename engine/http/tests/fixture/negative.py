@@ -8,6 +8,7 @@ import subprocess
 CASES = {
     "escape_chunk": ("scope", "leaked"),
     "escape_destination": ("scope", "leaked"),
+    "escape_request_view": ("scope", "leaked"),
     "bad_return": ("scalarResponse", "requires Result!HttpResponse"),
     "two_bodies": ("duplicateBodies", "multiple body arguments"),
     "unknown_uda": ("unknownParameter", "unknown parameter UDA"),

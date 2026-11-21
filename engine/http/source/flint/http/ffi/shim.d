@@ -3,7 +3,7 @@ module flint.http.ffi.shim;
 
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.http.types : ChunkConsumer, ClientOptions, DestinationPolicy, Header, HttpMethod,
-    HttpResponse, HttpStreamOptions, HttpVersion;
+    HttpRequestView, HttpResponse, HttpStreamOptions, HttpVersion;
 
 @safe:
 
@@ -64,6 +64,8 @@ extern (C) private @system nothrow @nogc
     int flint_http_initialize();
     int flint_http_new(const(NativeOptions)* options, NativeLoop** output);
     int flint_http_begin(NativeLoop* loop, const(char)* url, size_t length, uint method, uint stream, ulong* output);
+    int flint_http_begin_view(NativeLoop* loop, scope const(char)* url, size_t length, uint method,
+            uint flags, const(ubyte)* input, size_t inputLength, scope ulong* output);
     int flint_http_stream_begin(NativeLoop* loop, scope const(char)* url, size_t length, uint mode,
             ubyte allowCleartext, uint receiveRate, scope ulong* output);
     int flint_http_stream_view_request(NativeLoop* loop, ulong id, scope NativeStreamView* output);
@@ -148,6 +150,8 @@ package(flint.http) struct StreamView
     Error error;
 }
 
+package(flint.http) alias RequestTransfer = Result!HttpResponse delegate(ulong id) @safe nothrow @nogc;
+
 package(flint.http) struct Bridge
 {
     private NativeLoop* loop;
@@ -181,6 +185,31 @@ package(flint.http) struct Bridge
         const status = invoke!flint_http_begin(loop, url.length ? &url[0] : null, url.length,
                 cast(uint) method, cast(uint) streaming, &id);
         return Result!ulong(id, nativeError(status));
+    }
+
+    // The scoped action receives only the generation, cannot throw, and runs outside C callbacks.
+    // SAFETY: Cancel and release synchronously retire the bounded upload on its owner before return.
+    package(flint.http) Result!HttpResponse withRequest(scope const ref HttpRequestView request,
+            bool streaming, scope RequestTransfer action) @trusted nothrow @nogc
+    {
+        static if (!provider)
+            return Result!HttpResponse(HttpResponse.init, nativeError(Status.unsupported));
+        else
+        {
+            uint flags = streaming ? 1u : 0u;
+            if (request.preservePath)
+                flags |= 2;
+            if (streaming && request.successBodyOnly)
+                flags |= 4;
+            ulong id;
+            const status = cast(Status) flint_http_begin_view(loop, request.url.ptr,
+                    request.url.length, cast(uint) request.method, flags, request.body.ptr, request.body.length, &id);
+            if (status != Status.ok)
+                return Result!HttpResponse(HttpResponse.init, nativeError(status));
+            scope (exit)
+                retire(id);
+            return action(id);
+        }
     }
 
     package(flint.http) Result!ulong beginStream(scope const ref HttpStreamOptions options) nothrow @nogc

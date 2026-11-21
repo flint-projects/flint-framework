@@ -272,10 +272,27 @@ func main() {
 		}
 		_, _ = io.Copy(w, r.Body)
 	})
+	mux.HandleFunc("/stream-rejected", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, "data: unexpected\n\n")
+	})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.RequestURI, "/view-signed/") {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		if r.Method != "PUT" || r.RequestURI != "/view-signed/leaf/../%E2%98%83?mode=a%2Fb" ||
+			r.Header.Get("X-Probe") != "scoped" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = io.Copy(w, r.Body)
+	})
 
-	h1 := httptest.NewServer(mux)
+	h1 := httptest.NewServer(handler)
 	defer h1.Close()
-	h2 := tlsServer(mux, goodRaw, goodKey)
+	h2 := tlsServer(handler, goodRaw, goodKey)
 	defer h2.Close()
 	expired := tlsServer(mux, oldRaw, oldKey)
 	defer expired.Close()

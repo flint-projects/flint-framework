@@ -133,6 +133,15 @@ int flint_http_new(const flint_http_options *options, flint_curl_loop **result);
 int flint_http_owner(flint_curl_loop *loop);
 int flint_http_begin(flint_curl_loop *loop, const char *url, size_t length,
                      uint32_t method, uint32_t streaming, uint64_t *request_id);
+enum flint_http_view_flags {
+    FLINT_HTTP_VIEW_STREAM = 1,
+    FLINT_HTTP_VIEW_KEEP_PATH = 2,
+    FLINT_HTTP_VIEW_SUCCESS_ONLY = 4
+};
+/* The upload span remains borrowed until this request is cancelled and released. Views never redirect. */
+int flint_http_begin_view(flint_curl_loop *loop, const char *url, size_t length,
+                          uint32_t method, uint32_t flags, const uint8_t *upload, size_t upload_length,
+                          uint64_t *request_id);
 int flint_http_header(flint_curl_loop *loop, uint64_t request_id, const char *key, size_t key_length,
                       const char *value, size_t value_length);
 int flint_http_body(flint_curl_loop *loop, uint64_t request_id, const uint8_t *bytes, size_t length);

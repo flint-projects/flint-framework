@@ -6,7 +6,7 @@ import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Context, Deadline;
 import flint.http.ffi.shim : Bridge, NativeWatch, StreamView;
 import flint.http.types : ChunkConsumer, ClientOptions, DestinationPolicy, Header, HttpMethod,
-    HttpRequest, HttpResponse, HttpStreamOptions;
+    HttpRequest, HttpRequestView, HttpResponse, HttpStreamOptions;
 import flint.reactor : NativeInterest, NativeReadyFn, Reactor;
 
 @safe:
@@ -55,6 +55,23 @@ nothrow @nogc:
         if (consume is null)
             return Result!ushort(0, Error(Status.invalidArgument, "missing HTTP chunk consumer"));
         const response = exchange(request.url, request.method, request.headers, request.body, arena, context, consume);
+        return Result!ushort(response.value.status, response.error);
+    }
+
+    /// Borrow a replay-stable upload through response completion or cancellation.
+    Result!HttpResponse sendView(scope const ref HttpRequestView request, ref scope RequestArena arena,
+            ref Context context)
+    {
+        return exchangeView(request, arena, context, null);
+    }
+
+    /// Stream responses from a scoped request and report its final HTTP status.
+    Result!ushort streamView(scope const ref HttpRequestView request, ref scope RequestArena arena,
+            ref Context context, scope ChunkConsumer consume)
+    {
+        if (consume is null)
+            return Result!ushort(0, Error(Status.invalidArgument, "missing HTTP chunk consumer"));
+        const response = exchangeView(request, arena, context, consume);
         return Result!ushort(response.value.status, response.error);
     }
 
@@ -156,17 +173,40 @@ nothrow @nogc:
         scope (exit)
         {
             client.bridge.retire(id);
-            --client.inFlight;
-            if (client.inFlight == 0)
-                client.clearWatches();
-            else
-                client.refreshWatches();
+            client.transferRetired();
         }
 
         const prepared = client.prepare(id, headers, body, arena, context);
         if (prepared.code != Status.ok)
             return failed(prepared);
         return client.run(id, arena, context, consume, onLoop ? 16 : uint.max);
+    }
+
+    private Result!HttpResponse exchangeView(scope const ref HttpRequestView request,
+            ref scope RequestArena arena, ref Context context, scope ChunkConsumer consume)
+    {
+        auto client = state;
+        if (client is null)
+            return failed(Error(Status.conflict, "HTTP client is closed"));
+        const ready = client.streamOwner(context);
+        if (ready.code != Status.ok)
+            return failed(ready);
+        const onLoop = Reactor.current().currentCore() != uint.max;
+        ++client.inFlight;
+        scope (exit)
+            client.transferRetired();
+        return client.bridge.withRequest(request, consume !is null, (ulong id) @safe nothrow @nogc {
+            foreach (ref field; request.headers)
+            {
+                const added = client.bridge.header(id, field.name, field.value);
+                if (added.code != Status.ok)
+                    return failed(added);
+            }
+            const prepared = client.activate(id, context);
+            if (prepared.code != Status.ok)
+                return failed(prepared);
+            return client.run(id, arena, context, consume, onLoop ? 16 : uint.max);
+        });
     }
 }
 
@@ -390,11 +430,25 @@ nothrow @nogc:
             if (copied.code != Status.ok)
                 return copied;
         }
+        return activate(id, ctx);
+    }
+
+    Error activate(ulong id, ref const Context ctx) scope
+    {
         const allowed = bridge.allow(id, policy, false);
         if (allowed.code != Status.ok)
             return allowed;
         const live = ctx.check();
         return live.code == Status.ok ? bridge.activate(id) : live;
+    }
+
+    void transferRetired() scope
+    {
+        --inFlight;
+        if (inFlight == 0)
+            clearWatches();
+        else
+            refreshWatches();
     }
 
     Result!HttpResponse run(ulong id, ref scope RequestArena arena, ref Context context,

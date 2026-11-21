@@ -3,7 +3,8 @@ module flint.http.http_behavior_test;
 import flint.arena : Buffer, Error, RequestArena, Result, Status, Text;
 import flint.conc : CancelSource, Context, Deadline;
 import flint.http : ChunkConsumer, ClientOptions, GetExchange, Header, HeaderParam, HttpClient,
-    HttpExchange, HttpMethod, HttpRequest, HttpResponse, HttpVersion, PostExchange, bindHttpClient;
+    HttpExchange, HttpMethod,
+    HttpRequest, HttpRequestView, HttpResponse, HttpStreamField, HttpVersion, PostExchange, bindHttpClient;
 
 @safe:
 
@@ -225,6 +226,50 @@ version (FlintNativeCurl)
         assert(result.ok && result.value.status == 204);
     }
 
+    private void exerciseScopedRequests(string origin)
+    {
+        HttpClient client;
+        ClientOptions options;
+        options.followRedirects = true;
+        options.destinationPolicy = (scope const(char)[]) @safe nothrow @nogc => true;
+        assert(client.open(options).code == Status.ok);
+        scope (exit)
+            assert(client.close().code == Status.ok);
+
+        ubyte[8192] scratch;
+        auto arena = RequestArena(scratch[]);
+        Context context;
+        const target = origin ~ "/view-signed/leaf/../%E2%98%83?mode=a%2Fb";
+        const HttpStreamField[1] fields = [HttpStreamField("X-Probe", "scoped")];
+        const ubyte[7] input = [13, 10, 0, 128, 1, 50, 230];
+        scope request = HttpRequestView(HttpMethod.put, target, fields[], input[], true);
+        const response = client.sendView(request, arena, context);
+        assert(response.ok && response.value.status == 200);
+        assert(arena.read(response.value.body, (scope const(ubyte)[] received) @safe nothrow @nogc {
+                assert(received == input[]);
+            }) == Status.ok);
+
+        const redirect = origin ~ "/repeat-upload";
+        const limited = origin ~ "/stream-rejected";
+        const echo = origin ~ "/echo";
+        const HttpStreamField[1] media = [HttpStreamField("Content-Type", "application/json")];
+        scope stream = HttpRequestView(HttpMethod.post, redirect, media[], input[], false, true);
+        size_t consumed;
+        scope ChunkConsumer receive = (scope const(ubyte)[] bytes) @safe nothrow @nogc {
+            consumed += bytes.length;
+            return Error(Status.cancelled, "test consumer retired the request");
+        };
+        auto status = client.streamView(stream, arena, context, receive);
+        assert(status.ok && status.value == 307 && consumed == 0);
+        stream.url = limited;
+        status = client.streamView(stream, arena, context, receive);
+        assert(status.ok && status.value == 429 && consumed == 0);
+        stream.url = echo;
+        status = client.streamView(stream, arena, context, receive);
+        assert(status.error.code == Status.cancelled && consumed > 0);
+        assert(client.sendView(stream, arena, context).value.status == 200);
+    }
+
     private void exerciseStreams(string origin)
     {
         HttpClient client;
@@ -357,6 +402,7 @@ version (FlintNativeCurl)
         {
             exercisePolicy(origin, setting("HTTPS"));
             exerciseRedirects(origin, setting("HTTPS"));
+            exerciseScopedRequests(origin);
             exerciseStreams(origin);
             exerciseCancellation(origin);
             exerciseExchange();

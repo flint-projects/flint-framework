@@ -37,6 +37,7 @@ typedef struct request {
     int error;
     bool streaming, paused, redirected_origin, dropped_upload, location;
     bool head_complete, send_paused, send_ended, upgraded;
+    bool scoped_view, preserve_path, success_only;
     uint32_t stream_mode, receive_rate;
     unsigned redirects;
     size_t decoded;
@@ -48,6 +49,7 @@ typedef struct request {
     size_t request_headers_bytes;
     unsigned header_count;
     uint8_t *upload;
+    const uint8_t *borrowed_upload;
     size_t upload_length;
     size_t upload_offset;
     bytes response_headers;
@@ -353,7 +355,9 @@ static size_t receive_body(char *source, size_t size, size_t count, void *user)
     }
     if (!length)
         return 0;
-    if (!record->stream_mode && record->loop->redirects && redirect_code(record->status) && record->location) {
+    if ((record->success_only && (record->status < 200 || record->status >= 300))
+        || (!record->scoped_view && !record->stream_mode && record->loop->redirects
+            && redirect_code(record->status) && record->location)) {
         record->decoded += length;
         return length;
     }
@@ -577,9 +581,10 @@ int flint_http_new(const flint_http_options *options, flint_curl_loop **result)
     return FLINT_HTTP_OK;
 }
 
-static int parse_url(CURLU *parsed, const char *url)
+static int parse_url(CURLU *parsed, const char *url, bool preserve_path)
 {
-    if (curl_url_set(parsed, CURLUPART_URL, url, CURLU_DISALLOW_USER) != CURLUE_OK)
+    const unsigned flags = CURLU_DISALLOW_USER | (preserve_path ? CURLU_PATH_AS_IS : 0);
+    if (curl_url_set(parsed, CURLUPART_URL, url, flags) != CURLUE_OK)
         return FLINT_HTTP_ARGUMENT;
     char *scheme = NULL;
     char *host = NULL;
@@ -628,7 +633,8 @@ static int parse_stream_url(CURLU *parsed, const char *url, uint32_t mode, bool 
     return status;
 }
 
-static int normalize_target(const char *raw, size_t length, char **result, uint32_t mode, bool cleartext)
+static int normalize_target(const char *raw, size_t length, char **result, uint32_t mode, bool cleartext,
+                            bool preserve_path)
 {
     if (!raw || !length || length > MAX_URL || memchr(raw, 0, length))
         return FLINT_HTTP_ARGUMENT;
@@ -639,7 +645,7 @@ static int normalize_target(const char *raw, size_t length, char **result, uint3
         curl_url_cleanup(parsed);
         return FLINT_HTTP_MEMORY;
     }
-    int status = mode ? parse_stream_url(parsed, input, mode, cleartext) : parse_url(parsed, input);
+    int status = mode ? parse_stream_url(parsed, input, mode, cleartext) : parse_url(parsed, input, preserve_path);
     if (!status) {
         char *canonical = NULL;
         if (curl_url_get(parsed, CURLUPART_URL, &canonical, 0) != CURLUE_OK)
@@ -660,7 +666,7 @@ static int normalize_target(const char *raw, size_t length, char **result, uint3
 
 static int normalize_url(const char *raw, size_t length, char **result)
 {
-    return normalize_target(raw, length, result, 0, false);
+    return normalize_target(raw, length, result, 0, false, false);
 }
 
 flint_curl_loop *flint_curl_new(void)
@@ -680,7 +686,7 @@ static const char *const method_names[] = {"GET", "POST", "PUT", "PATCH", "DELET
 
 static int begin_request(flint_curl_loop *loop, const char *url, size_t length,
                          uint32_t method, bool streaming, uint32_t mode, bool cleartext,
-                         uint32_t receive_rate, uint64_t *request_id)
+                         uint32_t receive_rate, bool preserve_path, uint64_t *request_id)
 {
     const int owner = owner_status(loop);
     if (owner)
@@ -693,7 +699,7 @@ static int begin_request(flint_curl_loop *loop, const char *url, size_t length,
         request *record = &loop->requests[slot];
         if (record->state || record->generation == UINT32_MAX)
             continue;
-        const int parsed = normalize_target(url, length, &record->url, mode, cleartext);
+        const int parsed = normalize_target(url, length, &record->url, mode, cleartext, preserve_path);
         if (parsed)
             return parsed;
         if (mode == FLINT_HTTP_DUPLEX) {
@@ -710,6 +716,7 @@ static int begin_request(flint_curl_loop *loop, const char *url, size_t length,
         record->state = FLINT_HTTP_PREPARED;
         record->method = method;
         record->streaming = streaming;
+        record->preserve_path = preserve_path;
         *request_id = ((uint64_t) ++record->generation << 32) | (uint32_t) slot;
         return FLINT_HTTP_OK;
     }
@@ -719,7 +726,28 @@ static int begin_request(flint_curl_loop *loop, const char *url, size_t length,
 int flint_http_begin(flint_curl_loop *loop, const char *url, size_t length,
                      uint32_t method, uint32_t streaming, uint64_t *request_id)
 {
-    return begin_request(loop, url, length, method, streaming != 0, 0, false, 0, request_id);
+    return begin_request(loop, url, length, method, streaming != 0, 0, false, 0, false, request_id);
+}
+
+int flint_http_begin_view(flint_curl_loop *loop, const char *url, size_t length, uint32_t method,
+                          uint32_t flags, const uint8_t *upload, size_t upload_length, uint64_t *request_id)
+{
+    const uint32_t permitted = FLINT_HTTP_VIEW_STREAM | FLINT_HTTP_VIEW_KEEP_PATH | FLINT_HTTP_VIEW_SUCCESS_ONLY;
+    const bool streaming = (flags & FLINT_HTTP_VIEW_STREAM) != 0;
+    const bool success_only = (flags & FLINT_HTTP_VIEW_SUCCESS_ONLY) != 0;
+    if ((flags & ~permitted) || (success_only && !streaming) || upload_length > INT64_MAX
+        || (upload_length && (!upload || method == FLINT_HTTP_HEAD)))
+        return FLINT_HTTP_ARGUMENT;
+    const int status = begin_request(loop, url, length, method, streaming, 0, false, 0,
+                                     (flags & FLINT_HTTP_VIEW_KEEP_PATH) != 0, request_id);
+    if (status)
+        return status;
+    request *record = lookup(loop, *request_id);
+    record->scoped_view = true;
+    record->success_only = success_only;
+    record->borrowed_upload = upload_length ? upload : NULL;
+    record->upload_length = upload_length;
+    return FLINT_HTTP_OK;
 }
 
 int flint_http_stream_begin(flint_curl_loop *loop, const char *url, size_t length, uint32_t mode,
@@ -730,7 +758,7 @@ int flint_http_stream_begin(flint_curl_loop *loop, const char *url, size_t lengt
     if (mode == FLINT_HTTP_DUPLEX && (receive_rate < 32 * 1024 || receive_rate > 256 * 1024))
         return FLINT_HTTP_ARGUMENT;
     const uint32_t method = mode == FLINT_HTTP_DUPLEX ? FLINT_HTTP_POST : FLINT_HTTP_GET;
-    return begin_request(loop, url, length, method, true, mode, loopback_cleartext != 0, receive_rate, request_id);
+    return begin_request(loop, url, length, method, true, mode, loopback_cleartext != 0, receive_rate, false, request_id);
 }
 
 static bool token_char(unsigned char value)
@@ -802,7 +830,7 @@ int flint_http_body(flint_curl_loop *loop, uint64_t request_id, const uint8_t *d
     if (owner)
         return owner;
     request *record = lookup(loop, request_id);
-    if (!record || record->state != FLINT_HTTP_PREPARED || record->upload)
+    if (!record || record->state != FLINT_HTTP_PREPARED || record->scoped_view || record->upload)
         return FLINT_HTTP_CONFLICT;
     if (length > INT64_MAX || (length && !data) || record->method == FLINT_HTTP_HEAD)
         return FLINT_HTTP_ARGUMENT;
@@ -849,6 +877,7 @@ static int configure_headers(request *record)
 static int configure_transport(request *record)
 {
     flint_curl_loop *loop = record->loop;
+    EASY(CURLOPT_PATH_AS_IS, (long)record->preserve_path);
     EASY(CURLOPT_URL, record->url);
     EASY(CURLOPT_PROTOCOLS_STR, record->stream_mode == FLINT_HTTP_UPGRADED_BYTES ? "ws,wss" : "http,https");
     EASY(CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
@@ -896,9 +925,10 @@ static int configure_method(request *record)
     }
     if (record->stream_mode == FLINT_HTTP_UPGRADED_BYTES)
         return FLINT_HTTP_OK;
-    if (record->upload || method == FLINT_HTTP_POST || method == FLINT_HTTP_PUT || method == FLINT_HTTP_PATCH) {
+    const uint8_t *upload = record->scoped_view ? record->borrowed_upload : record->upload;
+    if (upload || method == FLINT_HTTP_POST || method == FLINT_HTTP_PUT || method == FLINT_HTTP_PATCH) {
         EASY(CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t) record->upload_length);
-        EASY(CURLOPT_POSTFIELDS, record->upload ? (char *) record->upload : "");
+        EASY(CURLOPT_POSTFIELDS, upload ? (const char *)upload : "");
     }
     if (method == FLINT_HTTP_HEAD)
         EASY(CURLOPT_NOBODY, 1L);
@@ -971,7 +1001,8 @@ static void get_response(request *record, CURLcode result)
     }
     if (!record->error)
         record->error = map_curl(result);
-    if (!record->stream_mode && !record->error && record->loop->redirects && redirect_code(record->status)) {
+    if (!record->scoped_view && !record->stream_mode && !record->error && record->loop->redirects
+        && redirect_code(record->status)) {
         char *raw = NULL;
         if (CURL_ON_OWNER(record->loop, curl_easy_getinfo(record->easy, CURLINFO_REDIRECT_URL, &raw)) == CURLE_OK && raw)
             record->error = normalize_url(raw, strnlen(raw, MAX_URL + 1), &record->redirect);
@@ -1241,9 +1272,9 @@ static int redirect_origin(const char *current, const char *next, bool *crosses)
     CURLU *right = curl_url();
     int status = FLINT_HTTP_MEMORY;
     if (left && right) {
-        status = parse_url(left, current);
+        status = parse_url(left, current, false);
         if (!status)
-            status = parse_url(right, next);
+            status = parse_url(right, next, false);
         if (!status && strncasecmp(current, "https:", 6) == 0 && strncasecmp(next, "http:", 5) == 0)
             status = FLINT_HTTP_DENIED;
         if (!status)

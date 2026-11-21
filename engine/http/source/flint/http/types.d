@@ -137,6 +137,23 @@ struct HttpStreamField
     const(char)[] value;
 }
 
+/// Scoped request with a borrowed upload. These operations return redirect responses without following them.
+struct HttpRequestView
+{
+    /// HTTP verb.
+    HttpMethod method = HttpMethod.get;
+    /// Absolute HTTP or HTTPS URL.
+    const(char)[] url;
+    /// Headers copied before the transfer starts.
+    const(HttpStreamField)[] headers;
+    /// Keep this upload immutable and alive through the call.
+    const(ubyte)[] body;
+    /// Preserve path segments byte for byte for externally signed URLs.
+    bool preservePath;
+    /// Deliver stream chunks only for HTTP 2xx responses.
+    bool successBodyOnly;
+}
+
 /// Options for a single incremental transfer.
 struct HttpStreamOptions
 {

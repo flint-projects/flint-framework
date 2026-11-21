@@ -220,6 +220,41 @@ static void sample_allocations(flint_curl_loop *loop, const char *origin)
     }
 }
 
+static void scoped_upload(flint_curl_loop *loop, const char *origin)
+{
+    uint8_t input[17] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 255};
+    char url[512];
+    uint64_t id = 0;
+    transfer_url(url, origin, "/view-signed/leaf/../%E2%98%83?mode=a%2Fb");
+    assert(flint_http_begin_view(loop, url, strlen(url), FLINT_HTTP_HEAD, 0, input, sizeof(input), &id)
+        == FLINT_HTTP_ARGUMENT);
+    assert(flint_http_begin_view(loop, url, strlen(url), FLINT_HTTP_PUT, FLINT_HTTP_VIEW_KEEP_PATH,
+                                input, sizeof(input), &id) == FLINT_HTTP_OK);
+    assert(flint_http_header(loop, id, "X-Probe", 7, "scoped", 6) == FLINT_HTTP_OK);
+    assert(flint_http_body(loop, id, input, sizeof(input)) == FLINT_HTTP_CONFLICT);
+    assert(flint_http_activate(loop, id) == FLINT_HTTP_OK);
+    for (unsigned step = 0; step < 2000; ++step) {
+        flint_http_view view;
+        assert(flint_http_poll(loop, 1) == FLINT_HTTP_OK);
+        assert(flint_http_view_request(loop, id, &view) == FLINT_HTTP_OK && !view.error);
+        if (view.state == FLINT_HTTP_COMPLETE) {
+            assert(view.status == 200 && view.body_length == sizeof(input));
+            assert(memcmp(view.body, input, sizeof(input)) == 0);
+            assert(flint_http_release(loop, id) == FLINT_HTTP_OK);
+            assert(flint_http_view_request(loop, id, &view) == FLINT_HTTP_NOT_FOUND);
+            break;
+        }
+        assert(step != 1999);
+    }
+    transfer_url(url, origin, "/late");
+    assert(flint_http_begin_view(loop, url, strlen(url), FLINT_HTTP_POST, FLINT_HTTP_VIEW_STREAM,
+                                input, sizeof(input), &id) == FLINT_HTTP_OK);
+    assert(flint_http_activate(loop, id) == FLINT_HTTP_OK);
+    assert(flint_curl_cancel(loop, id) == FLINT_HTTP_OK);
+    assert(flint_http_release(loop, id) == FLINT_HTTP_OK);
+    puts("scoped upload: exact request path and bytes, invalid HEAD, and cancellation retirement passed");
+}
+
 int main(void)
 {
     const char *origin = getenv("FLINT_HTTP_HTTP");
@@ -246,6 +281,7 @@ int main(void)
     corpus(loop, origin);
     cancel_resolving(loop);
     cancel_paused(loop, origin, other);
+    scoped_upload(loop, origin);
     sample_allocations(loop, secure);
     flint_curl_free(loop);
     assert(flint_http_owner_calls() > 100);
