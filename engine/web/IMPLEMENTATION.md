@@ -23,4 +23,4 @@ The integrated h2spec v2.6.0 run passed 138 of 146 cases with zero skips. The li
 
 [RFC 9113 §5.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1), [§5.1.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.1.1), [§5.3.2](https://www.rfc-editor.org/rfc/rfc9113.html#section-5.3.2), [§6.8](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.8), [§6.9.1](https://www.rfc-editor.org/rfc/rfc9113.html#section-6.9.1).
 
-The release gate remains open. Local measurements exceeded the DMD edited-build ceiling and the full template instance ceiling. The Linux baseline, million-reply GC and arena accounting, and head-to-head trials remain pending.
+On the local Linux host, both request workers handled 500,000 replies each, reset their arenas after every reply, and recorded zero D GC allocation and collections. The nine-trial local REST comparison met the comparative throughput and p99 targets. Peak RSS and the CPU-time confidence bound exceeded their targets. The local package probe also exceeded the DMD edited-build and linked size ceilings. See [Milestone 06](../../docs/milestones/06.md) for the measured source, raw evidence digests, and release blockers.

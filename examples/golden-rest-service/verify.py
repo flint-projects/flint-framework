@@ -21,24 +21,26 @@ def json_request(connection, method, path, expected, body=None):
     return json.loads(contents)
 
 
-def ready(process, port):
+def ready(process, client, endpoint):
     until = time.monotonic() + 10
     while process.poll() is None and time.monotonic() < until:
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
-                return
+            # A terminated server's listener can still be reachable during kernel cleanup.
+            json_request(client, "GET", f"{endpoint}/0", 404)
+            return
         except OSError:
+            client.close()
             time.sleep(0.02)
-    raise AssertionError(f"listener unavailable, exit status {process.poll()}")
+    raise AssertionError(f"HTTP endpoint unavailable, exit status {process.poll()}")
 
 
 def exercise(executable, directory, port, existing=None):
     process = subprocess.Popen([executable, str(port)], cwd=directory)
     try:
-        ready(process, port)
         client = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
         try:
             endpoint = "/api/users"
+            ready(process, client, endpoint)
             if existing is not None:
                 fetched = json_request(client, "GET", f"{endpoint}/{existing['id']}", 200)
                 assert fetched == existing
