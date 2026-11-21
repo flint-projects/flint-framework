@@ -6,6 +6,7 @@ import core.memory : GC;
 import core.thread : Fiber, Thread;
 import flint.arena : Error, Result, Status;
 import flint.conc : Context, Deadline;
+import flint.conc.wait : replaceWaitHook;
 import flint.reactor.internal.operations : OperationId, OperationTable;
 import flint.reactor.internal.queues : Mailbox, Message, Timers;
 import flint.reactor.sys.fibers : createFiber, releaseFiber, resetFiber, resumeFiber, yieldFiber;
@@ -47,6 +48,14 @@ private enum State : ubyte
 }
 
 private shared ulong lastIdentity;
+private Error waitOnOwner(Deadline deadline) nothrow @nogc
+{
+    auto owner = Reactor.current();
+    if (!owner.currentTask().ok())
+        return Error(Status.conflict, "cooperative wait requires an active reactor fiber");
+    return owner.yieldUntil(deadline);
+}
+
 private Runtime* currentRuntime;
 private uint currentWorkerIndex = uint.max;
 private enum noSlot = uint.max;
@@ -786,8 +795,10 @@ private struct Worker
     {
         currentRuntime = runtime;
         currentWorkerIndex = index;
+        const previousWait = replaceWaitHook(&waitOnOwner);
         scope (exit)
         {
+            replaceWaitHook(previousWait);
             currentWorkerIndex = uint.max;
             currentRuntime = null;
         }

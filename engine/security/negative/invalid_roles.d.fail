@@ -1,0 +1,13 @@
+module invalid_roles;
+
+import flint.arena : RequestArena;
+import flint.security : Principal, RolesAllowed, rolesAllowed;
+
+@safe:
+
+bool duplicateRoles(ref scope RequestArena arena) nothrow @nogc
+{
+    Principal principal;
+    enum rule = RolesAllowed(["read", "read"]);
+    return rolesAllowed!rule(principal, arena);
+}

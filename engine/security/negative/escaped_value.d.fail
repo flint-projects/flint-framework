@@ -1,0 +1,15 @@
+module escaped_value;
+
+import flint.arena : Error;
+import flint.serde.json_visit : visitJsonArray;
+
+@safe:
+
+void retainValue(scope const(ubyte)[] json) nothrow @nogc
+{
+    const(ubyte)[] escaped;
+    visitJsonArray(json, (scope const(ubyte)[] member) {
+        escaped = member;
+        return Error.init;
+    });
+}

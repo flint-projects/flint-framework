@@ -1,0 +1,15 @@
+module escaped_name;
+
+import flint.arena : Error;
+import flint.serde.json_visit : JsonMemberName, visitJsonObject;
+
+@safe:
+
+void retainName(scope const(ubyte)[] json) nothrow @nogc
+{
+    JsonMemberName escaped;
+    visitJsonObject(json, (scope JsonMemberName member, scope const(ubyte)[] value) {
+        escaped = member;
+        return Error.init;
+    });
+}

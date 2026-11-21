@@ -1,0 +1,14 @@
+module unknown_policy;
+
+import flint.conc : Context;
+import flint.security : PreAuthorize, Principal, authorize;
+
+@safe:
+
+void invalidRegistry() nothrow @nogc
+{
+    Context context;
+    Principal principal;
+    enum policy = PreAuthorize("missing");
+    authorize!policy(principal, context);
+}
