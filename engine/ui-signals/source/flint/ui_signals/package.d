@@ -473,19 +473,40 @@ private bool pristine(scope const(SignalSlot)[] signals, scope const(ObserverSlo
         scope const(uint)[] queue, scope const(ComputedSlot)[] computations, scope const(SignalId)[] edges)
 {
     foreach (ref slot; signals)
-        if (slot != SignalSlot.init)
+        if (!pristineSlot(slot))
             return false;
     foreach (ref slot; observers)
-        if (slot != ObserverSlot.init)
+        if (!pristineSlot(slot))
             return false;
     foreach (entry; queue)
         if (entry != 0)
             return false;
     foreach (ref slot; computations)
-        if (slot != ComputedSlot.init)
+        if (!pristineSlot(slot))
             return false;
     foreach (entry; edges)
-        if (entry != SignalId.init)
+        if (entry.index != 0 || entry.generation != 0)
             return false;
     return true;
+}
+
+// Compare fields so freestanding builds do not require a C struct comparison.
+private bool pristineSlot(scope const ref SignalSlot slot)
+{
+    return slot.value == 0 && slot.generation == 0 && slot.firstObserver == 0 && !slot.live
+        && slot.nextFree == 0 && slot.queued == 0 && slot.producer == 0 && slot.dependants == 0;
+}
+
+private bool pristineSlot(scope const ref ObserverSlot slot)
+{
+    return slot.source.index == 0 && slot.source.generation == 0 && slot.destination.index == 0
+        && slot.destination.generation == 0 && slot.next == 0 && !slot.live
+        && slot.previousInOrder == 0 && slot.nextInOrder == 0 && !slot.initial;
+}
+
+private bool pristineSlot(scope const ref ComputedSlot slot)
+{
+    return slot.output.index == 0 && slot.output.generation == 0 && slot.firstInput == 0
+        && slot.inputCount == 0 && slot.compute is null && !slot.live && slot.previous == 0
+        && slot.next == 0 && slot.proposed == 0 && !slot.changed;
 }

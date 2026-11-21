@@ -9,7 +9,7 @@ private int behaviorTest() nothrow @nogc
 {
     SignalSlot[4] slots;
     ObserverSlot[4] observers;
-    uint[8] queue;
+    uint[4] queue;
     ubyte[256] storage;
     auto graph = SignalGraph.fromStorage(slots[], observers[], queue[]);
     auto buffer = CommandBuffer.fromStorage(storage[]);
