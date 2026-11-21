@@ -1,0 +1,8 @@
+name "probe-di-baseline"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-di-baseline"
+dflags "-preview=dip1000"
+dependency "flint:arena" path="../../../.."

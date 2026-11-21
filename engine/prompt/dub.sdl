@@ -1,0 +1,22 @@
+name "prompt"
+description "Flint prompt subpackage"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:arena" version="*"
+dependency "flint:term" version="*"
+dependency "flint:tui" version="*"
+dependency "flint:widgets" version="*"
+dependency "flint:validate" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+    excludedSourceFiles "tests/betterc.d"
+}

@@ -1,0 +1,8 @@
+name "probe-di"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-di"
+dflags "-preview=dip1000"
+dependency "flint:di" path="../../.."

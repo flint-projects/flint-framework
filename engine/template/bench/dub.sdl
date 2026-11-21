@@ -1,0 +1,8 @@
+name "probe-template"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-template"
+dflags "-preview=dip1000"
+dependency "flint:template" path="../../.."

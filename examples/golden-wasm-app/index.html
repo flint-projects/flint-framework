@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flint WASM counter</title>
+<style>body{font:18px system-ui;margin:3rem auto;max-width:36rem;padding:1rem;background:#101a20;color:#eff6f4}button{font:inherit;padding:.7rem 1rem}output{display:block;font-size:3rem;margin:1rem 0}#status{min-height:2rem;color:#b7cdc7}</style>
+<h1>Flint WASM counter</h1><p>A D signal emits one bounded DOM update.</p>
+<output id="counter">0</output><button id="add" disabled>Add one</button><p id="status">Loading the compiled module…</p>
+<script type="module">
+import {createDriver} from './driver.mjs';
+const status=document.querySelector('#status'),button=document.querySelector('#add');
+try {
+  const response=await fetch('./build/app.wasm');if(!response.ok)throw new Error('Build the Flint WASM example before serving it.');
+  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{});const x=instance.exports;
+  if(x.flint_init(1)!==0)throw new Error('Module initialization failed.');
+  const driver=createDriver(document.querySelector('#counter'),{epoch:1});let pending=0,first=true,failed=false;
+  button.addEventListener('click',()=>{pending=Math.min(1024,pending+1);});button.disabled=false;
+  function frame(){
+    if(failed)return;
+    if(!document.hidden&&(first||pending)) {
+      try {
+        const delta=pending;pending=0;first=false;if(x.flint_tick(delta)!==0)throw new Error('Module rejected the frame.');
+        driver.apply(x.memory,x.flint_buffer_ptr(),x.flint_buffer_len());status.textContent='Ready';
+      } catch(e){failed=true;button.disabled=true;status.textContent=e.message;return;}
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+} catch(e){status.textContent=e.message;}
+</script>
+</html>

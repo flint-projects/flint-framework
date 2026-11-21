@@ -1,0 +1,8 @@
+name "probe-wasm-bridge-baseline"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-wasm-bridge-baseline"
+dflags "-preview=dip1000"
+dependency "flint:arena" path="../../../.."

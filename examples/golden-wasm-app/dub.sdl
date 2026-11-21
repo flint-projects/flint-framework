@@ -1,0 +1,8 @@
+name "golden-wasm-app"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:wasm-bridge" path="../.."
+dependency "flint:ui-signals" path="../.."
+dependency "flint:arena" path="../.."

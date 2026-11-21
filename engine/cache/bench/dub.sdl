@@ -1,0 +1,8 @@
+name "probe-cache"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-cache"
+dflags "-preview=dip1000"
+dependency "flint:cache" path="../../.."

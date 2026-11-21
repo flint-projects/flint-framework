@@ -1,0 +1,8 @@
+name "probe-wasi"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-wasi"
+dflags "-preview=dip1000"
+dependency "flint:wasi" path="../../.."

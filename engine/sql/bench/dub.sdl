@@ -1,0 +1,8 @@
+name "probe-sql"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-sql"
+dflags "-preview=dip1000"
+dependency "flint:sql" path="../../.."

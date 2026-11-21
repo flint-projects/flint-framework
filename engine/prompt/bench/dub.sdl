@@ -1,0 +1,8 @@
+name "probe-prompt"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-prompt"
+dflags "-preview=dip1000"
+dependency "flint:prompt" path="../../.."

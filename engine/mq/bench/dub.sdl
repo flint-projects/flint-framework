@@ -1,0 +1,8 @@
+name "probe-mq"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-mq"
+dflags "-preview=dip1000"
+dependency "flint:mq" path="../../.."

@@ -1,0 +1,8 @@
+name "probe-tui"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-tui"
+dflags "-preview=dip1000"
+dependency "flint:tui" path="../../.."

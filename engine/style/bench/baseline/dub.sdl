@@ -1,0 +1,7 @@
+name "probe-style-baseline"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-style-baseline"
+dflags "-preview=dip1000"

@@ -1,0 +1,8 @@
+name "probe-storage"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-storage"
+dflags "-preview=dip1000"
+dependency "flint:storage" path="../../.."

@@ -1,0 +1,8 @@
+name "probe-desktop"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-desktop"
+dflags "-preview=dip1000"
+dependency "flint:desktop" path="../../.."

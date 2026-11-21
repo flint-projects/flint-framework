@@ -1,0 +1,8 @@
+name "probe-wasm-bridge"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-wasm-bridge"
+dflags "-preview=dip1000"
+dependency "flint:wasm-bridge" path="../../.."

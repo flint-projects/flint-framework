@@ -1,0 +1,24 @@
+name "web"
+description "Flint web subpackage"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:arena" version="*"
+dependency "flint:reactor" version="*"
+dependency "flint:conc" version="*"
+dependency "flint:di" version="*"
+dependency "flint:serde" version="*"
+dependency "flint:validate" version="*"
+dependency "flint:log" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+    excludedSourceFiles "tests/betterc.d"
+}
