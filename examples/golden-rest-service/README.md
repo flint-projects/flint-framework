@@ -1,7 +1,27 @@
 # Golden REST service
 
-The source declares a persisted User DTO, generated repository binding, constructor-injected UserService and annotated controller, then starts a loopback server. The sample's explicit SQLite settings are in source; the TOML file illustrates matching application configuration for the later configuration-injection exercise. No claim is made that this file is loaded by the current source.
+The service verifies and applies its embedded SQLite migration before creating
+the constructor-injected repository, service and controller. It opens
+`users.db` in its working directory and listens on `127.0.0.1:8080` by default.
+Pass a different port as the first argument.
 
-`GET /api/users/1` returns a user or the specified 404 error mapping. `POST /api/users` validates the request and saves it with prepared parameters. Text fields are request-arena handles, so parsing, persistence and response serialization share a precisely bounded lifetime. The startup schema is solely a standalone demonstration; production composition invokes flint:migrate before admitting traffic.
+- `POST /api/users` accepts `{"displayName":"Ada"}`, validates the name, and
+  returns the created row with HTTP 201.
+- `GET /api/users/1` returns the stored row with HTTP 200 or an HTTP 404 error.
 
-The supplied sample is compiler-checked against contracts. It becomes runnable after Milestone 3 implements the dependencies. It is intentionally distinct from bench-rest, which has no database and is matched against the minimal Go reference. Do not benchmark this database application against a Go server that merely returns static JSON.
+From the monorepo root, verify the generated migration table and sidecar before
+building. Use the pinned REST and SQLite native libraries.
+
+```sh
+python3 tools/migration_manifest.py \
+  --input examples/golden-rest-service/resources/migrations \
+  --output examples/golden-rest-service/generated/golden/migrations.d \
+  --module golden.migrations --check
+dub build --root=examples/golden-rest-service --compiler=ldc2
+python3 examples/golden-rest-service/verify.py examples/golden-rest-service/golden-rest-service
+```
+
+The verifier uses a disposable database. It exercises malformed requests,
+insertion, fetching, restart, and refusal to start after changing the saved
+migration hash. The existing TOML file illustrates the equivalent configuration
+values. The executable supplies its settings explicitly.

@@ -1,0 +1,14 @@
+{
+  "migrations": [
+    {
+      "description": "create users",
+      "file": "V000001__create_users.sql",
+      "sha256": "b36bd70df54689d615c3b8a18d0f2f334efeb77de5a261d4f6cbd23c0f5a27df",
+      "size_bytes": 83,
+      "transactional": true,
+      "version": 1
+    }
+  ],
+  "module": "golden.migrations",
+  "schema": 1
+}

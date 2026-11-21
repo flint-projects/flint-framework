@@ -1,13 +1,16 @@
 module app;
-import flint.arena : Error, Result, Text, Status, RequestArena;
+import golden.migrations : migrations;
+import flint.arena : Result, Status, Text;
 import flint.conc : Context;
 import flint.data : Table, Id, Column, CrudRepository, SqlRepository;
-import flint.di : Service, BeanRegistrar, Bind, AppContext;
+import flint.di : Service, BeanRegistrar, Bind, AppContext, Provided;
+import flint.migrate : MigrationOptions, migrate;
 import flint.serde : JsonName;
 import flint.validate : Valid, NotBlank;
 import flint.web : RestController, Get, Post, PathVariable, RequestBody, RequestContext,
     ServerOptions, runApplication;
 import flint.sql : Pool, PoolOptions, Driver;
+import std.conv : ConvException, to;
 
 @safe:
 
@@ -82,8 +85,20 @@ struct Application
 }
 
 // Pool is externally owned; DI borrows its handle and never closes it.
-int main()
+int main(string[] arguments)
 {
+    if (arguments.length > 2)
+        return 64;
+    ushort port = 8080;
+    if (arguments.length == 2)
+    {
+        try
+            port = arguments[1].to!ushort;
+        catch (ConvException)
+            return 64;
+        if (port == 0)
+            return 64;
+    }
     Pool pool;
     PoolOptions database;
     database.driver = Driver.sqlite;
@@ -97,21 +112,11 @@ int main()
         pool.close(shutdownContext);
     }
 
-    // Standalone demonstration schema; production apps use flint:migrate.
-    ubyte[4096] startupBytes;
-    scope startupArena = RequestArena(startupBytes[]);
-    auto leased = pool.acquire(shutdownContext);
-    if (!leased.ok())
+    const schema = migrate(pool, migrations, MigrationOptions.init, shutdownContext);
+    if (!schema.ok())
         return 2;
-    auto connection = leased.value;
-    auto schema = connection.execute(
-            "CREATE TABLE IF NOT EXISTS users " ~ "(id INTEGER PRIMARY KEY, display_name TEXT NOT NULL)",
-            null, startupArena, shutdownContext);
-    const released = pool.release(connection);
-    if (!schema.ok() || released.code != Status.ok)
-        return 3;
 
-    AppContext!(Pool, UserBindings, UserService, UserController) context;
+    AppContext!(Provided!Pool, UserBindings, UserService, UserController) context;
     const provided = context.provide!Pool(pool);
     if (provided.code != Status.ok)
         return 4;
@@ -124,7 +129,7 @@ int main()
     auto application = Application(context.get!UserController());
     ServerOptions server;
     server.address = "127.0.0.1";
-    server.port = 8080;
+    server.port = port;
     return runApplication!Application(application, server);
 }
 
