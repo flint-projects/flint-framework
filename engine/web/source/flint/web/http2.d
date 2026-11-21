@@ -1,0 +1,619 @@
+/// Bounded HTTP/2 stream multiplexing on caller-owned reactor loops.
+module flint.web.http2;
+
+import core.atomic : atomicLoad, atomicOp, cas;
+import core.lifetime : move;
+import core.time : MonoTime, ticksToNSecs;
+import flint.arena : Buffer, RequestArena, Status;
+import flint.conc : CancelSource, Context, Deadline;
+import flint.reactor : Completion, ConnectionId, Reactor, TaskContext, TaskDelegate;
+import flint.web.dispatch : executeRoute, failureResponse, liveBody;
+import flint.web.ffi.http2 : H2Chunk, H2Event, H2Output, H2Session;
+import flint.web.http1 : Http1Reader;
+import flint.web.router : RouteTable;
+import flint.web.sys.ownership : releaseBytes, reserveBytes;
+import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
+import flint.web.types : Method, RequestContext, Response, ServerOptions;
+import flint.web.wire : responseCode, validMediaType;
+
+@safe:
+
+private enum ioBytes = 4096;
+private enum streamLimit = 100;
+private enum streamsPerCore = 1024;
+
+// RFC 9113 stream errors, passed as scalar choices into the provider.
+private enum Protocol : int
+{
+    ok = 0,
+    protocolError = 1,
+    internalError = 2,
+    refused = 7,
+    cancelled = 8,
+    exhausted = 11
+}
+
+private enum StreamPhase : ubyte
+{
+    free,
+    reading,
+    ready,
+    admitted,
+    responding
+}
+
+private struct Session
+{
+    ConnectionId id;
+    H2Session native;
+    uint[streamLimit] streams;
+    bool readActive;
+    bool writeActive;
+    bool closing;
+    bool draining;
+    size_t sent;
+    Deadline firstRequestDeadline;
+}
+
+/// A worker-local stream slot cannot recycle while a posted handler or final send can reference it.
+private struct Stream
+{
+    H2Runtime runtime;
+    TaskDelegate action;
+    uint index;
+    ConnectionId connection;
+    int number;
+    StreamPhase phase;
+    bool providerClosed;
+    Deadline headerDeadline;
+    Http1Reader assembly;
+    RequestContext request;
+    CancelSource cancel;
+    ubyte[] memory;
+    Buffer response;
+    size_t offset;
+
+    void execute() nothrow @nogc
+    {
+        runtime.dispatch(index);
+    }
+}
+
+package(flint.web) final class H2Runtime
+{
+    private ServerOptions options;
+    private RouteTable routes;
+    private TlsTransport tls;
+    private Context root;
+    private Session[] connections;
+    private Stream[] streams;
+    private uint workerStreams;
+    private size_t arenaBytes;
+    private shared ulong lastRequest;
+    private shared uint activeSessions;
+
+    this(ServerOptions options, RouteTable routes, Context root)
+    {
+        this.options = options;
+        this.routes = routes;
+        this.root = root;
+        arenaBytes = options.maxHeaderBytes + options.maxBodyBytes + options.writeQueueBytes + 1024;
+        const capacity = options.maxConnectionsPerCore * options.maxStreamsPerConnection;
+        workerStreams = capacity < streamsPerCore ? capacity : streamsPerCore;
+        connections = new Session[options.cores * options.maxConnectionsPerCore];
+        streams = new Stream[options.cores * workerStreams];
+        foreach (index, ref stream; streams)
+        {
+            stream.runtime = this;
+            stream.index = cast(uint) index;
+            stream.action = &stream.execute;
+        }
+    }
+
+    void setTls(TlsTransport value)
+    {
+        tls = value;
+    }
+
+    uint activeCount() nothrow @nogc
+    {
+        return atomicLoad(activeSessions);
+    }
+
+    void accept(ConnectionId id) nothrow @nogc
+    {
+        auto connection = slot(id);
+        if (connection is null || connection.id.generation != 0 || root.cancelled()
+                || connection.native.open(id.generation, options.maxStreamsPerConnection).code != Status.ok)
+        {
+            closePlain(tls, id);
+            return;
+        }
+        connection.id = id;
+        atomicOp!"+="(activeSessions, 1U);
+        connection.firstRequestDeadline = following(options.headerTimeoutNanos);
+        armRead(connection);
+        if (!connection.closing && connection.id.generation != 0)
+            flush(connection);
+    }
+
+    void release() nothrow @nogc
+    {
+        foreach (ref stream; streams)
+        {
+            if (stream.phase != StreamPhase.free)
+                retire(&stream);
+        }
+        foreach (ref connection; connections)
+            connection.native.close();
+        root = Context.init;
+    }
+
+    private Session* slot(ConnectionId id) nothrow @nogc
+    {
+        if (id.ownerCore >= options.cores || id.slot >= options.maxConnectionsPerCore)
+            return null;
+        return &connections[id.ownerCore * options.maxConnectionsPerCore + id.slot];
+    }
+
+    private Session* live(ConnectionId id) nothrow @nogc
+    {
+        auto connection = slot(id);
+        return connection !is null && connection.id == id && id.generation != 0 ? connection : null;
+    }
+
+    private Stream* streamFor(Session* connection, int number) nothrow @nogc
+    {
+        foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index != 0 && streams[index - 1].number == number)
+                return &streams[index - 1];
+        }
+        return null;
+    }
+
+    private int admitStream(Session* connection, int number) nothrow @nogc
+    {
+        if (number <= 0 || connection.closing || root.cancelled())
+            return Protocol.refused;
+
+        uint* member;
+        foreach (ref index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index == 0)
+            {
+                member = &index;
+                break;
+            }
+        }
+        if (member is null)
+            return Protocol.refused;
+
+        immutable first = connection.id.ownerCore * workerStreams;
+        foreach (ref stream; streams[first .. first + workerStreams])
+        {
+            if (stream.phase != StreamPhase.free)
+                continue;
+
+            if (!prepareStream(&stream, connection.id, number))
+                return Protocol.refused;
+            connection.firstRequestDeadline = Deadline.none();
+            *member = stream.index + 1;
+            return Protocol.ok;
+        }
+        return Protocol.refused;
+    }
+
+    private bool prepareStream(Stream* stream, ConnectionId connection, int number) nothrow @nogc
+    {
+        auto source = CancelSource.create(root, Deadline.none());
+        if (!source.ok())
+            return false;
+        const total = arenaBytes + options.maxHeaderBytes;
+        stream.memory = reserveBytes(total);
+        if (stream.memory.length != total)
+            return false;
+        auto arena = RequestArena(stream.memory[0 .. arenaBytes]);
+        move(arena, stream.request.arena);
+        stream.assembly.prepare(stream.memory[arenaBytes .. $], options.maxHeaderBytes, options.maxBodyBytes);
+        if (!stream.assembly.begin())
+        {
+            retire(stream);
+            return false;
+        }
+        move(source.value, stream.cancel);
+        stream.request.cancellation = stream.cancel.context();
+        stream.connection = connection;
+        stream.number = number;
+        stream.headerDeadline = following(options.headerTimeoutNanos);
+        stream.phase = StreamPhase.reading;
+        return true;
+    }
+
+    private int event(Session* connection, H2Event event, int number, uint code,
+            scope const(ubyte)[] name, scope const(ubyte)[] bytes) nothrow @nogc
+    {
+        if (event == H2Event.begin)
+            return admitStream(connection, number);
+        if (event == H2Event.goaway)
+            return Protocol.ok;
+        auto stream = streamFor(connection, number);
+        if (stream is null)
+            return Protocol.ok;
+
+        if (event == H2Event.reset)
+        {
+            stream.cancel.cancel();
+            return Protocol.ok;
+        }
+        if (event == H2Event.closed)
+        {
+            stream.providerClosed = true;
+            if (code != Protocol.ok)
+                stream.cancel.cancel();
+            return Protocol.ok;
+        }
+        return inputEvent(stream, event, code, name, bytes);
+    }
+
+    private int inputEvent(Stream* stream, H2Event event, uint code, scope const(ubyte)[] name,
+            scope const(ubyte)[] bytes) nothrow @nogc
+    {
+        if (stream.phase != StreamPhase.reading)
+            return Protocol.protocolError;
+
+        Status status;
+        switch (event)
+        {
+        case H2Event.headers:
+            stream.headerDeadline = Deadline.none();
+            return Protocol.ok;
+        case H2Event.field:
+            status = stream.assembly.receiveH2Header(name, bytes, code != 0, stream.request.arena);
+            break;
+        case H2Event.body:
+            status = stream.assembly.receiveH2Body(bytes, stream.request.arena);
+            break;
+        case H2Event.end:
+            if (!stream.assembly.finishH2(stream.request.arena))
+                return Protocol.protocolError;
+            stream.phase = StreamPhase.ready;
+            return Protocol.ok;
+        default:
+            return Protocol.internalError;
+        }
+        if (status == Status.ok)
+            return Protocol.ok;
+        stream.cancel.cancel();
+        return status == Status.resourceExhausted ? Protocol.exhausted : Protocol.protocolError;
+    }
+
+    private Deadline following(long timeout) nothrow @nogc
+    {
+        const timestamp = ticksToNSecs(MonoTime.currTime.ticks);
+        return Deadline(timeout >= long.max - timestamp ? long.max - 1 : timestamp + timeout);
+    }
+
+    private Context receiveContext(Session* connection) nothrow @nogc
+    {
+        auto earliest = following(options.idleTimeoutNanos);
+        if (connection.firstRequestDeadline.monotonicNanoseconds < earliest.monotonicNanoseconds)
+            earliest = connection.firstRequestDeadline;
+        foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index == 0)
+                continue;
+            const candidate = streams[index - 1].headerDeadline;
+            if (candidate.monotonicNanoseconds < earliest.monotonicNanoseconds)
+                earliest = candidate;
+        }
+        return root.withDeadline(earliest);
+    }
+
+    private void armRead(Session* connection) nothrow @nogc
+    {
+        if (connection.closing || connection.draining || connection.readActive)
+            return;
+        const queued = readPlain(tls, connection.id, ioBytes, receiveContext(connection), &read);
+        if (queued == Status.ok)
+            connection.readActive = true;
+        else
+            abort(connection);
+    }
+
+    private void read(Completion completion, scope const(ubyte)[] bytes) nothrow @nogc
+    {
+        auto connection = live(completion.connection);
+        if (connection is null)
+            return;
+        connection.readActive = false;
+        if (root.cancelled() && completion.status == Status.cancelled && !connection.closing)
+        {
+            beginDrain(connection);
+            return;
+        }
+        if (connection.closing || completion.status != Status.ok || bytes.length == 0)
+        {
+            abort(connection);
+            return;
+        }
+        const parsed = connection.native.feed(bytes, (H2Event kind, int number, uint code,
+                scope const(ubyte)[] name, scope const(ubyte)[] value) @safe nothrow @nogc {
+            return event(connection, kind, number, code, name, value);
+        });
+        if (!parsed)
+        {
+            abort(connection);
+            return;
+        }
+
+        schedule(connection);
+        if (connection.id.generation != 0)
+            armRead(connection);
+        if (connection.id.generation != 0)
+            flush(connection);
+    }
+
+    private void schedule(Session* connection) nothrow @nogc
+    {
+        foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index == 0)
+                continue;
+            auto stream = &streams[index - 1];
+            if (stream.phase != StreamPhase.ready || stream.providerClosed)
+                continue;
+
+            stream.request.requestId = requestId();
+            stream.phase = StreamPhase.admitted;
+            const posted = Reactor.current().postWith(connection.id.ownerCore, stream.action,
+                    TaskContext(stream.request.requestId, stream.request.cancellation));
+            if (posted.code != Status.ok)
+            {
+                stream.phase = StreamPhase.responding;
+                if (!connection.native.reply(stream.number, 503, null, 0, true))
+                {
+                    abort(connection);
+                    return;
+                }
+            }
+        }
+    }
+
+    private ulong requestId() nothrow @nogc
+    {
+        for (;;)
+        {
+            const previous = atomicLoad(lastRequest);
+            if (previous == ulong.max)
+                return 0;
+            if (cas(&lastRequest, previous, previous + 1))
+                return previous + 1;
+        }
+    }
+
+    private void dispatch(uint index) nothrow @nogc
+    {
+        auto stream = &streams[index];
+        auto connection = live(stream.connection);
+        if (connection is null || stream.phase != StreamPhase.admitted)
+            return;
+
+        if (discard(connection, stream))
+            return;
+        auto result = executeRoute(routes, &stream.assembly.metadata, stream.request);
+        stream.phase = StreamPhase.responding;
+        if (discard(connection, stream))
+            return;
+
+        if (result.error.code == Status.cancelled)
+        {
+            if (!connection.native.reset(stream.number, Protocol.cancelled))
+                abort(connection);
+            else
+                flush(connection);
+            return;
+        }
+
+        Response response = result.ok() ? result.value
+            : failureResponse(responseCode(result.error.code), stream.request.arena);
+        queueResponse(connection, stream, response);
+    }
+
+    private bool discard(Session* connection, Stream* stream) nothrow @nogc
+    {
+        if (!connection.closing && !connection.draining && !stream.providerClosed
+                && !stream.request.cancellation.cancelled())
+            return false;
+        stream.phase = StreamPhase.responding;
+        if (connection.closing)
+            finishClose(connection);
+        else
+            flush(connection);
+        return true;
+    }
+
+    private void queueResponse(Session* connection, Stream* stream, Response response) nothrow @nogc
+    {
+        if (response.status < 200 || response.status > 599 || !validMediaType(response.contentType)
+                || !liveBody(response.body, stream.request.arena))
+            response = failureResponse(500, stream.request.arena);
+        if (response.body.length() > options.writeQueueBytes)
+            response = failureResponse(503, stream.request.arena);
+        if (response.status == 204 || response.status == 304)
+            response = Response(response.status, null, Buffer.init);
+
+        stream.response = response.body;
+        stream.offset = 0;
+        const head = stream.assembly.metadata.method == Method.head;
+        if (!connection.native.reply(stream.number, response.status, response.contentType,
+                response.body.length(), head))
+            abort(connection);
+        else
+            flush(connection);
+    }
+
+    private H2Chunk copyBody(Session* connection, int number, scope ubyte[] output) nothrow @nogc
+    {
+        auto stream = streamFor(connection, number);
+        if (stream is null || stream.phase != StreamPhase.responding || stream.providerClosed)
+            return H2Chunk.init;
+
+        size_t stored;
+        const copied = stream.request.arena.read(stream.response, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
+            const remaining = bytes.length - stream.offset;
+            stored = remaining <= output.length ? remaining : output.length;
+            output[0 .. stored] = bytes[stream.offset .. stream.offset + stored];
+            stream.offset += stored;
+        });
+        return copied == Status.ok ? H2Chunk(cast(ptrdiff_t) stored,
+                stream.offset == stream.response.length()) : H2Chunk.init;
+    }
+
+    private void flush(Session* connection) nothrow @nogc
+    {
+        if (connection.closing || connection.writeActive)
+            return;
+
+        ubyte[ioBytes] bytes;
+        const capacity = options.writeQueueBytes < bytes.length ? options.writeQueueBytes : bytes.length;
+        scope sink = H2Output((H2Event kind, int number, uint code, scope const(ubyte)[] name,
+                scope const(ubyte)[] data) @safe nothrow @nogc {
+            return event(connection, kind, number, code, name, data);
+        }, (int number, scope ubyte[] data) @safe nothrow @nogc {
+            return copyBody(connection, number, data);
+        });
+        const written = connection.native.send(bytes[0 .. capacity], sink);
+        if (!written.ok())
+        {
+            abort(connection);
+            return;
+        }
+        const count = written.value;
+        if (count == 0)
+        {
+            reap(connection);
+            if (connection.draining || connection.native.done())
+                abort(connection);
+            return;
+        }
+
+        const deadline = following(options.idleTimeoutNanos);
+        auto context = connection.draining ? Context.init.withDeadline(deadline) : root.withDeadline(deadline);
+        const write = writePlain(tls, connection.id, bytes[0 .. count], context, &this.written);
+        if (write != Status.ok)
+        {
+            abort(connection);
+            return;
+        }
+        connection.writeActive = true;
+        connection.sent = count;
+    }
+
+    private void written(Completion completion) nothrow @nogc
+    {
+        auto connection = live(completion.connection);
+        if (connection is null)
+            return;
+        connection.writeActive = false;
+        if (connection.closing || completion.status != Status.ok || completion.bytes != connection.sent)
+        {
+            abort(connection);
+            return;
+        }
+        if (root.cancelled() && !connection.draining)
+        {
+            beginDrain(connection);
+            return;
+        }
+        if (!connection.native.pending())
+            reap(connection);
+        flush(connection);
+    }
+
+    private void beginDrain(Session* connection) nothrow @nogc
+    {
+        if (!connection.draining)
+        {
+            connection.draining = true;
+            if (!connection.native.drain())
+            {
+                abort(connection);
+                return;
+            }
+        }
+        flush(connection);
+    }
+
+    private void reap(Session* connection) nothrow @nogc
+    {
+        foreach (ref index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index == 0)
+                continue;
+            auto stream = &streams[index - 1];
+            if (stream.providerClosed && stream.phase != StreamPhase.admitted)
+            {
+                retire(stream);
+                index = 0;
+            }
+        }
+    }
+
+    private void abort(Session* connection) nothrow @nogc
+    {
+        if (!connection.closing)
+        {
+            connection.closing = true;
+            foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
+            {
+                if (index != 0)
+                    streams[index - 1].cancel.cancel();
+            }
+            closePlain(tls, connection.id);
+        }
+        finishClose(connection);
+    }
+
+    private void finishClose(Session* connection) nothrow @nogc
+    {
+        if (!connection.closing || connection.readActive || connection.writeActive)
+            return;
+        foreach (ref index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index == 0)
+                continue;
+            auto stream = &streams[index - 1];
+            if (stream.phase != StreamPhase.admitted)
+            {
+                retire(stream);
+                index = 0;
+            }
+        }
+        foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
+        {
+            if (index != 0)
+                return;
+        }
+        connection.native.close();
+        connection.id = ConnectionId.init;
+        connection.closing = false;
+        connection.draining = false;
+        atomicOp!"-="(activeSessions, 1U);
+    }
+
+    private void retire(Stream* stream) nothrow @nogc
+    {
+        stream.cancel.cancel();
+        stream.request.cancellation = Context.init;
+        stream.cancel.close();
+        stream.assembly.close();
+        destroy(stream.request.arena);
+        releaseBytes(stream.memory);
+        stream.phase = StreamPhase.free;
+        stream.providerClosed = false;
+        stream.response = Buffer.init;
+        stream.number = 0;
+        stream.connection = ConnectionId.init;
+    }
+}

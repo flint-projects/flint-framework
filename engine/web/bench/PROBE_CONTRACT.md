@@ -1,8 +1,21 @@
 # web exercised probe
 
-The implementation task creates `source/app.d` and `baseline/source/app.d` in this directory. The recipes resolve the local implementation root. Source is intentionally absent until real behavior exists; the measurement tool rejects missing probes.
+The feature and baseline run the same fixed HTTP/1 corpus with pinned llhttp. The corpus covers literal, named-parameter and wildcard routes, a chunked body and a miss. A trial repeats complete runs for at least 150 ms. Both binaries verify the same release-active checksum of 3227 per corpus and consume the aggregate checksum. The feature measures Flint parsing, matching, arena ownership and typed result handling.
 
-`source/app.d` must instantiate and execute the required workload in `handoff/specs/tier-2/web.md`. Preserve an observable checksum derived from actual results and check correctness through code that remains active in the release build. A bare import, constant-only substitute or discarded operation is invalid. Use the pinned input sizes/seeds from the specification; microbenchmark timing, where applicable, must exceed 100 ms per trial.
+## Local Linux measurements
+
+| Profile | Complete feature bytes | Complete provider baseline bytes | Signed delta |
+| --- | ---: | ---: | ---: |
+| LDC O3 | 748,728 | 492,976 | 255,752 |
+| LDC Oz | 740,536 | 497,072 | 243,464 |
+
+| Compiler | Cache-cold build | Edited leaf build | Peak process-tree RSS |
+| --- | ---: | ---: | ---: |
+| DMD 2.114 | 1.013 s | 0.647 s | 205,705,216 bytes |
+| LDC 1.43 O3 | 2.029 s | 0.808 s | 269,393,920 bytes |
+| LDC 1.43 Oz | 1.671 s | 0.740 s | 268,894,208 bytes |
+
+The edit touched `flint/web/router.d` in a fresh copied workspace with a private DUB cache. DMD reported 3,928 template instances across all DUB compilation groups. The local wrapper traced 211 instances in its single intercepted `-c` invocation. The complete count and edited-build duration exceed their ceilings. The local runs do not establish the dedicated-runner baseline.
 
 ## Equivalent provider baseline
 
