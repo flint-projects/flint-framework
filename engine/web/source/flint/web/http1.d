@@ -21,6 +21,7 @@ package(flint.web) struct Http1Reader
     RequestMetadata metadata;
     ushort responseStatus;
     bool keepAlive;
+    bool upgradeRequested;
     ubyte versionMinor;
 
     private Http1Parser parser;
@@ -128,6 +129,7 @@ package(flint.web) struct Http1Reader
         ++metadata.generation;
         responseStatus = 400;
         keepAlive = false;
+        upgradeRequested = false;
         versionMinor = 1;
         wireHeaderBytes = 0;
         trailerBytes = 0;
@@ -173,15 +175,22 @@ package(flint.web) struct Http1Reader
                 const status = acceptHeaders();
                 if (status != 0)
                     return reject(status);
-                break;
+                if (!upgradeRequested)
+                    break;
+                return finishRequest(arena);
             case HttpProgress.complete:
-                if (!complete(arena))
-                    return reject(503);
-                metadata.valid = true;
-                return ReadOutcome.request;
+                return finishRequest(arena);
             }
         }
         while (true);
+    }
+
+    private ReadOutcome finishRequest(ref scope RequestArena arena) nothrow @nogc
+    {
+        if (!complete(arena))
+            return reject(503);
+        metadata.valid = true;
+        return ReadOutcome.request;
     }
 
     private HttpProgress advance(scope const(ubyte)[] input, ref scope RequestArena arena,
@@ -226,10 +235,18 @@ package(flint.web) struct Http1Reader
             return 501;
         if (info.contentLength > bodyLimit)
             return 413;
+        upgradeRequested = info.upgrade != 0;
+        if (upgradeRequested && !validUpgrade(info))
+            return 400;
         metadata.method = cast(Method) info.method;
-        keepAlive = info.keepAlive != 0;
+        keepAlive = info.keepAlive != 0 && !upgradeRequested;
         readingHeaders = false;
         return 0;
+    }
+
+    private static bool validUpgrade(scope const ref Http1Info info) pure nothrow @nogc
+    {
+        return info.minor == 1 && info.chunked == 0 && info.contentLength == 0;
     }
 
     private Status receive(HttpEvent event, scope const(ubyte)[] bytes, ref scope RequestArena arena) nothrow @nogc

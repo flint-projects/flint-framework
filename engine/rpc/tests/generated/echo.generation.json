@@ -1,0 +1,15 @@
+{
+  "collection_capacity": 16,
+  "descriptor_reader": "7.36.2",
+  "flint_generator": 1,
+  "generated": {
+    "echo.pb-c.c": "77f72073eaf426066685378c942017103c0d3835ccca8ab2a2e42d240e184760",
+    "echo.pb-c.h": "13b9eacada59052a53a6e18a4c6aa8bdcdc35dae898cde4247fb5c3ef2ed920c",
+    "echo_flint.c": "cbc2831628d40061e46f75b2044bf8719e9c32846e22c85ecbf7734929263e8b",
+    "fixture_proto.d": "9bcbb4064b26091290bf0dd02d4c206cca3d40384e5f1370ab40c819706920f8"
+  },
+  "protobuf_c": "1.5.2",
+  "protoc": "libprotoc 30.2",
+  "schema": "echo.proto",
+  "schema_sha256": "505a70b09bc7e41a2801184bfd371ff314c3976c9542ee800304708f644d0009"
+}

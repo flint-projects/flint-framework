@@ -2,6 +2,7 @@
 module flint.web.wire;
 
 import flint.arena : Status;
+import flint.web.stream : StreamField, validStreamFields;
 
 @safe:
 
@@ -56,6 +57,54 @@ package(flint.web) size_t writeHeader(scope ubyte[] output, ushort status, strin
     writer.write("\r\nConnection: ");
     writer.write(persistent ? "keep-alive" : "close");
     writer.write("\r\n\r\n");
+    return writer.full ? 0 : writer.offset;
+}
+
+package(flint.web) size_t writeStreamHeader(scope ubyte[] output, ushort status,
+        scope const(StreamField)[] fields, ubyte minor, bool upgrade) nothrow @nogc
+{
+    if (!validStreamFields(fields, upgrade))
+        return 0;
+    scope writer = HeaderWriter(output);
+    writer.write(minor == 0 ? "HTTP/1.0 " : "HTTP/1.1 ");
+    writer.decimal(status);
+    writer.write(" ");
+    writer.write(status == 101 ? "Switching Protocols" : reason(status));
+    writer.write("\r\n");
+    foreach (ref field; fields)
+    {
+        writer.write(field.name);
+        writer.write(": ");
+        writer.write(field.value);
+        writer.write("\r\n");
+    }
+    if (!upgrade)
+    {
+        if (minor == 1)
+            writer.write("Transfer-Encoding: chunked\r\n");
+        writer.write("Connection: close\r\n");
+    }
+    writer.write("\r\n");
+    return writer.full ? 0 : writer.offset;
+}
+
+package(flint.web) size_t writeChunk(scope ubyte[] output, scope const(ubyte)[] body) nothrow @nogc
+{
+    scope writer = HeaderWriter(output);
+    char[2 * size_t.sizeof] digits;
+    size_t start = digits.length;
+    size_t left = body.length;
+    do
+    {
+        digits[--start] = "0123456789abcdef"[left % 16];
+        left /= 16;
+    }
+    while (left != 0);
+    writer.write(digits[start .. $]);
+    writer.write("\r\n");
+    writer.write(cast(const(char)[])
+            body);
+    writer.write("\r\n");
     return writer.full ? 0 : writer.offset;
 }
 

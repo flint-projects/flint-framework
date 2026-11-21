@@ -51,6 +51,7 @@ typedef struct flint_http1_info {
     uint8_t minor;
     uint8_t keep_alive;
     uint8_t chunked;
+    uint8_t upgrade;
 } flint_http1_info;
 
 flint_http1_parser *flint_http1_new(flint_http_event_cb callback, void *user);
@@ -79,6 +80,23 @@ flint_h2_session *flint_h2_new_token(uint64_t token, uint32_t max_streams, flint
 /* The provider copies exposed header data. Bodies are streamed through the callback under peer credit. */
 int flint_h2_reply(flint_h2_session *session, int32_t stream, unsigned status,
                    const uint8_t *content_type, size_t type_length, size_t body_length, int suppress_body);
+typedef struct flint_h2_field {
+    const char *name;
+    size_t name_length;
+    const char *value;
+    size_t value_length;
+} flint_h2_field;
+
+/* A DATA callback can hold stream credit or temporarily defer its outbound bytes. */
+#define FLINT_H2_HOLD_STREAM_CREDIT 2147483647
+#define FLINT_H2_DEFER_OUTPUT (-2)
+
+/* Status zero copies exact terminal fields. Other statuses start an incremental response. */
+int flint_h2_stream_headers(flint_h2_session *session, int32_t stream, unsigned status,
+                            const flint_h2_field *fields, size_t count);
+int flint_h2_consume_stream(flint_h2_session *session, int32_t stream, size_t count);
+int flint_h2_resume_stream(flint_h2_session *session, int32_t stream);
+
 int flint_h2_reset(flint_h2_session *session, int32_t stream, uint32_t code);
 int flint_h2_drain(flint_h2_session *session);
 int flint_h2_pending(const flint_h2_session *session);

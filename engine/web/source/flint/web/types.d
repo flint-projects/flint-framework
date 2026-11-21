@@ -306,6 +306,20 @@ struct Request
         return Result!Buffer(Buffer.init, Error(Status.notFound, "HTTP field is absent"));
     }
 
+    /// Count all fields with this ASCII case-insensitive name.
+    size_t headerCount(scope const(char)[] name) const scope nothrow @nogc
+    {
+        size_t count;
+        if (!live())
+            return count;
+        foreach (ref field; state.headers[0 .. state.fieldCount])
+        {
+            if (sameName(state.names[field.start .. field.end], name))
+                ++count;
+        }
+        return count;
+    }
+
     /// Dechunked body in the enclosing request arena.
     Result!Buffer body() const scope nothrow @nogc
     {

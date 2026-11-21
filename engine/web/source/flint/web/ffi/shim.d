@@ -56,6 +56,8 @@ extern (C) struct Http1Info
     ubyte keepAlive;
     /// The body is framed as chunks.
     ubyte chunked;
+    /// llhttp recognized a protocol upgrade at the header boundary.
+    ubyte upgrade;
 }
 
 /// Progress and count from one bounded input window.

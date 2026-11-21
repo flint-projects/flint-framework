@@ -9,6 +9,7 @@ import sys
 import time
 
 from h2 import config, connection, events, settings
+from hyperframe.frame import WindowUpdateFrame
 
 PAYLOAD = bytes(ord('a') + i % 23 for i in range(128 * 1024))
 JSON = b'{"id":-9223372036854775808,"size":18446744073709551615}'
@@ -207,11 +208,34 @@ def h2(binary):
                 for stream in active:
                     saturated.engine.reset_stream(stream)
                 saturated.flush()
+
+            overflow = peer.get('/hold', credit=64)
+            sibling = peer.get(TARGET, credit=1000)
+            assert peer.result(sibling) == (200, JSON)
+            frame = WindowUpdateFrame(overflow)
+            frame.window_increment = 0x7fffffff
+            wire = frame.serialize()
+            for segment in (wire[:3], wire[3:10], wire[10:]):
+                peer.socket.sendall(segment)
+            peer.through(lambda: overflow in peer.errors)
+            assert peer.errors[overflow] == 3
+            assert peer.result(peer.get(TARGET, credit=1000)) == (200, JSON)
+
+            retiring = H2Peer(port)
+            with retiring.socket:
+                assert retiring.result(retiring.get(TARGET, credit=1000)) == (200, JSON)
+                retiring.engine.close_connection()
+                retiring.flush()
+                retiring.through(lambda: retiring.goaway is not None)
+                assert retiring.goaway == 0
+                retiring.socket.shutdown(socket.SHUT_WR)
+                assert retiring.socket.recv(1) == b''
+
             peer.get('/shutdown')
             peer.through(lambda: peer.goaway is not None)
             assert peer.goaway == 0
         assert process.wait(5) == 0
-        print('H2 explicit preface, multiplexed bindings, WINDOW_UPDATE, RST_STREAM and 128 KiB drainage passed')
+        print('H2 multiplexing, flow credit, stream-local overflow, reciprocal GOAWAY and 128 KiB drainage passed')
     finally:
         if process.poll() is None:
             process.kill()

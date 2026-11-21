@@ -2,6 +2,7 @@
 module flint.web.router;
 
 import flint.arena : Error, Status;
+import flint.web.stream : StreamHandler, StreamMode, StreamRoute;
 import flint.web.types : Capture, ErrorAdvice, Handler, Method, RouteRegistration, maximumCaptures;
 
 @safe:
@@ -135,6 +136,8 @@ private struct Edge
 private struct Endpoint
 {
     Handler handler;
+    StreamHandler stream;
+    StreamMode mode;
     string[maximumCaptures] names;
 }
 
@@ -172,6 +175,8 @@ struct Match
     Capture[maximumCaptures] captures;
     size_t count;
     Error error;
+    StreamHandler stream;
+    StreamMode mode;
 }
 
 /// The registry is populated during startup and read on each owner core.
@@ -180,6 +185,7 @@ final class RouteTable
     private Node[] nodes;
     private RouteKey[] registrations;
     private ErrorAdvice errorAdvice;
+    private bool duplexRoutes;
 
     this()
     {
@@ -224,12 +230,36 @@ final class RouteTable
                 return Error(Status.conflict, "duplicate HTTP route");
         }
         foreach (index, ref entry; entries)
-            insertValidated(entry.method, patterns[index], entry.handler);
+            insertValidated(entry.method, patterns[index], Endpoint(entry.handler));
         registrations ~= keys;
         return Error.init;
     }
 
-    private void insertValidated(Method method, const ref Pattern pattern, Handler handler)
+    Error insertStream(StreamRoute route)
+    {
+        if (registrations.length == maxRoutes)
+            return Error(Status.resourceExhausted, "HTTP route registry is full");
+        if (route.handler is null || route.method > Method.options || route.mode > StreamMode.duplex)
+            return Error(Status.invalidArgument, "invalid streaming HTTP route");
+        const pattern = describe(route.path);
+        if (pattern.error.code != Status.ok)
+            return pattern.error;
+        const key = RouteKey(route.method, pattern.canonical);
+        if (contains(registrations, key))
+            return Error(Status.conflict, "duplicate HTTP route");
+        insertValidated(route.method, pattern, Endpoint(null, route.handler, route.mode));
+        registrations ~= key;
+        if (route.mode == StreamMode.duplex)
+            duplexRoutes = true;
+        return Error.init;
+    }
+
+    bool hasDuplex() const scope nothrow @nogc
+    {
+        return duplexRoutes;
+    }
+
+    private void insertValidated(Method method, const ref Pattern pattern, Endpoint endpoint)
     {
         uint current;
         foreach (ref segment; pattern.segments[0 .. pattern.count])
@@ -266,9 +296,9 @@ final class RouteTable
             }
         }
         auto action = &nodes[current].actions[method];
-        assert(action.handler is null);
-        action.handler = handler;
-        action.names = pattern.names;
+        assert(action.handler is null && action.stream is null);
+        endpoint.names = pattern.names;
+        *action = endpoint;
     }
 
     Match find(Method method, scope const(ubyte)[] path) nothrow @nogc
@@ -330,15 +360,19 @@ final class RouteTable
     {
         const node = &nodes[nodeIndex];
         // HEAD may reuse a GET action; the transport suppresses the wire body.
-        const selected = method == Method.head && node.actions[method].handler is null ? Method.get : method;
+        const useGet = method == Method.head && node.actions[method].handler is null
+            && node.actions[method].stream is null && node.actions[Method.get].handler !is null;
+        const selected = useGet ? Method.get : method;
         return &node.actions[selected];
     }
 
     private bool matchAction(const Endpoint* action, scope const(Capture)[] found, ref Match result) nothrow @nogc
     {
-        if (action.handler is null)
+        if (action.handler is null && action.stream is null)
             return false;
         result.handler = action.handler;
+        result.stream = action.stream;
+        result.mode = action.mode;
         result.count = found.length;
         foreach (index, ref capture; found)
         {

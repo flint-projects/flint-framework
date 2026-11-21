@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""Generate bounded Flint D DTO adapters from pinned protoc descriptors."""
+from argparse import ArgumentParser
+import hashlib
+import json
+from pathlib import Path
+import re
+import subprocess
+from tempfile import TemporaryDirectory
+
+from google.protobuf import __version__ as descriptor_version
+from google.protobuf.descriptor_pb2 import FieldDescriptorProto as F, FileDescriptorSet
+
+GENERATOR = 1
+DESC_VERSION = '7.36.2'
+CPP_VERSION = 'libprotoc 30.2'
+NATIVE_VERSION = '1.5.2'
+SCALARS = {
+    F.TYPE_BOOL: 'bool', F.TYPE_DOUBLE: 'double', F.TYPE_FLOAT: 'float',
+    F.TYPE_INT32: 'int', F.TYPE_SINT32: 'int', F.TYPE_SFIXED32: 'int',
+    F.TYPE_INT64: 'long', F.TYPE_SINT64: 'long', F.TYPE_SFIXED64: 'long',
+    F.TYPE_UINT32: 'uint', F.TYPE_FIXED32: 'uint',
+    F.TYPE_UINT64: 'ulong', F.TYPE_FIXED64: 'ulong',
+    F.TYPE_STRING: 'Text', F.TYPE_BYTES: 'Buffer',
+}
+D_RESERVED = frozenset(
+    'abstract alias align asm assert auto body bool break byte case cast catch cdouble cent cfloat '
+    'char class const continue creal dchar debug default delegate delete deprecated do double else '
+    'enum export extern false final finally float for foreach foreach_reverse function goto idouble '
+    'if ifloat immutable import in inout int interface invariant ireal is lazy long macro mixin module '
+    'new nothrow null out override package pragma private protected public pure real ref return scope '
+    'shared short static struct super switch synchronized template this throw true try typedef typeid '
+    'typeof ubyte ucent uint ulong union unittest ushort version void volatile wchar while with __gshared '
+    '__traits __vector __parameters init sizeof alignof mangleof stringof tupleof'.split())
+
+
+def execute(*argv):
+    return subprocess.run([str(arg) for arg in argv], text=True, stdout=subprocess.PIPE,
+                          check=True).stdout.strip()
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def member(spelling):
+    return spelling + '_' if spelling in D_RESERVED else spelling
+
+
+def type_part(spelling):
+    return ''.join(part[:1].upper() + part[1:] for part in spelling.split('_'))
+
+
+def lower_c_name(full_name):
+    parts = [re.sub(r'(?<=[^A-Z])([A-Z])', r'_\1', part).lstrip('_').lower()
+             if part[0].isupper() else re.sub(r'(?<=[^A-Z])([A-Z])', r'_\1', part).lower()
+             for part in full_name.lstrip('.').split('.')]
+    return '__'.join(parts)
+
+
+class Schema:
+    def __init__(self, descriptor, collections):
+        self.collections = collections
+        self.messages = {}
+        self.enums = {}
+        self.file = descriptor.name
+        self.descriptor = descriptor
+        if descriptor.syntax != 'proto3' or descriptor.edition:
+            raise ValueError('only proto3 syntax is supported')
+        if descriptor.dependency or descriptor.extension:
+            raise ValueError('initial generation accepts one self-contained proto3 schema')
+        namespace = '.' + descriptor.package if descriptor.package else ''
+        for value in descriptor.enum_type:
+            self.enums[namespace + '.' + value.name] = (type_part(value.name), value)
+        for message in descriptor.message_type:
+            self.add_message(namespace, '', message)
+        if len(self.messages) > 256:
+            raise ValueError('a generation unit can contain at most 256 messages')
+        names = [row[0] for row in self.enums.values()] + [row[0] for row in self.messages.values()]
+        if len(set(names)) != len(names):
+            raise ValueError('flattened D type names collide')
+        names += ['Buffer', 'Text', 'RequestArena', 'Error', 'Result', 'Status', 'ProtoDescriptor',
+                  'ProtoOptional', 'ProtoReader', 'ProtoRepeated', 'ProtoWriter']
+        if len(set(names)) != len(names):
+            raise ValueError('a generated type collides with the adapter interface')
+        for full_name in self.messages:
+            if self.depth(full_name, ()) > 16:
+                raise ValueError('protobuf message nesting exceeds the native depth bound')
+
+    def add_message(self, namespace, prefix, message):
+        full_name = namespace + '.' + message.name
+        short = prefix + type_part(message.name)
+        if len(message.field) > 64 or message.extension:
+            raise ValueError(f'{full_name} exceeds the field bound or uses extensions')
+        self.messages[full_name] = (short, message)
+        for choice in message.field:
+            if choice.label == F.LABEL_REQUIRED or choice.type == F.TYPE_GROUP:
+                raise ValueError(f'{full_name} uses a required field or group')
+            if choice.proto3_optional:
+                raise ValueError('the pinned protobuf-c generator cannot emit proto3 optional scalars')
+        for value in message.enum_type:
+            self.enums[full_name + '.' + value.name] = (short + type_part(value.name), value)
+        for nested in message.nested_type:
+            self.add_message(full_name, short, nested)
+
+    def depth(self, full_name, ancestors):
+        if full_name in ancestors:
+            raise ValueError(f'recursive message graph cannot be bounded at {full_name}')
+        _, message = self.messages[full_name]
+        nested = [self.depth(field.type_name, (*ancestors, full_name)) for field in message.field
+                  if field.type == F.TYPE_MESSAGE]
+        return 1 + max(nested, default=0)
+
+    def field_type(self, field):
+        if field.type == F.TYPE_MESSAGE:
+            return self.messages[field.type_name][0]
+        if field.type == F.TYPE_ENUM:
+            return self.enums[field.type_name][0]
+        return SCALARS[field.type]
+
+    def declaration(self, field):
+        plain = self.field_type(field)
+        if field.label == F.LABEL_REPEATED:
+            return f'ProtoRepeated!({plain}, {self.collections})'
+        if field.type == F.TYPE_MESSAGE and not field.HasField('oneof_index'):
+            return f'ProtoOptional!{plain}'
+        return plain
+
+    @staticmethod
+    def encode_lines(field, value):
+        number = field.number
+        if field.type == F.TYPE_MESSAGE:
+            return [f'const nested = writer.nested(parent, {number});',
+                    f'if (nested == 0 || !{value}.writeFields(nested, writer))', '    return false;']
+        if field.type == F.TYPE_STRING:
+            call = f'bytes(parent, {number}, {value}.bytes, true)'
+        elif field.type == F.TYPE_BYTES:
+            call = f'bytes(parent, {number}, {value})'
+        elif field.type in (F.TYPE_FLOAT, F.TYPE_DOUBLE):
+            call = f'floating(parent, {number}, {value})'
+        else:
+            call = f'integer(parent, {number}, cast(ulong) {value})'
+        return [f'if (!writer.{call})', '    return false;']
+
+    def make_encoder(self, message, fields):
+        lines = []
+        for field in fields:
+            name = member(field.name)
+            if field.label == F.LABEL_REPEATED:
+                lines.extend([f'if ({name}.count > {name}.values.length)', '    return false;',
+                              f'foreach (ref value; {name}.values[0 .. {name}.count])', '{'])
+                lines.extend('    ' + step for step in self.encode_lines(field, 'value'))
+                lines.append('}')
+            elif field.HasField('oneof_index'):
+                group = message.oneof_decl[field.oneof_index]
+                lines.extend([f'if ({member(group.name)}Case == {type_part(group.name)}Case.{name})', '{'])
+                lines.extend('    ' + step for step in self.encode_lines(field, name))
+                lines.append('}')
+            elif field.type == F.TYPE_MESSAGE:
+                lines.extend([f'if ({name}.present)', '{'])
+                lines.extend('    ' + step for step in self.encode_lines(field, name + '.value'))
+                lines.append('}')
+            elif field.type in (F.TYPE_BYTES, F.TYPE_STRING):
+                handle = name + '.bytes' if field.type == F.TYPE_STRING else name
+                lines.extend([f'if ({handle} != Buffer.init)', '{'])
+                lines.extend('    ' + step for step in self.encode_lines(field, name))
+                lines.append('}')
+            else:
+                lines.extend(self.encode_lines(field, name))
+        return '\n'.join('        ' + line for line in lines)
+
+    def store_lines(self, field, destination):
+        data_type = self.field_type(field)
+        if field.type == F.TYPE_MESSAGE:
+            return [f'const loaded = {destination}.loadFields(reader, cast(uint) cursor, arena);',
+                    'if (loaded.code != Status.ok)', '    return loaded;']
+        if field.type in (F.TYPE_BYTES, F.TYPE_STRING):
+            text = str(field.type == F.TYPE_STRING).lower()
+            value = 'Text(bytes.value)' if text == 'true' else 'bytes.value'
+            return [f'const bytes = reader.bytes(cursor, arena, {text});', 'if (!bytes.ok())',
+                    '    return bytes.error;', f'{destination} = {value};']
+        if field.type in (F.TYPE_FLOAT, F.TYPE_DOUBLE):
+            return [f'{destination} = cast({data_type}) reader.floating(cursor);']
+        return [f'{destination} = cast({data_type}) reader.integer(cursor);']
+
+    def make_decoder(self, message, fields):
+        lines = []
+        for field in fields:
+            name = member(field.name)
+            lines.extend(['{', '    size_t cursor;'])
+            iterating = field.label == F.LABEL_REPEATED
+            keyword = 'while' if iterating else 'if'
+            lines.extend([f'    {keyword} (reader.next(parent, {field.number}, cursor))', '    {'])
+            if iterating:
+                lines.extend([f'        if ({name}.count == {name}.values.length)',
+                              '            return Error(Status.resourceExhausted, "protobuf repeated field is full");',
+                              f'        auto index = {name}.count++;'])
+                target = f'{name}.values[index]'
+            elif field.HasField('oneof_index'):
+                group = message.oneof_decl[field.oneof_index]
+                lines.append(f'        {member(group.name)}Case = {type_part(group.name)}Case.{name};')
+                target = name
+            elif field.type == F.TYPE_MESSAGE:
+                lines.append(f'        {name}.present = true;')
+                target = name + '.value'
+            else:
+                target = name
+            lines.extend('        ' + line for line in self.store_lines(field, target))
+            lines.extend(['    }', '}'])
+        return '\n'.join('        ' + line for line in lines)
+
+    def groups(self, message):
+        blocks = [list(message.field[start:start + 3]) for start in range(0, len(message.field), 3)] or [[]]
+        groups = []
+        for index, block in enumerate(blocks):
+            encode = self.make_encoder(message, block)
+            decode = self.make_decoder(message, block)
+            if index + 1 == len(blocks):
+                write_next, read_next = 'true', 'Error.init'
+            else:
+                write_next = f'writeGroup{index + 1}(parent, writer)'
+                read_next = f'loadGroup{index + 1}(reader, parent, arena)'
+            groups.append(f'''    private bool writeGroup{index}(uint parent, ref scope ProtoWriter writer) const scope nothrow @nogc
+    {{
+{encode}
+        return {write_next};
+    }}
+
+    private Error loadGroup{index}(
+            scope const ref ProtoReader reader, uint parent, ref scope RequestArena arena
+        ) scope nothrow @nogc
+    {{
+{decode}
+        return {read_next};
+    }}
+''')
+        return '\n'.join(groups)
+
+    def make_message(self, full_name, short, message):
+        declarations = []
+        for index, choice in enumerate(message.oneof_decl):
+            name = type_part(choice.name) + 'Case'
+            cases = ', '.join([f'{member(field.name)} = {field.number}' for field in message.field
+                               if field.HasField('oneof_index') and field.oneof_index == index])
+            declarations.extend([f'/// Active alternative in the {choice.name} oneof.',
+                                 f'enum {name} : uint {{ unset = 0, {cases} }}',
+                                 f'/// Active {choice.name} value.',
+                                 f'{name} {member(choice.name)}Case;'])
+        for item in message.field:
+            name = member(item.name)
+            zero = (' = 0' if item.type in (F.TYPE_FLOAT, F.TYPE_DOUBLE)
+                    and item.label != F.LABEL_REPEATED else '')
+            declarations.extend([f'/// Protobuf field {item.name}.', f'{self.declaration(item)} {name}{zero};'])
+        if len(set(member(item.name) for item in message.field)) != len(message.field):
+            raise ValueError(f'{full_name} has colliding D field names after keyword escaping')
+        fields = '\n'.join('    ' + line for line in declarations)
+        selected = 'flint_generated_' + lower_c_name(full_name)
+        groups = self.groups(message)
+        return f'''
+/// Generated DTO for {full_name[1:]}.
+struct {short}
+{{
+{fields}
+
+    /// Encode using the generated native descriptor.
+    static Result!Buffer flintEncode(scope const ref {short} message, ref scope RequestArena arena) nothrow @nogc
+    {{
+        ProtoWriter writer;
+        if (!message.writeFields(0, writer))
+            return Result!Buffer(Buffer.init, Error(Status.resourceExhausted, "protobuf field limit exceeded"));
+        return writer.pack(&{selected}, arena);
+    }}
+
+    /// Publish the typed output only after every field is validated.
+    static Error flintDecode(scope const(ubyte)[] wire, ref {short} message, ref scope RequestArena arena) nothrow @nogc
+    {{
+        {short} decoded;
+        const result = readProto(&{selected}, wire, (scope const ref ProtoReader reader) @safe nothrow @nogc {{
+            return decoded.loadFields(reader, 0, arena);
+        }});
+        if (result.code == Status.ok)
+            message = decoded;
+        return result;
+    }}
+
+    private bool writeFields(uint parent, ref scope ProtoWriter writer) const scope nothrow @nogc
+    {{
+        return writeGroup0(parent, writer);
+    }}
+
+    private Error loadFields(
+            scope const ref ProtoReader reader, uint parent, ref scope RequestArena arena
+        ) scope nothrow @nogc
+    {{
+        return loadGroup0(reader, parent, arena);
+    }}
+
+{groups}
+}}
+'''
+
+    def render_d(self, module):
+        text = [f'/// Generated by protoc-gen-flint {GENERATOR}. Regenerate from the checked proto3 schema.',
+                f'module {module};', '',
+                'import flint.arena : Buffer, Error, RequestArena, Result, Status, Text;',
+                'import flint.rpc.proto : ProtoDescriptor, ProtoOptional, ProtoReader, ProtoRepeated, ProtoWriter, readProto;',
+                '', '@safe:', '',
+                'version (FlintNativeProtobufC)', '{',
+                '    private extern (C) @system nothrow @nogc', '    {']
+        text += [f'        const(ProtoDescriptor)* flint_generated_{lower_c_name(full)}();'
+                 for full in self.messages]
+        text += ['    }', '}', 'else', '{']
+        text += ['    private extern (C) @system nothrow @nogc', '    {']
+        text += [f'        const(ProtoDescriptor)* flint_generated_{lower_c_name(full)}() {{ return null; }}'
+                 for full in self.messages]
+        text += ['    }']
+        text += ['}', '']
+        for short, value in self.enums.values():
+            text.extend([f'/// Generated enumeration for {value.name}.', f'enum {short} : int', '{'])
+            text.extend(f'    {member(item.name)} = {item.number},' for item in value.value)
+            text.append('}')
+        text += [self.make_message(full, *row) for full, row in self.messages.items()]
+        return '\n'.join(text).rstrip() + '\n'
+
+    def render_c(self, header):
+        lines = ['/* Generated by protoc-gen-flint. */', '#include "flint_rpc.h"', f'#include "{header}"', '']
+        for full in self.messages:
+            name = lower_c_name(full)
+            lines.extend([f'const flint_proto_descriptor *flint_generated_{name}(void) {{',
+                          f'    return (const flint_proto_descriptor *)&{name}__descriptor;', '}', ''])
+        return '\n'.join(lines).rstrip() + '\n'
+
+
+def wrap_signatures(source):
+    lines = source.splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        if len(line) <= 120 or '(' not in line or ',' not in line or 'nothrow' not in line:
+            yield line
+            continue
+        position = line.rfind(', ', 0, 94)
+        if position < 0:
+            yield line
+            continue
+        indentation = line[:len(line) - len(line.lstrip())]
+        yield indentation + '// dfmt off'
+        yield line[:position + 1]
+        yield indentation + '        ' + line[position + 2:]
+        if index < len(lines) and lines[index] == indentation + '{':
+            while index < len(lines):
+                body = lines[index]
+                index += 1
+                yield body
+                if body == indentation + '}':
+                    break
+        yield indentation + '// dfmt on'
+
+
+def generate(args, output):
+    file = args.schema.resolve()
+    schema_root = file.parent
+    output.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory() as temporary:
+        descriptors = Path(temporary) / 'tool.desc'
+        execute(args.protoc, f'-I{schema_root}', f'--descriptor_set_out={descriptors}', file)
+        descriptor = FileDescriptorSet.FromString(descriptors.read_bytes())
+    if len(descriptor.file) != 1:
+        raise ValueError('the descriptor must identify exactly one schema')
+    schema = Schema(descriptor.file[0], args.collection_capacity)
+    execute(args.protoc, f'-I{schema_root}', f'--plugin=protoc-gen-c={args.plugin.resolve()}',
+            f'--c_out={output}', file)
+    stem = file.stem
+    d_path = output / f'{args.module.split(".")[-1]}.d'
+    d_path.write_text(schema.render_d(args.module))
+    formatted = execute(args.dfmt, '--config', args.format_config, d_path)
+    d_path.write_text('\n'.join(wrap_signatures(formatted)) + '\n')
+    d_path.write_text(execute(args.dfmt, '--config', args.format_config, d_path) + '\n')
+    (output / f'{stem}_flint.c').write_text(schema.render_c(f'{stem}.pb-c.h'))
+    receipt = {'schema': file.name, 'schema_sha256': digest(file), 'protoc': CPP_VERSION,
+               'protobuf_c': NATIVE_VERSION, 'descriptor_reader': descriptor_version,
+               'flint_generator': GENERATOR, 'collection_capacity': args.collection_capacity,
+               'generated': {item.name: digest(item) for item in sorted(output.iterdir())
+                             if item.is_file() and (item.suffix in ('.c', '.h', '.d'))}}
+    (output / f'{stem}.generation.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
+
+
+def main():
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--schema', type=Path, required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--module', required=True)
+    parser.add_argument('--protoc', required=True)
+    parser.add_argument('--plugin', type=Path, required=True)
+    parser.add_argument('--runtime-header', type=Path, required=True)
+    parser.add_argument('--dfmt', default='dfmt')
+    parser.add_argument('--format-config', type=Path, default=Path(__file__).resolve().parents[3])
+    parser.add_argument('--collection-capacity', default=16, type=int)
+    parser.add_argument('--check', action='store_true')
+    args = parser.parse_args()
+    if not re.fullmatch(r'[A-Za-z_]\w*(\.[A-Za-z_]\w*)*', args.module, re.ASCII):
+        parser.error('invalid D module name')
+    if not 1 <= args.collection_capacity <= 64:
+        parser.error('collection capacity must be from 1 to 64')
+    if descriptor_version != DESC_VERSION or execute(args.protoc, '--version') != CPP_VERSION:
+        parser.error('expected the pinned descriptor reader and protoc version')
+    pattern = rf'^#define\s+PROTOBUF_C_VERSION\s+"{re.escape(NATIVE_VERSION)}"\s*$'
+    if not re.search(pattern, args.runtime_header.read_text(), re.MULTILINE):
+        parser.error('expected the pinned protobuf-c runtime header')
+    try:
+        with TemporaryDirectory() as temporary:
+            generated = Path(temporary)
+            generate(args, generated)
+            if not args.check:
+                args.output.mkdir(parents=True, exist_ok=True)
+            for item in generated.iterdir():
+                target = args.output / item.name
+                if args.check:
+                    if not target.is_file() or target.read_bytes() != item.read_bytes():
+                        raise ValueError(f'generated file differs: {target}')
+                else:
+                    target.write_bytes(item.read_bytes())
+    except (ValueError, KeyError) as error:
+        parser.error(str(error))
+
+
+if __name__ == '__main__':
+    main()

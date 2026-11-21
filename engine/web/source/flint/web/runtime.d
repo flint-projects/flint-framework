@@ -7,17 +7,18 @@ import core.thread : Thread;
 import core.time : MonoTime, dur, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : AcceptDelegate, Completion, ConnectionId, ListenOptions, Reactor,
-    ReactorOptions, TaskContext, TaskDelegate;
-import flint.web.dispatch : executeRoute, failureResponse;
+import flint.reactor : AcceptDelegate, Completion, CompletionDelegate, ConnectionId, ListenOptions,
+    ReadDelegate, Reactor, ReactorOptions, TaskContext, TaskDelegate;
+import flint.web.dispatch : executeMatched, executeStream, failureResponse, lookupRoute;
 import flint.web.http2 : H2Runtime;
 import flint.web.http1 : Http1Reader, ReadOutcome;
-import flint.web.router : RouteTable, maximumTargetBytes;
+import flint.web.router : Match, RouteTable, maximumTargetBytes;
+import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
 import flint.web.sys.ownership : launchDriver, releaseBytes, reserveBytes;
 import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
 import flint.web.types : ErrorAdvice, Handler, Method, RequestContext, Response, RouteRegistration, ServerOptions;
 import flint.web.worker : WorkerLifecycle;
-import flint.web.wire : responseCode, validMediaType, writeHeader;
+import flint.web.wire : responseCode, validMediaType, writeChunk, writeHeader, writeStreamHeader;
 
 @safe:
 
@@ -39,7 +40,8 @@ private enum ConnectionPhase : ubyte
     free,
     reading,
     handling,
-    writing
+    writing,
+    streaming
 }
 
 private struct Connection
@@ -61,7 +63,12 @@ private struct Connection
     bool readActive;
     bool writeActive;
     bool taskActive;
+    bool taskEntered;
     bool closing;
+    StreamMode streamMode;
+    bool streamStarted;
+    bool streamEnded;
+    bool streamRaw;
     Buffer response;
     size_t bodySent;
     size_t writeBytes;
@@ -121,6 +128,17 @@ struct Server
         if (driver is null || atomicLoad(driver.phase) != DriverPhase.prepared)
             return Error(Status.conflict, "HTTP routes require a prepared server");
         return driver.routes.insertBatch(entries);
+    }
+
+    /// Register a streaming action before the server begins accepting requests.
+    Error routeStream(StreamRoute route)
+    {
+        if (driver is null || atomicLoad(driver.phase) != DriverPhase.prepared)
+            return Error(Status.conflict, "streaming HTTP routes require a prepared server");
+        if ((route.mode == StreamMode.upgrade && driver.limits.http2PriorKnowledge)
+                || (route.mode == StreamMode.duplex && !allowsH2(driver.limits)))
+            return Error(Status.unsupported, "listener cannot serve this streaming mode");
+        return driver.routes.insertStream(route);
     }
 
     package(flint.web) uint ownerCount() const nothrow @nogc
@@ -277,9 +295,11 @@ private Deadline following(long delta) nothrow @nogc
     return Deadline(delta >= long.max - timestamp ? long.max - 1 : timestamp + delta);
 }
 
-private final class Runtime
+private final class Runtime : StreamEndpoint
 {
     private ServerOptions limits;
+    private ReadDelegate readDone;
+    private CompletionDelegate writeDone;
     private Reactor reactor;
     private RouteTable routes;
     private H2Runtime http2;
@@ -297,6 +317,8 @@ private final class Runtime
     this(ServerOptions limits)
     {
         this.limits = limits;
+        readDone = &read;
+        writeDone = &written;
         arenaBytes = limits.maxHeaderBytes + limits.maxBodyBytes + limits.writeQueueBytes + 1024;
         routes = new RouteTable;
         if (!limits.http2PriorKnowledge)
@@ -509,10 +531,11 @@ private final class Runtime
         connection.request.requestId = 0;
         connection.hasHeaderDeadline = false;
         connection.phase = ConnectionPhase.reading;
+        connection.taskEntered = false;
         return true;
     }
 
-    private void readMore(Connection* connection) nothrow @nogc
+    private void readMore(scope Connection* connection) scope nothrow @nogc
     {
         if (connection.closing || connection.readActive || connection.pendingCount == connection.pending.length)
             return;
@@ -521,7 +544,7 @@ private final class Runtime
                 && connection.parser.awaitingHeaders())
             context = context.withDeadline(connection.headerDeadline);
         const maximum = connection.pending.length - connection.pendingCount;
-        const queued = readPlain(tls, connection.id, maximum, context, &read);
+        const queued = readPlain(tls, connection.id, maximum, context, readDone);
         if (queued == Status.ok)
             connection.readActive = true;
         else
@@ -613,15 +636,28 @@ private final class Runtime
         auto connection = checked(id, ConnectionPhase.handling);
         if (connection is null)
             return;
+        connection.taskEntered = true;
         if (connection.request.cancellation.cancelled())
         {
             connection.taskActive = false;
             close(connection);
             return;
         }
+        auto matched = lookupRoute(routes, &connection.parser.metadata, connection.request.arena);
+        if (matched.stream !is null && matched.mode != StreamMode.duplex)
+        {
+            dispatchStreaming(connection, matched);
+            return;
+        }
+        if (connection.parser.upgradeRequested)
+        {
+            connection.taskActive = false;
+            reply(connection, failure(connection, 400), false, false);
+            return;
+        }
         const head = connection.parser.metadata.method == Method.head;
         const keep = connection.parser.keepAlive;
-        const response = executeRoute(routes, &connection.parser.metadata, connection.request);
+        const response = executeMatched(routes, &connection.parser.metadata, connection.request, matched);
         connection.taskActive = false;
         if (connection.request.cancellation.cancelled() || response.error.code == Status.cancelled)
         {
@@ -630,6 +666,195 @@ private final class Runtime
         }
         reply(connection, response.ok() ? response.value : failure(connection,
                 responseCode(response.error.code)), keep, head);
+    }
+
+    private void dispatchStreaming(Connection* connection, const ref Match matched) nothrow @nogc
+    {
+        if (connection.parser.upgradeRequested && matched.mode != StreamMode.upgrade)
+        {
+            connection.taskActive = false;
+            reply(connection, failure(connection, 400), false, false);
+            return;
+        }
+        connection.phase = ConnectionPhase.streaming;
+        connection.streamMode = matched.mode;
+        const index = cast(ulong) connection.id.ownerCore * limits.maxConnectionsPerCore + connection.id.slot;
+        scope token = StreamToken(this, index, connection.id.generation);
+        const result = executeStream(&connection.parser.metadata, connection.request, matched, token);
+        if (!connection.streamStarted && !connection.closing)
+        {
+            connection.taskActive = false;
+            const status = result.code == Status.ok ? 500 : responseCode(result.code);
+            reply(connection, failure(connection, status), false, false);
+            return;
+        }
+        if (result.code == Status.ok && !connection.streamEnded && !connection.closing)
+            token.finish(null, connection.request.cancellation);
+        connection.taskActive = false;
+        close(connection);
+    }
+
+    private Connection* streamConnection(ulong index, ulong generation) return scope nothrow @nogc
+    {
+        if (index >= connections.length || reactor.currentCore() != index / limits.maxConnectionsPerCore)
+            return null;
+        auto connection = &connections[cast(size_t) index];
+        if (connection.id.generation != generation || connection.phase != ConnectionPhase.streaming
+                || !connection.taskActive || connection.closing)
+            return null;
+        const task = reactor.currentTask();
+        return task.ok() && task.value.requestId == connection.request.requestId ? connection : null;
+    }
+
+    private static Error streamUnavailable() pure nothrow @nogc
+    {
+        return Error(Status.unavailable, "HTTP/1 stream is no longer active on this fiber");
+    }
+
+    override Error begin(ulong index, ulong generation, ushort status,
+            scope const(StreamField)[] fields, ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = streamConnection(index, generation);
+        if (connection is null)
+            return streamUnavailable();
+        if (connection.streamStarted)
+            return Error(Status.conflict, "HTTP stream response already started");
+        const raw = status == 101 && connection.streamMode == StreamMode.upgrade
+            && connection.parser.upgradeRequested && connection.parser.versionMinor == 1;
+        if (!raw && (status < 200 || status > 599))
+            return Error(Status.invalidArgument, "invalid streaming HTTP response status");
+
+        ubyte[ioBytes] header;
+        const count = writeStreamHeader(header[], status, fields, connection.parser.versionMinor, raw);
+        if (count == 0)
+            return Error(Status.invalidArgument, "invalid or oversized streaming HTTP response headers");
+        const sent = writeStream(connection, header[0 .. count], context);
+        if (sent.code == Status.ok)
+        {
+            connection.streamRaw = raw;
+            connection.streamStarted = true;
+        }
+        return sent;
+    }
+
+    // dfmt off
+    override Result!size_t receive(ulong index, ulong generation, scope ubyte[] output,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = streamConnection(index, generation);
+        if (connection is null)
+            return Result!size_t(0, streamUnavailable());
+        if (!connection.streamRaw || output.length == 0)
+            return Result!size_t(0, Error(Status.invalidArgument, "raw HTTP/1 stream receive requires an upgrade"));
+        while (connection.pendingCount == 0 && !connection.closing)
+        {
+            const ready = waitForStream(context);
+            if (ready.code != Status.ok)
+                return Result!size_t(0, ready);
+        }
+        if (connection.closing)
+            return Result!size_t(0, connection.request.cancellation.check());
+        const count = output.length < connection.pendingCount ? output.length : connection.pendingCount;
+        output[0 .. count] = connection.pending[0 .. count];
+        const remaining = connection.pendingCount - count;
+        foreach (position; 0 .. remaining)
+            connection.pending[position] = connection.pending[count + position];
+        connection.pendingCount = remaining;
+        readMore(connection);
+        return Result!size_t(count);
+    }
+    // dfmt on
+
+    // dfmt off
+    override Error send(ulong index, ulong generation, scope const(ubyte)[] body,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = streamConnection(index, generation);
+        if (connection is null)
+            return streamUnavailable();
+        if (!connection.streamStarted || connection.streamEnded)
+            return Error(Status.conflict, "HTTP stream output is closed");
+        const chunked = !connection.streamRaw && connection.parser.versionMinor == 1;
+        const bounded = ioBytes < limits.writeQueueBytes ? ioBytes : limits.writeQueueBytes;
+        if (chunked && bounded <= 12)
+            return Error(Status.resourceExhausted, "HTTP/1 write queue cannot carry chunk framing");
+        const capacity = chunked ? bounded - 12 : bounded;
+        ubyte[ioBytes] frame;
+        size_t first;
+        while (first < body.length)
+        {
+            const count = body.length - first < capacity ? body.length - first : capacity;
+            const piece = body[first .. first + count];
+            const framed = chunked ? frame[0 .. writeChunk(frame[], piece)] : piece;
+            const sent = writeStream(connection, framed, context);
+            if (sent.code != Status.ok)
+                return sent;
+            first += count;
+        }
+        return context.check();
+    }
+    // dfmt on
+
+    override Error finish(ulong index, ulong generation, scope const(StreamField)[] trailers,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = streamConnection(index, generation);
+        if (connection is null)
+            return streamUnavailable();
+        if (!connection.streamStarted || connection.streamEnded)
+            return Error(Status.conflict, "HTTP stream output already closed or not started");
+        if (trailers.length != 0)
+            return Error(Status.unsupported, "stream trailers require HTTP/2");
+        connection.streamEnded = true;
+        if (connection.streamRaw || connection.parser.versionMinor == 0)
+            return context.check();
+        return writeStream(connection, cast(const(ubyte)[]) "0\r\n\r\n", context);
+    }
+
+    override Error cancel(ulong index, ulong generation) scope nothrow @nogc
+    {
+        auto connection = streamConnection(index, generation);
+        if (connection is null)
+            return streamUnavailable();
+        close(connection);
+        return Error.init;
+    }
+
+    // dfmt off
+    private Error writeStream(scope Connection* connection, scope const(ubyte)[] bytes,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return checked;
+        if (connection.writeActive)
+            return Error(Status.conflict, "HTTP/1 response write is already pending");
+        if (!submitWrite(connection, bytes))
+        {
+            close(connection);
+            return Error(Status.ioError, "unable to write HTTP stream bytes");
+        }
+        while (connection.writeActive && !connection.closing)
+        {
+            const resumed = waitForStream(context);
+            if (resumed.code != Status.ok)
+            {
+                close(connection);
+                return resumed;
+            }
+        }
+        return connection.closing ? streamUnavailable() : Error.init;
+    }
+    // dfmt on
+
+    private Error waitForStream(ref scope const Context context) scope nothrow @nogc
+    {
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return checked;
+        const waiting = following(1_000_000);
+        const caller = context.deadline();
+        return reactor.yieldUntil(waiting.monotonicNanoseconds < caller.monotonicNanoseconds ? waiting : caller);
     }
 
     private ulong nextId() nothrow @nogc
@@ -700,10 +925,10 @@ private final class Runtime
         return status == Status.ok && admitted;
     }
 
-    private bool submitWrite(Connection* connection, scope const(ubyte)[] bytes) nothrow @nogc
+    private bool submitWrite(scope Connection* connection, scope const(ubyte)[] bytes) scope nothrow @nogc
     {
         auto context = connection.request.cancellation.withDeadline(following(limits.idleTimeoutNanos));
-        const submitted = writePlain(tls, connection.id, bytes, context, &written);
+        const submitted = writePlain(tls, connection.id, bytes, context, writeDone);
         if (submitted == Status.ok)
         {
             connection.writeBytes = bytes.length;
@@ -714,8 +939,9 @@ private final class Runtime
 
     private void written(Completion completion) nothrow @nogc
     {
-        auto connection = checked(completion.connection, ConnectionPhase.writing);
-        if (connection is null)
+        auto connection = slot(completion.connection);
+        if (connection is null || connection.id != completion.connection
+                || (connection.phase != ConnectionPhase.writing && connection.phase != ConnectionPhase.streaming))
             return;
         connection.writeActive = false;
         if (connection.closing || completion.status != Status.ok
@@ -725,6 +951,12 @@ private final class Runtime
             return;
         }
 
+        if (connection.phase == ConnectionPhase.writing)
+            writeNext(connection);
+    }
+
+    private void writeNext(Connection* connection) nothrow @nogc
+    {
         if (!connection.suppressBody && connection.bodySent < connection.response.length())
         {
             if (!submitBodyChunk(connection))
@@ -758,19 +990,23 @@ private final class Runtime
         return status == Status.ok && admitted;
     }
 
-    private void close(Connection* connection) nothrow @nogc
+    private void close(scope Connection* connection) scope nothrow @nogc
     {
         if (!connection.closing)
         {
             connection.closing = true;
             connection.cancellation.cancel();
-            closePlain(tls, connection.id);
         }
-        if (!connection.readActive && !connection.writeActive && !connection.taskActive)
+        // Keep the reactor slot reserved while an entered task or transport callback still owns it.
+        // Reactor discards a canceled task that has not entered.
+        if (!connection.readActive && !connection.writeActive && (!connection.taskActive || !connection.taskEntered))
+        {
+            closePlain(tls, connection.id);
             retire(connection);
+        }
     }
 
-    private void retire(Connection* connection) nothrow @nogc
+    private void retire(scope Connection* connection) scope nothrow @nogc
     {
         connection.cancellation.cancel();
         connection.request.cancellation = Context.init;
@@ -784,7 +1020,11 @@ private final class Runtime
         connection.readActive = false;
         connection.writeActive = false;
         connection.taskActive = false;
+        connection.taskEntered = false;
         connection.closing = false;
+        connection.streamStarted = false;
+        connection.streamEnded = false;
+        connection.streamRaw = false;
         connection.id = ConnectionId.init;
     }
 }

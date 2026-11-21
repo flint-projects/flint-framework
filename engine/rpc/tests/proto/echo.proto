@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package flint.rpc.fixture;
+
+enum Switch {
+  SWITCH_UNSPECIFIED = 0;
+  SWITCH_ENABLED = 1;
+}
+
+message Detail {
+  uint32 id = 1;
+  string note = 2;
+}
+
+message Envelope {
+  sint64 floor = 1;
+  uint64 ceiling = 2;
+  Switch status = 3;
+  repeated sint32 samples = 4;
+  map<string, Detail> details = 5;
+  oneof choice {
+    uint32 number = 6;
+    string label = 7;
+  }
+  Detail child = 8;
+  bytes payload = 9;
+  double ratio = 10;
+  bool active = 11;
+}
+
+service Echo {
+  rpc Unary(Envelope) returns (Envelope);
+  rpc ClientStream(stream Envelope) returns (Envelope);
+  rpc ServerStream(Envelope) returns (stream Envelope);
+  rpc Bidi(stream Envelope) returns (stream Envelope);
+}

@@ -69,17 +69,13 @@ static uint32_t method_code(llhttp_t *parser) {
 
 static int on_headers(llhttp_t *parser) {
     flint_http1_parser *handle = owner(parser);
-    /* Upgrade requires a separate ownership hand-off, which this stream does not admit. */
-    if (llhttp_get_upgrade(parser)) {
-        llhttp_set_error_reason(parser, "HTTP upgrade is unavailable on this listener");
-        return -1;
-    }
     handle->headers.content_length = parser->content_length;
     handle->headers.method = method_code(parser);
     handle->headers.major = llhttp_get_http_major(parser);
     handle->headers.minor = llhttp_get_http_minor(parser);
     handle->headers.keep_alive = llhttp_should_keep_alive(parser) != 0;
     handle->headers.chunked = (parser->flags & F_CHUNKED) != 0;
+    handle->headers.upgrade = llhttp_get_upgrade(parser) != 0;
     if (emit_event(parser, FLINT_HTTP_HEADERS, NULL, 0) != 0)
         return -1;
     handle->boundary = FLINT_HTTP1_HEADERS;
@@ -198,7 +194,22 @@ void flint_http1_free(flint_http1_parser *parser) {
 #include <stdlib.h>
 #include <string.h>
 
-enum { FLINT_H2_MAX_STREAMS = 100, FLINT_H2_DATA_CHUNK = 4000 };
+enum {
+    FLINT_H2_MAX_STREAMS = 100,
+    FLINT_H2_DATA_CHUNK = 4000,
+    FLINT_H2_FRAME_HEADER = 9,
+    FLINT_H2_WINDOW_BYTES = 4,
+    FLINT_H2_MAX_OUTPUT_FIELDS = 32,
+    FLINT_H2_MAX_OUTPUT_FIELD_BYTES = 8192
+};
+
+typedef struct flint_h2_trailer {
+    struct flint_h2_trailer *next;
+    int32_t stream;
+    size_t count;
+    nghttp2_nv fields[FLINT_H2_MAX_OUTPUT_FIELDS];
+    uint8_t bytes[];
+} flint_h2_trailer;
 
 struct flint_h2_session {
     nghttp2_session *native;
@@ -209,7 +220,30 @@ struct flint_h2_session {
     uint64_t token;
     const uint8_t *pending;
     size_t pending_length;
+    size_t received_preface;
+    size_t received_header;
+    size_t received_window;
+    size_t data_remaining;
+    uint8_t header[FLINT_H2_FRAME_HEADER];
+    uint8_t window[FLINT_H2_WINDOW_BYTES];
+    int awaiting_continuation;
+    flint_h2_trailer *trailers;
+    size_t trailer_count;
 };
+
+static flint_h2_trailer *take_trailer(flint_h2_session *owner, int32_t stream) {
+    flint_h2_trailer **next = &owner->trailers;
+    while (*next != NULL) {
+        if ((*next)->stream == stream) {
+            flint_h2_trailer *taken = *next;
+            *next = taken->next;
+            --owner->trailer_count;
+            return taken;
+        }
+        next = &(*next)->next;
+    }
+    return NULL;
+}
 
 static int h2_event(flint_h2_session *owner, uint32_t event, int32_t stream, uint32_t code,
                     const uint8_t *name, size_t namesize, const uint8_t *value, size_t valuesize) {
@@ -263,10 +297,13 @@ static int h2_data(nghttp2_session *session, uint8_t flags, int32_t stream,
                    const uint8_t *data, size_t length, void *user) {
     (void)flags;
     int decision = h2_event(user, FLINT_H2_BODY, stream, 0, NULL, 0, data, length);
-    if (decision < 0)
+    if (decision < 0 || nghttp2_session_consume_connection(session, length) != 0)
         return NGHTTP2_ERR_CALLBACK_FAILURE;
-    if (decision != 0 &&
-        nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE, stream, (uint32_t)decision) != 0)
+    if (decision == FLINT_H2_HOLD_STREAM_CREDIT)
+        return 0;
+    if (decision == 0)
+        return nghttp2_session_consume_stream(session, stream, length) == 0 ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE;
+    if (nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE, stream, (uint32_t)decision) != 0)
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     return 0;
 }
@@ -278,9 +315,14 @@ static int h2_received(nghttp2_session *session, const nghttp2_frame *frame, voi
     if (frame->hd.type == NGHTTP2_RST_STREAM)
         return h2_event(user, FLINT_H2_RESET, frame->hd.stream_id, frame->rst_stream.error_code,
                         NULL, 0, NULL, 0) == 0 ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE;
-    if (frame->hd.type == NGHTTP2_HEADERS && frame->headers.cat == NGHTTP2_HCAT_REQUEST &&
-        h2_event(user, FLINT_H2_HEADERS, frame->hd.stream_id, 0, NULL, 0, NULL, 0) != 0)
-        return NGHTTP2_ERR_CALLBACK_FAILURE;
+    if (frame->hd.type == NGHTTP2_HEADERS && frame->headers.cat == NGHTTP2_HCAT_REQUEST) {
+        const int decision = h2_event(user, FLINT_H2_HEADERS, frame->hd.stream_id, 0, NULL, 0, NULL, 0);
+        if (decision < 0)
+            return NGHTTP2_ERR_CALLBACK_FAILURE;
+        if (decision != 0)
+            return nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE, frame->hd.stream_id,
+                                             (uint32_t)decision) == 0 ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE;
+    }
     if ((frame->hd.type != NGHTTP2_HEADERS && frame->hd.type != NGHTTP2_DATA) ||
         !(frame->hd.flags & NGHTTP2_FLAG_END_STREAM))
         return 0;
@@ -296,6 +338,7 @@ static int h2_received(nghttp2_session *session, const nghttp2_frame *frame, voi
 
 static int h2_closed(nghttp2_session *session, int32_t stream, uint32_t code, void *user) {
     (void)session;
+    free(take_trailer(user, stream));
     return h2_event(user, FLINT_H2_CLOSED, stream, code, NULL, 0, NULL, 0) == 0
         ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE;
 }
@@ -303,7 +346,6 @@ static int h2_closed(nghttp2_session *session, int32_t stream, uint32_t code, vo
 static nghttp2_ssize h2_write_body(nghttp2_session *session, int32_t stream, uint8_t *output,
                                   size_t capacity, uint32_t *flags, nghttp2_data_source *source,
                                   void *user) {
-    (void)session;
     (void)source;
     flint_h2_session *owner = user;
     if (owner->body == NULL)
@@ -312,10 +354,21 @@ static nghttp2_ssize h2_write_body(nghttp2_session *session, int32_t stream, uin
         capacity = FLINT_H2_DATA_CHUNK;
     int finished = 0;
     ptrdiff_t result = owner->body(owner->token, stream, output, capacity, &finished);
+    if (result == FLINT_H2_DEFER_OUTPUT)
+        return NGHTTP2_ERR_DEFERRED;
     if (result < 0 || (size_t)result > capacity || (result == 0 && !finished))
         return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
-    if (finished)
+    if (finished) {
         *flags |= NGHTTP2_DATA_FLAG_EOF;
+        flint_h2_trailer *trailer = take_trailer(owner, stream);
+        if (trailer != NULL) {
+            *flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
+            const int submitted = nghttp2_submit_trailer(session, stream, trailer->fields, trailer->count);
+            free(trailer);
+            if (submitted != 0)
+                return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+        }
+    }
     return result;
 }
 
@@ -340,7 +393,8 @@ static flint_h2_session *h2_create(uint32_t max_streams) {
     nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, h2_data);
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks, h2_received);
     nghttp2_session_callbacks_set_on_stream_close_callback(callbacks, h2_closed);
-    nghttp2_option_set_max_send_header_block_length(options, 512);
+    nghttp2_option_set_max_send_header_block_length(options, FLINT_H2_MAX_OUTPUT_FIELD_BYTES);
+    nghttp2_option_set_no_auto_window_update(options, 1);
     nghttp2_option_set_max_deflate_dynamic_table_size(options, 4096);
     nghttp2_option_set_max_continuations(options, 8);
     nghttp2_option_set_max_outbound_ack(options, 32);
@@ -385,13 +439,88 @@ flint_h2_session *flint_h2_new_token(uint64_t token, uint32_t max_streams, flint
     return owner;
 }
 
-int flint_h2_feed(flint_h2_session *owner, const uint8_t *data, size_t length) {
-    if (owner == NULL || (data == NULL && length != 0) || length > PTRDIFF_MAX)
-        return -1;
+static int h2_feed_native(flint_h2_session *owner, const uint8_t *data, size_t length) {
     if (length == 0)
         return 0;
     nghttp2_ssize consumed = nghttp2_session_mem_recv2(owner->native, data, length);
     return consumed < 0 || (size_t)consumed != length ? -1 : 0;
+}
+
+static size_t h2_copy_input(uint8_t *destination, size_t used, size_t capacity,
+                            const uint8_t **input, size_t *remaining) {
+    const size_t needed = capacity - used;
+    const size_t size = *remaining < needed ? *remaining : needed;
+    memcpy(destination + used, *input, size);
+    *input += size;
+    *remaining -= size;
+    return used + size;
+}
+
+static uint32_t h2_read32(const uint8_t *bytes) {
+    return (uint32_t)bytes[0] << 24 | (uint32_t)bytes[1] << 16 | (uint32_t)bytes[2] << 8 | bytes[3];
+}
+
+static int h2_accept_window(flint_h2_session *owner) {
+    const int32_t stream = (int32_t)(h2_read32(owner->header + 5) & INT32_MAX);
+    const uint32_t increment = h2_read32(owner->window) & INT32_MAX;
+    const int32_t current = nghttp2_session_get_stream_remote_window_size(owner->native, stream);
+    /* This provider pin terminates the connection for a live stream overflow.
+       RFC 9113 §6.9.1 makes the error stream-local. Leave all other errors to nghttp2. */
+    if (current >= 0 && increment > (uint32_t)(INT32_MAX - current))
+        return nghttp2_submit_rst_stream(owner->native, NGHTTP2_FLAG_NONE, stream, NGHTTP2_FLOW_CONTROL_ERROR);
+    if (h2_feed_native(owner, owner->header, sizeof(owner->header)) != 0)
+        return -1;
+    return h2_feed_native(owner, owner->window, sizeof(owner->window));
+}
+
+int flint_h2_feed(flint_h2_session *owner, const uint8_t *data, size_t length) {
+    if (owner == NULL || (data == NULL && length != 0) || length > PTRDIFF_MAX)
+        return -1;
+    const size_t pending_magic = NGHTTP2_CLIENT_MAGIC_LEN - owner->received_preface;
+    if (pending_magic != 0 && length != 0) {
+        const size_t count = length < pending_magic ? length : pending_magic;
+        if (h2_feed_native(owner, data, count) != 0)
+            return -1;
+        owner->received_preface += count;
+        data += count;
+        length -= count;
+    }
+    while (length != 0) {
+        if (owner->data_remaining != 0) {
+            const size_t count = owner->data_remaining < length ? owner->data_remaining : length;
+            if (h2_feed_native(owner, data, count) != 0)
+                return -1;
+            owner->data_remaining -= count;
+            data += count;
+            length -= count;
+            continue;
+        }
+        owner->received_header = h2_copy_input(owner->header, owner->received_header,
+                                               sizeof(owner->header), &data, &length);
+        if (owner->received_header != sizeof(owner->header))
+            break;
+        const size_t payload = (size_t)owner->header[0] << 16 |
+                               (size_t)owner->header[1] << 8 | owner->header[2];
+        const uint8_t type = owner->header[3];
+        if (type == NGHTTP2_WINDOW_UPDATE && payload == sizeof(owner->window) &&
+            !owner->awaiting_continuation && (h2_read32(owner->header + 5) & INT32_MAX) != 0) {
+            owner->received_window = h2_copy_input(owner->window, owner->received_window,
+                                                    sizeof(owner->window), &data, &length);
+            if (owner->received_window != sizeof(owner->window))
+                break;
+            if (h2_accept_window(owner) != 0)
+                return -1;
+            owner->received_window = 0;
+        } else {
+            if (type == NGHTTP2_HEADERS || type == NGHTTP2_CONTINUATION)
+                owner->awaiting_continuation = (owner->header[4] & NGHTTP2_FLAG_END_HEADERS) == 0;
+            if (h2_feed_native(owner, owner->header, sizeof(owner->header)) != 0)
+                return -1;
+            owner->data_remaining = payload;
+        }
+        owner->received_header = 0;
+    }
+    return 0;
 }
 
 int flint_h2_send(flint_h2_session *owner, uint8_t *output, size_t capacity, size_t *written) {
@@ -453,6 +582,94 @@ int flint_h2_reply(flint_h2_session *owner, int32_t stream, unsigned status,
     return nghttp2_submit_response2(owner->native, stream, fields, type_length != 0 ? 3 : 2, body);
 }
 
+static int bounded_fields(const flint_h2_field *fields, size_t count, size_t *total) {
+    *total = 0;
+    if (count > FLINT_H2_MAX_OUTPUT_FIELDS || (count != 0 && fields == NULL))
+        return 0;
+    for (size_t index = 0; index < count; ++index) {
+        const flint_h2_field *field = &fields[index];
+        if (field->name == NULL || field->name_length == 0 || field->name_length > 128 ||
+                (field->value == NULL && field->value_length != 0) || field->value_length > 4096)
+            return 0;
+        *total += field->name_length + field->value_length + 32;
+        if (*total > FLINT_H2_MAX_OUTPUT_FIELD_BYTES)
+            return 0;
+    }
+    return 1;
+}
+
+static int store_trailer(flint_h2_session *owner, int32_t stream, const flint_h2_field *fields,
+                         size_t count, size_t total) {
+    if (count == 0)
+        return 0;
+    if (owner->trailer_count == FLINT_H2_MAX_STREAMS)
+        return -1;
+    for (flint_h2_trailer *node = owner->trailers; node != NULL; node = node->next) {
+        if (node->stream == stream)
+            return -1;
+    }
+    flint_h2_trailer *node = malloc(sizeof(*node) + total);
+    if (node == NULL)
+        return -1;
+    size_t offset = 0;
+    for (size_t index = 0; index < count; ++index) {
+        const flint_h2_field *field = &fields[index];
+        uint8_t *name = node->bytes + offset;
+        memcpy(name, field->name, field->name_length);
+        offset += field->name_length;
+        uint8_t *value = node->bytes + offset;
+        if (field->value_length != 0)
+            memcpy(value, field->value, field->value_length);
+        offset += field->value_length;
+        node->fields[index] = h2_field((const char *)name, field->name_length, value, field->value_length);
+    }
+    node->count = count;
+    node->stream = stream;
+    node->next = owner->trailers;
+    owner->trailers = node;
+    ++owner->trailer_count;
+    return 0;
+}
+
+int flint_h2_stream_headers(flint_h2_session *owner, int32_t stream, unsigned status,
+                            const flint_h2_field *fields, size_t count) {
+    size_t total;
+    if (owner == NULL || owner->body == NULL || stream <= 0 ||
+            !bounded_fields(fields, count, &total))
+        return -1;
+    if (status == 0)
+        return store_trailer(owner, stream, fields, count, total);
+    if (status < 200 || status > 599)
+        return -1;
+    const uint8_t status_text[] = {
+        (uint8_t)('0' + status / 100),
+        (uint8_t)('0' + status / 10 % 10),
+        (uint8_t)('0' + status % 10)
+    };
+    nghttp2_nv headers[FLINT_H2_MAX_OUTPUT_FIELDS + 1];
+    headers[0] = h2_field(":status", 7, status_text, sizeof(status_text));
+    for (size_t index = 0; index < count; ++index)
+        headers[index + 1] = h2_field(fields[index].name, fields[index].name_length,
+                                     (const uint8_t *)fields[index].value, fields[index].value_length);
+
+    nghttp2_data_provider2 provider = { .read_callback = h2_write_body };
+    return nghttp2_submit_response2(owner->native, stream, headers, count + 1, &provider);
+}
+
+int flint_h2_consume_stream(flint_h2_session *owner, int32_t stream, size_t count) {
+    if (owner == NULL || stream <= 0 || count == 0 || count > 65535)
+        return -1;
+    return nghttp2_session_consume_stream(owner->native, stream, count);
+}
+
+int flint_h2_resume_stream(flint_h2_session *owner, int32_t stream) {
+    if (owner == NULL || stream <= 0)
+        return -1;
+    const int result = nghttp2_session_resume_data(owner->native, stream);
+    /* An active provider needs no resume operation when its DATA was never deferred. */
+    return result == NGHTTP2_ERR_INVALID_ARGUMENT ? 0 : result;
+}
+
 int flint_h2_reset(flint_h2_session *owner, int32_t stream, uint32_t code) {
     if (owner == NULL || stream <= 0)
         return -1;
@@ -478,6 +695,11 @@ int flint_h2_done(const flint_h2_session *owner) {
 void flint_h2_free(flint_h2_session *owner) {
     if (owner != NULL) {
         nghttp2_session_del(owner->native);
+        while (owner->trailers != NULL) {
+            flint_h2_trailer *node = owner->trailers;
+            owner->trailers = node->next;
+            free(node);
+        }
         free(owner);
     }
 }

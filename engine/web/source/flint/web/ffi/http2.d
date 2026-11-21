@@ -2,6 +2,7 @@
 module flint.web.ffi.http2;
 
 import flint.arena : Error, Result, Status;
+import flint.web.stream : StreamField, validStreamFields;
 
 @safe:
 
@@ -40,6 +41,17 @@ package(flint.web) struct H2Output
 }
 
 private struct NativeSession;
+
+private extern (C) struct NativeField
+{
+    const(char)* name;
+    size_t nameLength;
+    const(char)* value;
+    size_t valueLength;
+}
+
+package(flint.web) enum holdStreamCredit = int.max;
+package(flint.web) enum deferOutput = -2;
 private ulong activeToken;
 private H2Events activeEvents;
 private H2Body activeBody;
@@ -58,6 +70,10 @@ version (FlintNativeNghttp2)
         int flint_h2_send(NativeSession* session, scope ubyte* data, size_t capacity, scope size_t* written);
         int flint_h2_reply(NativeSession* session, int stream, uint status,
                 scope const(char)* contentType, size_t typeLength, size_t bodyLength, int head);
+        int flint_h2_stream_headers(NativeSession* session, int stream, uint status,
+                scope const(NativeField)* fields, size_t count);
+        int flint_h2_consume_stream(NativeSession* session, int stream, size_t count);
+        int flint_h2_resume_stream(NativeSession* session, int stream);
         int flint_h2_reset(NativeSession* session, int stream, uint code);
         int flint_h2_drain(NativeSession* session);
         int flint_h2_pending(const NativeSession* session);
@@ -167,6 +183,42 @@ package(flint.web) struct H2Session
         version (FlintNativeNghttp2)
             return native !is null && activeToken == 0 && stream > 0 && media.length <= 256
                 && flint_h2_reply(native, stream, status, media.ptr, media.length, length, head) == 0;
+        else
+            return false;
+    }
+
+    // SAFETY: A live owner-local session validates the bounded field spans. The provider copies the
+    // response fields or makes a native-owned trailer record before returning. No D pointer is retained.
+    bool streamHeaders(int stream, ushort status, scope const(StreamField)[] fields) scope @trusted nothrow @nogc
+    {
+        version (FlintNativeNghttp2)
+        {
+            if (native is null || activeToken != 0 || stream <= 0 || !validStreamFields(fields, false))
+                return false;
+            NativeField[32] converted;
+            foreach (index, ref field; fields)
+                converted[index] = NativeField(field.name.ptr, field.name.length, field.value.ptr, field.value.length);
+            return flint_h2_stream_headers(native, stream, status, converted.ptr, fields.length) == 0;
+        }
+        else
+            return false;
+    }
+
+    // SAFETY: Credits only bytes the owner drained for the live stream. The scalar operation cannot invoke callbacks.
+    bool consumeStream(int stream, size_t count) scope @trusted nothrow @nogc
+    {
+        version (FlintNativeNghttp2)
+            return native !is null && activeToken == 0 && stream > 0 && count > 0
+                && flint_h2_consume_stream(native, stream, count) == 0;
+        else
+            return false;
+    }
+
+    // SAFETY: Mark a live stream's DATA provider available without passing a pointer into D storage.
+    bool resumeStream(int stream) scope @trusted nothrow @nogc
+    {
+        version (FlintNativeNghttp2)
+            return native !is null && activeToken == 0 && stream > 0 && flint_h2_resume_stream(native, stream) == 0;
         else
             return false;
     }

@@ -1,8 +1,23 @@
 # rpc exercised probe
 
-The implementation task creates `source/app.d` and `baseline/source/app.d` in this directory. The recipes resolve the local implementation root. Source is intentionally absent until real behavior exists; the measurement tool rejects missing probes.
+The probe runs the generated Envelope through pinned protobuf-c with 128-byte and 64-KiB payloads. Both variants verify the same scalar fields, payload length and checksum on every round trip. The two fixed checksums are 3,763 and 73,140. Each trial runs for at least 150 ms. The direct C control uses the upstream generated codec and default bounded test input. The Flint feature uses the typed DTO and arena handle path.
 
-`source/app.d` must instantiate and execute the required workload in `handoff/specs/tier-2/rpc.md`. Preserve an observable checksum derived from actual results and check correctness through code that remains active in the release build. A bare import, constant-only substitute or discarded operation is invalid. Use the pinned input sizes/seeds from the specification; microbenchmark timing, where applicable, must exceed 100 ms per trial.
+The independent gRPC-Go loopback benchmark uses the standard Protobuf codec and checks responses at each of the same nominal payload sizes with 1 and 64 concurrent calls. The 128-byte case is unary and the 64-KiB case opens bidirectional streams. Codec allocation samples use a separate Linux profile with GNU link wrappers around malloc, calloc and realloc. That profile reports those C call counts alongside thread-local D GC allocated bytes. It is separate from the stripped size observations.
+
+## Local Linux observations
+
+| Profile | Complete feature bytes | Complete provider-control bytes | Signed delta |
+| --- | ---: | ---: | ---: |
+| LDC O3 | 1,201,056 | 1,054,200 | 146,856 |
+| LDC Oz | 1,143,712 | 1,021,432 | 122,280 |
+
+| Compiler | Cache-cold build | Edited leaf build | Peak process-tree RSS |
+| --- | ---: | ---: | ---: |
+| DMD 2.114 | 1.102 s | 0.564 s | 155,930,624 bytes |
+| LDC 1.43 O3 | 2.785 s | 1.134 s | 253,751,296 bytes |
+| LDC 1.43 Oz | 2.371 s | 0.990 s | 250,621,952 bytes |
+
+Each codec round trip used two wrapped native allocation calls in both variants. Every timed codec trial reported zero D GC bytes. The cold-build runs used fresh copied workspaces and isolated DUB caches. These local samples leave the dedicated-runner baseline open.
 
 ## Equivalent provider baseline
 

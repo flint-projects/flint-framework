@@ -4,13 +4,15 @@ module flint.web.http2;
 import core.atomic : atomicLoad, atomicOp, cas;
 import core.lifetime : move;
 import core.time : MonoTime, ticksToNSecs;
-import flint.arena : Buffer, RequestArena, Status;
+import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Completion, ConnectionId, Reactor, TaskContext, TaskDelegate;
-import flint.web.dispatch : executeRoute, failureResponse, liveBody;
-import flint.web.ffi.http2 : H2Chunk, H2Event, H2Output, H2Session;
+import flint.reactor : Completion, CompletionDelegate, ConnectionId, Reactor, TaskContext, TaskDelegate;
+import flint.web.dispatch : executeMatched, executeStream, failureResponse, liveBody, lookupRoute;
+import flint.web.ffi.http2 : H2Chunk, H2Event, H2Output, H2Session, deferOutput, holdStreamCredit;
 import flint.web.http1 : Http1Reader;
-import flint.web.router : RouteTable;
+import flint.web.router : Match, RouteTable;
+import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamToken;
+import flint.web.stream_queues : StreamQueues;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
 import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
 import flint.web.types : Method, RequestContext, Response, ServerOptions;
@@ -46,11 +48,14 @@ private struct Session
 {
     ConnectionId id;
     H2Session native;
+    CancelSource transfer;
     uint[streamLimit] streams;
     bool readActive;
     bool writeActive;
     bool closing;
     bool draining;
+    bool peerClosing;
+    bool reciprocalGoaway;
     size_t sent;
     Deadline firstRequestDeadline;
 }
@@ -65,6 +70,13 @@ private struct Stream
     int number;
     StreamPhase phase;
     bool providerClosed;
+    bool entered;
+    bool duplex;
+    bool incremental;
+    bool inputEnded;
+    bool startedOutput;
+    bool finishedOutput;
+    StreamQueues queues;
     Deadline headerDeadline;
     Http1Reader assembly;
     RequestContext request;
@@ -79,9 +91,10 @@ private struct Stream
     }
 }
 
-package(flint.web) final class H2Runtime
+package(flint.web) final class H2Runtime : StreamEndpoint
 {
     private ServerOptions options;
+    private CompletionDelegate writeDone;
     private RouteTable routes;
     private TlsTransport tls;
     private Context root;
@@ -95,6 +108,7 @@ package(flint.web) final class H2Runtime
     this(ServerOptions options, RouteTable routes, Context root)
     {
         this.options = options;
+        writeDone = &written;
         this.routes = routes;
         this.root = root;
         arenaBytes = options.maxHeaderBytes + options.maxBodyBytes + options.writeQueueBytes + 1024;
@@ -123,12 +137,18 @@ package(flint.web) final class H2Runtime
     void accept(ConnectionId id) nothrow @nogc
     {
         auto connection = slot(id);
-        if (connection is null || connection.id.generation != 0 || root.cancelled()
-                || connection.native.open(id.generation, options.maxStreamsPerConnection).code != Status.ok)
+        if (connection is null || connection.id.generation != 0 || root.cancelled())
         {
             closePlain(tls, id);
             return;
         }
+        auto lifetime = CancelSource.create(root, Deadline.none());
+        if (!lifetime.ok() || connection.native.open(id.generation, options.maxStreamsPerConnection).code != Status.ok)
+        {
+            closePlain(tls, id);
+            return;
+        }
+        move(lifetime.value, connection.transfer);
         connection.id = id;
         atomicOp!"+="(activeSessions, 1U);
         connection.firstRequestDeadline = following(options.headerTimeoutNanos);
@@ -145,24 +165,27 @@ package(flint.web) final class H2Runtime
                 retire(&stream);
         }
         foreach (ref connection; connections)
+        {
+            connection.transfer.close();
             connection.native.close();
+        }
         root = Context.init;
     }
 
-    private Session* slot(ConnectionId id) nothrow @nogc
+    private Session* slot(ConnectionId id) return scope nothrow @nogc
     {
         if (id.ownerCore >= options.cores || id.slot >= options.maxConnectionsPerCore)
             return null;
         return &connections[id.ownerCore * options.maxConnectionsPerCore + id.slot];
     }
 
-    private Session* live(ConnectionId id) nothrow @nogc
+    private Session* live(ConnectionId id) return scope nothrow @nogc
     {
         auto connection = slot(id);
         return connection !is null && connection.id == id && id.generation != 0 ? connection : null;
     }
 
-    private Stream* streamFor(Session* connection, int number) nothrow @nogc
+    private Stream* streamFor(scope Session* connection, int number) return scope nothrow @nogc
     {
         foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
         {
@@ -172,9 +195,9 @@ package(flint.web) final class H2Runtime
         return null;
     }
 
-    private int admitStream(Session* connection, int number) nothrow @nogc
+    private int admitStream(scope Session* connection, int number) scope nothrow @nogc
     {
-        if (number <= 0 || connection.closing || root.cancelled())
+        if (number <= 0 || connection.closing || connection.peerClosing || root.cancelled())
             return Protocol.refused;
 
         uint* member;
@@ -204,7 +227,7 @@ package(flint.web) final class H2Runtime
         return Protocol.refused;
     }
 
-    private bool prepareStream(Stream* stream, ConnectionId connection, int number) nothrow @nogc
+    private bool prepareStream(scope Stream* stream, ConnectionId connection, int number) scope nothrow @nogc
     {
         auto source = CancelSource.create(root, Deadline.none());
         if (!source.ok())
@@ -230,13 +253,20 @@ package(flint.web) final class H2Runtime
         return true;
     }
 
-    private int event(Session* connection, H2Event event, int number, uint code,
-            scope const(ubyte)[] name, scope const(ubyte)[] bytes) nothrow @nogc
+    private int event(scope Session* connection, H2Event event, int number, uint code,
+            scope const(ubyte)[] name, scope const(ubyte)[] bytes) scope nothrow @nogc
     {
         if (event == H2Event.begin)
             return admitStream(connection, number);
         if (event == H2Event.goaway)
+        {
+            if (!connection.peerClosing)
+            {
+                connection.peerClosing = true;
+                connection.firstRequestDeadline = following(options.idleTimeoutNanos);
+            }
             return Protocol.ok;
+        }
         auto stream = streamFor(connection, number);
         if (stream is null)
             return Protocol.ok;
@@ -256,9 +286,11 @@ package(flint.web) final class H2Runtime
         return inputEvent(stream, event, code, name, bytes);
     }
 
-    private int inputEvent(Stream* stream, H2Event event, uint code, scope const(ubyte)[] name,
-            scope const(ubyte)[] bytes) nothrow @nogc
+    private int inputEvent(scope Stream* stream, H2Event event, uint code, scope const(ubyte)[] name,
+            scope const(ubyte)[] bytes) scope nothrow @nogc
     {
+        if (stream.duplex)
+            return duplexInput(stream, event, code, bytes);
         if (stream.phase != StreamPhase.reading)
             return Protocol.protocolError;
 
@@ -267,7 +299,7 @@ package(flint.web) final class H2Runtime
         {
         case H2Event.headers:
             stream.headerDeadline = Deadline.none();
-            return Protocol.ok;
+            return receivedHeaders(stream);
         case H2Event.field:
             status = stream.assembly.receiveH2Header(name, bytes, code != 0, stream.request.arena);
             break;
@@ -288,13 +320,59 @@ package(flint.web) final class H2Runtime
         return status == Status.resourceExhausted ? Protocol.exhausted : Protocol.protocolError;
     }
 
-    private Deadline following(long timeout) nothrow @nogc
+    private int receivedHeaders(scope Stream* stream) scope nothrow @nogc
+    {
+        if (!routes.hasDuplex())
+            return Protocol.ok;
+        if (!stream.assembly.finishH2(stream.request.arena))
+            return Protocol.protocolError;
+        const matched = lookupRoute(routes, &stream.assembly.metadata, stream.request.arena);
+        if (matched.stream is null || matched.mode != StreamMode.duplex)
+            return Protocol.ok;
+        if (!openQueues(stream, true))
+            return Protocol.exhausted;
+        stream.phase = StreamPhase.ready;
+        return Protocol.ok;
+    }
+
+    private bool openQueues(scope Stream* stream, bool duplex) scope nothrow @nogc
+    {
+        const outgoing = options.writeQueueBytes < ioBytes ? options.writeQueueBytes : ioBytes;
+        if (!stream.queues.open(duplex, outgoing))
+            return false;
+        stream.incremental = true;
+        stream.duplex = duplex;
+        return true;
+    }
+
+    // dfmt off
+    private static int duplexInput(scope Stream* stream, H2Event event, uint code,
+            scope const(ubyte)[] bytes) nothrow @nogc
+    {
+        switch (event)
+        {
+        case H2Event.field:
+            return code != 0 ? Protocol.ok : Protocol.protocolError;
+        case H2Event.end:
+            stream.inputEnded = true;
+            return Protocol.ok;
+        case H2Event.body:
+            if (stream.phase == StreamPhase.responding)
+                return Protocol.ok;
+            return stream.queues.admit(bytes) ? holdStreamCredit : Protocol.exhausted;
+        default:
+            return Protocol.protocolError;
+        }
+    }
+    // dfmt on
+
+    private static Deadline following(long timeout) nothrow @nogc
     {
         const timestamp = ticksToNSecs(MonoTime.currTime.ticks);
         return Deadline(timeout >= long.max - timestamp ? long.max - 1 : timestamp + timeout);
     }
 
-    private Context receiveContext(Session* connection) nothrow @nogc
+    private Context receiveContext(scope Session* connection) nothrow @nogc
     {
         auto earliest = following(options.idleTimeoutNanos);
         if (connection.firstRequestDeadline.monotonicNanoseconds < earliest.monotonicNanoseconds)
@@ -307,10 +385,10 @@ package(flint.web) final class H2Runtime
             if (candidate.monotonicNanoseconds < earliest.monotonicNanoseconds)
                 earliest = candidate;
         }
-        return root.withDeadline(earliest);
+        return connection.transfer.context().withDeadline(earliest);
     }
 
-    private void armRead(Session* connection) nothrow @nogc
+    private void armRead(scope Session* connection) nothrow @nogc
     {
         if (connection.closing || connection.draining || connection.readActive)
             return;
@@ -354,7 +432,7 @@ package(flint.web) final class H2Runtime
             flush(connection);
     }
 
-    private void schedule(Session* connection) nothrow @nogc
+    private void schedule(scope Session* connection) nothrow @nogc
     {
         foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
         {
@@ -399,9 +477,16 @@ package(flint.web) final class H2Runtime
         if (connection is null || stream.phase != StreamPhase.admitted)
             return;
 
+        stream.entered = true;
         if (discard(connection, stream))
             return;
-        auto result = executeRoute(routes, &stream.assembly.metadata, stream.request);
+        const matched = lookupRoute(routes, &stream.assembly.metadata, stream.request.arena);
+        if (matched.stream !is null && matched.mode != StreamMode.upgrade)
+        {
+            dispatchStream(connection, stream, matched);
+            return;
+        }
+        auto result = executeMatched(routes, &stream.assembly.metadata, stream.request, matched);
         stream.phase = StreamPhase.responding;
         if (discard(connection, stream))
             return;
@@ -418,6 +503,204 @@ package(flint.web) final class H2Runtime
         Response response = result.ok() ? result.value
             : failureResponse(responseCode(result.error.code), stream.request.arena);
         queueResponse(connection, stream, response);
+    }
+
+    private void dispatchStream(Session* connection, Stream* stream, const ref Match matched) nothrow @nogc
+    {
+        if (!stream.incremental && !openQueues(stream, false))
+        {
+            stream.phase = StreamPhase.responding;
+            queueResponse(connection, stream, failureResponse(503, stream.request.arena));
+            return;
+        }
+        scope token = StreamToken(this, stream.index, stream.request.requestId);
+        const result = executeStream(&stream.assembly.metadata, stream.request, matched, token);
+        if (discard(connection, stream))
+            return;
+        if (!stream.startedOutput)
+        {
+            stream.phase = StreamPhase.responding;
+            stream.incremental = false;
+            queueResponse(connection, stream, failureResponse(result.code == Status.ok
+                    ? 500 : responseCode(result.code), stream.request.arena));
+            return;
+        }
+        if (!stream.finishedOutput)
+        {
+            if (result.code == Status.ok)
+                token.finish(null, stream.request.cancellation);
+            else
+                token.cancel();
+        }
+        const pending = stream.queues.inbound;
+        stream.phase = StreamPhase.responding;
+        if (pending != 0 && !stream.providerClosed && !connection.native.consumeStream(stream.number, pending))
+        {
+            abort(connection);
+            return;
+        }
+        flush(connection);
+    }
+
+    private Stream* activeStream(ulong index, ulong generation) return scope nothrow @nogc
+    {
+        if (index >= streams.length || Reactor.current().currentCore() != index / workerStreams)
+            return null;
+        auto stream = &streams[cast(size_t) index];
+        if (!stream.incremental || stream.phase != StreamPhase.admitted || stream.providerClosed
+                || stream.request.requestId != generation || !stream.entered)
+            return null;
+        const task = Reactor.current().currentTask();
+        return task.ok() && task.value.requestId == generation ? stream : null;
+    }
+
+    private static Error unavailable() pure nothrow @nogc
+    {
+        return Error(Status.unavailable, "HTTP/2 stream is no longer active on this fiber");
+    }
+
+    override Error begin(ulong index, ulong generation, ushort status,
+            scope const(StreamField)[] fields, ref scope const Context context) scope nothrow @nogc
+    {
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return checked;
+        auto stream = activeStream(index, generation);
+        if (stream is null)
+            return unavailable();
+        if (stream.startedOutput)
+            return Error(Status.conflict, "HTTP/2 response already started");
+        if (status < 200 || status > 599)
+            return Error(Status.invalidArgument, "invalid HTTP/2 response status");
+        auto connection = live(stream.connection);
+        if (connection is null || connection.closing || connection.draining
+                || !connection.native.streamHeaders(stream.number, status, fields))
+            return unavailable();
+        stream.startedOutput = true;
+        flush(connection);
+        return stream.request.cancellation.check();
+    }
+
+    // dfmt off
+    override Result!size_t receive(ulong index, ulong generation, scope ubyte[] output,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        auto stream = activeStream(index, generation);
+        if (stream is null)
+            return Result!size_t(0, unavailable());
+        if (!stream.duplex || output.length == 0)
+            return Result!size_t(0, Error(Status.invalidArgument, "HTTP/2 receive requires a duplex stream"));
+        while (stream.queues.inbound == 0 && !stream.inputEnded)
+        {
+            const resumed = waitForStream(stream, context);
+            if (resumed.code != Status.ok)
+                return Result!size_t(0, resumed);
+        }
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return Result!size_t(0, checked);
+        const count = stream.queues.read(output);
+        if (count != 0)
+        {
+            auto connection = live(stream.connection);
+            if (connection is null || connection.closing || !connection.native.consumeStream(stream.number, count))
+                return Result!size_t(0, unavailable());
+            flush(connection);
+        }
+        return Result!size_t(count);
+    }
+    // dfmt on
+
+    // dfmt off
+    override Error send(ulong index, ulong generation, scope const(ubyte)[] bytes,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        auto stream = activeStream(index, generation);
+        if (stream is null)
+            return unavailable();
+        if (!stream.startedOutput || stream.finishedOutput)
+            return Error(Status.conflict, "HTTP/2 stream output is closed");
+        size_t offset;
+        while (offset < bytes.length)
+        {
+            while (stream.queues.outbound != 0)
+            {
+                const available = waitForStream(stream, context);
+                if (available.code != Status.ok)
+                    return available;
+            }
+            const sent = queueChunk(stream, bytes[offset .. $], context);
+            if (!sent.ok())
+                return sent.error;
+            offset += sent.value;
+        }
+        return stream.request.cancellation.check();
+    }
+    // dfmt on
+
+    // dfmt off
+    private Result!size_t queueChunk(scope Stream* stream, scope const(ubyte)[] bytes,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return Result!size_t(0, checked);
+        auto connection = live(stream.connection);
+        if (connection is null || connection.closing || connection.draining || stream.providerClosed)
+            return Result!size_t(0, unavailable());
+        const stored = stream.queues.write(bytes);
+        if (stored == 0 || !connection.native.resumeStream(stream.number))
+            return Result!size_t(0, unavailable());
+        flush(connection);
+        return Result!size_t(stored);
+    }
+    // dfmt on
+
+    override Error finish(ulong index, ulong generation, scope const(StreamField)[] trailers,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return checked;
+        auto stream = activeStream(index, generation);
+        if (stream is null)
+            return unavailable();
+        if (!stream.startedOutput || stream.finishedOutput)
+            return Error(Status.conflict, "HTTP/2 stream output already closed or not started");
+        auto connection = live(stream.connection);
+        if (connection is null || connection.closing || connection.draining
+                || !connection.native.streamHeaders(stream.number, 0, trailers)
+                || !connection.native.resumeStream(stream.number))
+            return unavailable();
+        stream.finishedOutput = true;
+        flush(connection);
+        return Error.init;
+    }
+
+    override Error cancel(ulong index, ulong generation) scope nothrow @nogc
+    {
+        auto stream = activeStream(index, generation);
+        if (stream is null)
+            return unavailable();
+        auto connection = live(stream.connection);
+        stream.cancel.cancel();
+        if (connection is null || connection.closing || !connection.native.reset(stream.number, Protocol.cancelled))
+            return unavailable();
+        flush(connection);
+        return Error.init;
+    }
+
+    private Error waitForStream(scope Stream* stream, ref scope const Context context) scope nothrow @nogc
+    {
+        const checked = context.check();
+        if (checked.code != Status.ok)
+            return checked;
+        if (stream.providerClosed)
+            return unavailable();
+        const waiting = following(1_000_000);
+        const deadline = context.deadline();
+        return Reactor.current()
+            .yieldUntil(waiting.monotonicNanoseconds < deadline.monotonicNanoseconds ? waiting : deadline);
     }
 
     private bool discard(Session* connection, Stream* stream) nothrow @nogc
@@ -453,10 +736,18 @@ package(flint.web) final class H2Runtime
             flush(connection);
     }
 
-    private H2Chunk copyBody(Session* connection, int number, scope ubyte[] output) nothrow @nogc
+    private H2Chunk copyBody(scope Session* connection, int number, scope ubyte[] output) scope nothrow @nogc
     {
         auto stream = streamFor(connection, number);
-        if (stream is null || stream.phase != StreamPhase.responding || stream.providerClosed)
+        if (stream is null || stream.providerClosed)
+            return H2Chunk.init;
+        if (stream.incremental)
+        {
+            const count = stream.queues.send(output);
+            const ending = stream.finishedOutput && stream.queues.outbound == 0;
+            return H2Chunk(count != 0 || ending ? cast(ptrdiff_t) count : deferOutput, ending);
+        }
+        if (stream.phase != StreamPhase.responding)
             return H2Chunk.init;
 
         size_t stored;
@@ -470,7 +761,7 @@ package(flint.web) final class H2Runtime
                 stream.offset == stream.response.length()) : H2Chunk.init;
     }
 
-    private void flush(Session* connection) nothrow @nogc
+    private void flush(scope Session* connection) scope nothrow @nogc
     {
         if (connection.closing || connection.writeActive)
             return;
@@ -493,14 +784,17 @@ package(flint.web) final class H2Runtime
         if (count == 0)
         {
             reap(connection);
-            if (connection.draining || connection.native.done())
+            if (connection.draining)
                 abort(connection);
+            else if (connection.native.done())
+                finishPeerShutdown(connection);
             return;
         }
 
         const deadline = following(options.idleTimeoutNanos);
-        auto context = connection.draining ? Context.init.withDeadline(deadline) : root.withDeadline(deadline);
-        const write = writePlain(tls, connection.id, bytes[0 .. count], context, &this.written);
+        auto context = connection.draining
+            ? Context.init.withDeadline(deadline) : connection.transfer.context().withDeadline(deadline);
+        const write = writePlain(tls, connection.id, bytes[0 .. count], context, writeDone);
         if (write != Status.ok)
         {
             abort(connection);
@@ -508,6 +802,20 @@ package(flint.web) final class H2Runtime
         }
         connection.writeActive = true;
         connection.sent = count;
+    }
+
+    private void finishPeerShutdown(scope Session* connection) scope nothrow @nogc
+    {
+        if (!connection.peerClosing)
+            abort(connection);
+        else if (!connection.reciprocalGoaway)
+        {
+            connection.reciprocalGoaway = true;
+            if (!connection.native.drain())
+                abort(connection);
+            else
+                flush(connection);
+        }
     }
 
     private void written(Completion completion) nothrow @nogc
@@ -531,7 +839,7 @@ package(flint.web) final class H2Runtime
         flush(connection);
     }
 
-    private void beginDrain(Session* connection) nothrow @nogc
+    private void beginDrain(scope Session* connection) nothrow @nogc
     {
         if (!connection.draining)
         {
@@ -545,14 +853,14 @@ package(flint.web) final class H2Runtime
         flush(connection);
     }
 
-    private void reap(Session* connection) nothrow @nogc
+    private void reap(scope Session* connection) scope nothrow @nogc
     {
         foreach (ref index; connection.streams[0 .. options.maxStreamsPerConnection])
         {
             if (index == 0)
                 continue;
             auto stream = &streams[index - 1];
-            if (stream.providerClosed && stream.phase != StreamPhase.admitted)
+            if (stream.providerClosed && (stream.phase != StreamPhase.admitted || !stream.entered))
             {
                 retire(stream);
                 index = 0;
@@ -560,22 +868,24 @@ package(flint.web) final class H2Runtime
         }
     }
 
-    private void abort(Session* connection) nothrow @nogc
+    private void abort(scope Session* connection) scope nothrow @nogc
     {
         if (!connection.closing)
         {
             connection.closing = true;
+            connection.transfer.cancel();
             foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
             {
                 if (index != 0)
                     streams[index - 1].cancel.cancel();
             }
-            closePlain(tls, connection.id);
+            if (connection.draining)
+                closePlain(tls, connection.id);
         }
         finishClose(connection);
     }
 
-    private void finishClose(Session* connection) nothrow @nogc
+    private void finishClose(scope Session* connection) scope nothrow @nogc
     {
         if (!connection.closing || connection.readActive || connection.writeActive)
             return;
@@ -584,7 +894,7 @@ package(flint.web) final class H2Runtime
             if (index == 0)
                 continue;
             auto stream = &streams[index - 1];
-            if (stream.phase != StreamPhase.admitted)
+            if (stream.phase != StreamPhase.admitted || !stream.entered)
             {
                 retire(stream);
                 index = 0;
@@ -595,14 +905,20 @@ package(flint.web) final class H2Runtime
             if (index != 0)
                 return;
         }
+        // Hold the physical reactor slot through the last entered stream task and I/O callback.
+        if (!connection.draining)
+            closePlain(tls, connection.id);
+        connection.transfer.close();
         connection.native.close();
         connection.id = ConnectionId.init;
         connection.closing = false;
         connection.draining = false;
+        connection.peerClosing = false;
+        connection.reciprocalGoaway = false;
         atomicOp!"-="(activeSessions, 1U);
     }
 
-    private void retire(Stream* stream) nothrow @nogc
+    private void retire(scope Stream* stream) scope nothrow @nogc
     {
         stream.cancel.cancel();
         stream.request.cancellation = Context.init;
@@ -612,6 +928,13 @@ package(flint.web) final class H2Runtime
         releaseBytes(stream.memory);
         stream.phase = StreamPhase.free;
         stream.providerClosed = false;
+        stream.entered = false;
+        stream.duplex = false;
+        stream.incremental = false;
+        stream.inputEnded = false;
+        stream.startedOutput = false;
+        stream.finishedOutput = false;
+        stream.queues.clear();
         stream.response = Buffer.init;
         stream.number = 0;
         stream.connection = ConnectionId.init;
