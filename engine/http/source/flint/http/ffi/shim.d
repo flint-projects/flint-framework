@@ -75,6 +75,9 @@ extern (C) private @system nothrow @nogc
     int flint_http_stream_finish_send(NativeLoop* loop, ulong id);
     int flint_http_header(NativeLoop* loop, ulong id, const(char)* key, size_t keyLength,
             const(char)* value, size_t valueLength);
+    int flint_http_aws_v4(NativeLoop* loop, ulong id, scope const(char)* region, size_t regionLength,
+            scope const(char)* service, size_t serviceLength, scope const(char)* access,
+            size_t accessLength, scope const(char)* secret, size_t secretLength);
     int flint_http_body(NativeLoop* loop, ulong id, const(ubyte)* bytes, size_t length);
     int flint_http_activate(NativeLoop* loop, ulong id);
     int flint_http_view_request(NativeLoop* loop, ulong id, NativeView* output);
@@ -208,6 +211,15 @@ package(flint.http) struct Bridge
                 return Result!HttpResponse(HttpResponse.init, nativeError(status));
             scope (exit)
                 retire(id);
+            const aws = request.awsV4;
+            if (aws.region.length || aws.service.length || aws.accessKey.length || aws.secretKey.length)
+            {
+                const signed = cast(Status) flint_http_aws_v4(loop, id, aws.region.ptr,
+                        aws.region.length, aws.service.ptr, aws.service.length, aws.accessKey.ptr,
+                        aws.accessKey.length, aws.secretKey.ptr, aws.secretKey.length);
+                if (signed != Status.ok)
+                    return Result!HttpResponse(HttpResponse.init, nativeError(signed));
+            }
             return action(id);
         }
     }

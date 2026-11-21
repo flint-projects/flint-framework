@@ -142,6 +142,10 @@ enum flint_http_view_flags {
 int flint_http_begin_view(flint_curl_loop *loop, const char *url, size_t length,
                           uint32_t method, uint32_t flags, const uint8_t *upload, size_t upload_length,
                           uint64_t *request_id);
+/* Configure SigV4 before adding headers or activating a scoped HTTPS request. */
+int flint_http_aws_v4(flint_curl_loop *loop, uint64_t request_id, const char *region, size_t region_length,
+                      const char *service, size_t service_length, const char *access, size_t access_length,
+                      const char *secret, size_t secret_length);
 int flint_http_header(flint_curl_loop *loop, uint64_t request_id, const char *key, size_t key_length,
                       const char *value, size_t value_length);
 int flint_http_body(flint_curl_loop *loop, uint64_t request_id, const uint8_t *bytes, size_t length);

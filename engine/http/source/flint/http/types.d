@@ -137,6 +137,19 @@ struct HttpStreamField
     const(char)[] value;
 }
 
+/// Scoped credentials and signing scope for an AWS SigV4 HTTP request.
+struct HttpAwsV4
+{
+    /// Signing region.
+    const(char)[] region;
+    /// AWS service identifier.
+    const(char)[] service;
+    /// AWS access key identity.
+    const(char)[] accessKey;
+    /// AWS signing secret.
+    const(char)[] secretKey;
+}
+
 /// Scoped request with a borrowed upload. These operations return redirect responses without following them.
 struct HttpRequestView
 {
@@ -152,6 +165,10 @@ struct HttpRequestView
     bool preservePath;
     /// Deliver stream chunks only for HTTP 2xx responses.
     bool successBodyOnly;
+    /// Optional SigV4 signing through pinned curl. Signed requests require HTTPS.
+    HttpAwsV4 awsV4;
+    /// A separately borrowed generated field, copied after the other headers.
+    HttpStreamField finalField;
 }
 
 /// Options for a single incremental transfer.

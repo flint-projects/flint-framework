@@ -37,7 +37,7 @@ typedef struct request {
     int error;
     bool streaming, paused, redirected_origin, dropped_upload, location;
     bool head_complete, send_paused, send_ended, upgraded;
-    bool scoped_view, preserve_path, success_only;
+    bool scoped_view, preserve_path, success_only, aws_v4;
     uint32_t stream_mode, receive_rate;
     unsigned redirects;
     size_t decoded;
@@ -789,6 +789,61 @@ static bool valid_header(const char *key, size_t length, const char *value, size
         && !key_is(key, length, "Upgrade") && !key_is(key, length, "Proxy-Connection");
 }
 
+static bool aws_text(const char *data, size_t length, size_t bound, unsigned kind)
+{
+    if (!data || !length || length > bound)
+        return false;
+    for (size_t i = 0; i < length; ++i) {
+        const unsigned char byte = (unsigned char)data[i];
+        if ((byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') || byte == '-')
+            continue;
+        if (kind == 1 && ((byte >= 'A' && byte <= 'Z') || byte == '_'))
+            continue;
+        if (kind == 2 && byte > ' ' && byte < 127)
+            continue;
+        return false;
+    }
+    return true;
+}
+
+int flint_http_aws_v4(flint_curl_loop *loop, uint64_t request_id, const char *region, size_t region_length,
+                      const char *service, size_t service_length, const char *access, size_t access_length,
+                      const char *secret, size_t secret_length)
+{
+    const int owner = owner_status(loop);
+    if (owner)
+        return owner;
+    request *record = lookup(loop, request_id);
+    if (!record || record->state != FLINT_HTTP_PREPARED || !record->scoped_view || record->headers || record->aws_v4)
+        return FLINT_HTTP_CONFLICT;
+    if (strncmp(record->url, "https://", 8) != 0
+        || !aws_text(region, region_length, 63, 0) || !aws_text(service, service_length, 31, 0)
+        || !aws_text(access, access_length, 128, 1) || !aws_text(secret, secret_length, 256, 2))
+        return FLINT_HTTP_ARGUMENT;
+
+    char configuration[105], username[129], password[257];
+    const int formatted = snprintf(configuration, sizeof(configuration), "aws:amz:%.*s:%.*s",
+                                   (int)region_length, region, (int)service_length, service);
+    if (formatted < 1 || (size_t)formatted >= sizeof(configuration))
+        return FLINT_HTTP_ARGUMENT;
+    memcpy(username, access, access_length);
+    username[access_length] = 0;
+    memcpy(password, secret, secret_length);
+    password[secret_length] = 0;
+
+    int status = map_curl(CURL_ON_OWNER(loop, curl_easy_setopt(record->easy, CURLOPT_AWS_SIGV4, configuration)));
+    if (!status)
+        status = map_curl(CURL_ON_OWNER(loop, curl_easy_setopt(record->easy, CURLOPT_USERNAME, username)));
+    if (!status)
+        status = map_curl(CURL_ON_OWNER(loop, curl_easy_setopt(record->easy, CURLOPT_PASSWORD, password)));
+    volatile char *wipe = password;
+    for (size_t i = 0; i < sizeof(password); ++i)
+        wipe[i] = 0;
+    if (!status)
+        record->aws_v4 = true;
+    return status;
+}
+
 int flint_http_header(flint_curl_loop *loop, uint64_t request_id, const char *key, size_t key_length,
                       const char *value, size_t value_length)
 {
@@ -802,7 +857,8 @@ int flint_http_header(flint_curl_loop *loop, uint64_t request_id, const char *ke
         || value_length >= MAX_REQUEST_HEADER_BYTES
         || key_length + value_length + 2 > MAX_REQUEST_HEADER_BYTES - record->request_headers_bytes)
         return FLINT_HTTP_EXHAUSTED;
-    if (!valid_header(key, key_length, value, value_length))
+    if (!valid_header(key, key_length, value, value_length)
+        || (record->aws_v4 && key_is(key, key_length, "Authorization")))
         return FLINT_HTTP_ARGUMENT;
 
     const size_t total = key_length + value_length + 1;

@@ -202,6 +202,12 @@ nothrow @nogc:
                 if (added.code != Status.ok)
                     return failed(added);
             }
+            if (request.finalField.name.length)
+            {
+                const added = client.bridge.header(id, request.finalField.name, request.finalField.value);
+                if (added.code != Status.ok)
+                    return failed(added);
+            }
             const prepared = client.activate(id, context);
             if (prepared.code != Status.ok)
                 return failed(prepared);
