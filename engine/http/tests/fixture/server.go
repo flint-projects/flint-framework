@@ -244,6 +244,13 @@ func main() {
 	mux.HandleFunc("/zero", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
+	// An origin whose replies take longer than a loopback round trip, as across a LAN or the internet.
+	// An idle Go runtime rounds a short sleep up to a millisecond, so wait on the clock instead.
+	mux.HandleFunc("/delayed", func(w http.ResponseWriter, _ *http.Request) {
+		for started := time.Now(); time.Since(started) < 300*time.Microsecond; {
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("/bytes", func(w http.ResponseWriter, r *http.Request) {
 		n, err := strconv.Atoi(r.URL.Query().Get("n"))
 		if err != nil || n < 0 {

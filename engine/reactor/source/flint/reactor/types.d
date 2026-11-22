@@ -148,6 +148,24 @@ struct WorkerStats
     uint outstandingOperations;
 }
 
+/// A handle that lets a completion on the owner loop resume one suspended task fiber. The
+/// generation changes whenever the fiber slot is reused, so a handle outliving its task is rejected.
+struct TaskWaker
+{
+    /// Loop that owns the fiber.
+    uint ownerCore = uint.max;
+    /// Fiber slot in the owner's pool.
+    uint slot;
+    /// Lifetime of the task in that slot. Zero marks an empty handle.
+    ulong generation;
+
+    /// Whether this handle names a task, live or retired.
+    bool valid() const pure nothrow @nogc
+    {
+        return generation != 0;
+    }
+}
+
 /// One posted task's copied identity and cancellation context.
 struct TaskContext
 {

@@ -83,6 +83,8 @@ static void *wrong_owner(void *context)
     uint64_t id = 0;
     assert(flint_http_begin(loop, "http://localhost/", 17, FLINT_HTTP_GET, 0, &id) == FLINT_HTTP_CONFLICT);
     assert(flint_http_due(loop) == FLINT_HTTP_CONFLICT);
+    uint64_t remaining = 7;
+    assert(flint_http_timer(loop, &remaining) == FLINT_HTTP_CONFLICT && remaining == 7);
     flint_curl_free(loop);
     return NULL;
 }
@@ -180,6 +182,10 @@ static void cancel_paused(flint_curl_loop *loop, const char *origin, const char 
 static void complete_stream(flint_curl_loop *loop, const char *url, size_t expected)
 {
     const uint64_t handle = start(loop, url, 1);
+    // A running transfer always holds a libcurl timer, at least its connect deadline.
+    uint64_t remaining = UINT64_MAX;
+    assert(flint_http_timer(loop, &remaining) == FLINT_HTTP_OK && remaining != UINT64_MAX);
+    assert(flint_http_timer(loop, NULL) == FLINT_HTTP_ARGUMENT);
     size_t received = 0;
     for (unsigned tries = 0; tries < 10000; ++tries) {
         flint_http_view view;

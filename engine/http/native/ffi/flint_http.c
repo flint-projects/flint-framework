@@ -1137,6 +1137,22 @@ int flint_http_due(flint_curl_loop *loop)
         ? flint_curl_timeout(loop) : FLINT_HTTP_OK;
 }
 
+int flint_http_timer(flint_curl_loop *loop, uint64_t *remaining_ms)
+{
+    const int owner = owner_status(loop);
+    if (owner)
+        return owner;
+    if (!remaining_ms)
+        return FLINT_HTTP_ARGUMENT;
+    if (!loop->timer_pending) {
+        *remaining_ms = UINT64_MAX;
+        return FLINT_HTTP_OK;
+    }
+    const uint64_t now = clock_ms();
+    *remaining_ms = now >= loop->timer ? 0 : loop->timer - now;
+    return FLINT_HTTP_OK;
+}
+
 int flint_curl_cancel(flint_curl_loop *loop, uint64_t request_id)
 {
     const int owner = owner_status(loop);

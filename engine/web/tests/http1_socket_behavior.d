@@ -1,6 +1,6 @@
 module flint.web.http1_socket_behavior;
 
-import core.time : MonoTime, dur;
+import core.time : Duration, MonoTime, dur;
 import flint.arena : Buffer, Error, Result, Status;
 import flint.conc : Context, Deadline;
 import flint.web.runtime : Server;
@@ -393,6 +393,75 @@ unittest
     const elapsed = MonoTime.currTime - started;
     // Each round trip waits for one receive and one send completion: 1 ms polls need over 200 ms.
     assertWallClock(elapsed < dur!"msecs"(100), "200 echo round trips took " ~ elapsed.toString() ~ " against 100 ms");
+}
+
+/// User plus system CPU time of the whole test process.
+// SAFETY: getrusage writes only the local rusage it is given and retains no pointer to it.
+private Duration processCpu() @trusted
+{
+    import core.sys.posix.sys.resource : getrusage, rusage, RUSAGE_SELF;
+
+    rusage usage;
+    assert(getrusage(RUSAGE_SELF, &usage) == 0);
+    return dur!"seconds"(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + dur!"usecs"(
+            usage.ru_utime.tv_usec + usage.ru_stime.tv_usec);
+}
+
+@("HTTP/1 upgraded echoes from a peer slower than 200 µs are neither paced by a 1 ms poll nor spun for")
+unittest
+{
+    import core.thread : Thread;
+
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    socket.setOption(SocketOptionLevel.TCP, SocketOption.TCP_NODELAY, true);
+    sendAll(socket, "GET /echo HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: flint-echo\r\n\r\n");
+    char[] pending;
+    string head;
+    readResponse(socket, pending, head);
+    assert(head.length >= 12 && head[0 .. 12] == "HTTP/1.1 101", head);
+    enum rounds = 200;
+    Duration[rounds] replies;
+    char[16] reply;
+    const cpuBefore = processCpu();
+    const started = MonoTime.currTime;
+    foreach (round; 0 .. rounds)
+    {
+        // The handler has been waiting for this message for longer than the former 200 µs spin window,
+        // as it would behind a LAN or internet round trip.
+        Thread.sleep(dur!"usecs"(300));
+        const sent = MonoTime.currTime;
+        sendAll(socket, "0123456789abcdef");
+        size_t have;
+        while (have < reply.length)
+        {
+            const count = receiveSome(socket, reply[have .. $]);
+            assert(count > 0);
+            have += count;
+        }
+        replies[round] = MonoTime.currTime - sent;
+        assert(reply[] == "0123456789abcdef");
+    }
+    const elapsed = MonoTime.currTime - started;
+    const cpu = processCpu() - cpuBefore;
+    foreach (index; 1 .. rounds)
+        for (size_t at = index; at > 0 && replies[at] < replies[at - 1]; --at)
+        {
+            const swap = replies[at];
+            replies[at] = replies[at - 1];
+            replies[at - 1] = swap;
+        }
+    const median = replies[rounds / 2];
+    // A 1 ms poll answers each message at the next poll, roughly 0.8 ms after it arrives.
+    assertWallClock(median < dur!"usecs"(250), "median delayed echo took " ~ median.toString() ~ " against 250 µs");
+    // Spinning for 200 µs of every wait costs at least 40 ms of CPU over these rounds.
+    assertWallClock(cpu < dur!"msecs"(30),
+            "delayed echoes used " ~ cpu.toString() ~ " of CPU in " ~ elapsed.toString() ~ " against 30 ms");
 }
 
 /// Return a response field's value, matching the name case-insensitively.

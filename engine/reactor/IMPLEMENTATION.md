@@ -2,6 +2,8 @@
 
 The reactor reserves connection slots, operation buffers, timers and a task fiber pool before admitting work. Each connection and fiber stays on its owning loop. Slot generations identify connections and operations across reuse. Timeouts and cancellation select an outcome without retiring buffers early. A read the kernel completed with data before its cancellation took effect is delivered as a successful completion with that data on both io_uring and epoll; a read that ends without data stays cancelled or timed out (ADR-017 decision 7). Writes copy scoped caller bytes into an operation slot. Reads expose received bytes only for the duration of their completion callback.
 
+A task fiber that waits for progress registers a `TaskWaker` from `currentWaker()`. The completion, timer or task that makes progress calls `wake` on the same loop, and the loop resumes the fiber on its next pass instead of at the yield deadline. Generations reject handles from finished tasks. `yieldUntil(deadline, watched)` adds a caller context to the per-pass cancellation check (`tests/wake.d`).
+
 Linux automatic mode probes the pinned liburing provider and selects epoll if io_uring is unavailable or denied. Explicit io_uring selection reports the failed capability. Each loop processes bounded callback batches, records its preferred CPU and reports allocator and OS counters after shutdown.
 
 Run the Linux package checks with the pinned toolchains.

@@ -6,7 +6,8 @@ import core.lifetime : move;
 import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Completion, CompletionDelegate, ConnectionId, IoId, Reactor, TaskContext, TaskDelegate;
+import flint.reactor : Completion, CompletionDelegate, ConnectionId, IoId, Reactor, TaskContext,
+    TaskDelegate, TaskWaker;
 import flint.web.dispatch : executeMatched, executeStream, failureResponse, liveBody, lookupRoute;
 import flint.web.ffi.http2 : H2Chunk, H2Event, H2Output, H2Session, deferOutput, holdStreamCredit;
 import flint.web.http1 : Http1Reader;
@@ -14,7 +15,7 @@ import flint.web.router : Match, RouteTable;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamToken;
 import flint.web.stream_queues : StreamQueues;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
-import flint.web.transport : TlsTransport, closePlain, readPlain, streamClock, streamWake;
+import flint.web.transport : TlsTransport, awaitStream, closePlain, readPlain, wakeStream;
 import flint.web.types : HeaderRecord, Method, RequestContext, Response, ServerOptions, maximumFields;
 import flint.web.wire : allowBytes, formatAllow, httpDate, responseCode, validMediaType;
 
@@ -86,6 +87,8 @@ private struct Stream
     ubyte[] memory;
     Buffer response;
     size_t offset;
+    /// The stream's handler fiber while it waits for input, output credit or the stream's end.
+    TaskWaker waiter;
 
     void execute() nothrow @nogc
     {
@@ -279,6 +282,8 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         auto stream = streamFor(connection, number);
         if (stream is null)
             return Protocol.ok;
+        // Every remaining event changes input, reset or close state that a waiting handler re-checks.
+        wakeStream(stream.waiter);
 
         if (event == H2Event.reset)
         {
@@ -605,10 +610,9 @@ package(flint.web) final class H2Driver() : StreamEndpoint
             return Result!size_t(0, unavailable());
         if (!stream.duplex || output.length == 0)
             return Result!size_t(0, Error(Status.invalidArgument, "HTTP/2 receive requires a duplex stream"));
-        const started = streamClock();
         while (stream.queues.inbound == 0 && !stream.inputEnded)
         {
-            const resumed = waitForStream(stream, context, started);
+            const resumed = waitForStream(stream, context);
             if (resumed.code != Status.ok)
                 return Result!size_t(0, resumed);
         }
@@ -639,10 +643,9 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         size_t offset;
         while (offset < bytes.length)
         {
-            const started = streamClock();
             while (stream.queues.outbound != 0)
             {
-                const available = waitForStream(stream, context, started);
+                const available = waitForStream(stream, context);
                 if (available.code != Status.ok)
                     return available;
             }
@@ -707,14 +710,15 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         return Error.init;
     }
 
-    private Error waitForStream(scope Stream* stream, ref scope const Context context, long started) scope nothrow @nogc
+    /// Stream events, output drained by `copyBody` and connection abort wake the waiting handler.
+    private Error waitForStream(scope Stream* stream, ref scope const Context context) scope nothrow @nogc
     {
         const checked = context.check();
         if (checked.code != Status.ok)
             return checked;
         if (stream.providerClosed)
             return unavailable();
-        return Reactor.current().yieldUntil(streamWake(started, context.deadline()));
+        return awaitStream(stream.waiter, context);
     }
 
     private bool discard(Session* connection, Stream* stream) nothrow @nogc
@@ -761,6 +765,8 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         if (stream.incremental)
         {
             const count = stream.queues.send(output);
+            if (count != 0)
+                wakeStream(stream.waiter);
             const ending = stream.finishedOutput && stream.queues.outbound == 0;
             return H2Chunk(count != 0 || ending ? cast(ptrdiff_t) count : deferOutput, ending);
         }
@@ -905,7 +911,10 @@ package(flint.web) final class H2Driver() : StreamEndpoint
             foreach (index; connection.streams[0 .. options.maxStreamsPerConnection])
             {
                 if (index != 0)
+                {
                     streams[index - 1].cancel.cancel();
+                    wakeStream(streams[index - 1].waiter);
+                }
             }
             if (connection.draining || (tls !is null && connection.writeActive))
                 closePlain(tls, connection.id);
@@ -966,6 +975,7 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         stream.finishedOutput = false;
         stream.queues.clear();
         stream.response = Buffer.init;
+        stream.waiter = TaskWaker.init;
         stream.number = 0;
         stream.connection = ConnectionId.init;
     }

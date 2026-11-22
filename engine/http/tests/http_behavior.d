@@ -595,6 +595,89 @@ version (FlintNativeCurl)
         assertWallClock(average < 1_000_000, average.to!string ~ " ns per exchange against 1000000 ns");
     }
 
+    private final class Delayed
+    {
+        HttpClient transport;
+        HttpRequest request;
+        long[100] replies;
+        long cpuNanos;
+        uint completed;
+    }
+
+    private shared Delayed activeDelayed;
+
+    // SAFETY: The harness publishes one live fixture before starting the sole worker; the
+    // worker has exclusive access until the main thread joins it and withdraws publication.
+    private Delayed delayedFixture() @trusted nothrow @nogc
+    {
+        return cast(Delayed) activeDelayed;
+    }
+
+    private void delayedExchanges() nothrow @nogc
+    {
+        import core.time : MonoTime;
+
+        auto owner = Reactor.current();
+        auto fixture = delayedFixture();
+        ubyte[4096] memory;
+        auto arena = RequestArena(memory[]);
+        auto deadline = CancelSource.create(Context.init, Deadline.afterMillis(10_000));
+        assert(deadline.ok);
+        auto context = deadline.value.context();
+        // The first exchange opens the reused connection; only later exchanges are timed.
+        foreach (round; 0 .. fixture.replies.length + 1)
+        {
+            const started = MonoTime.currTime;
+            const response = fixture.transport.send(fixture.request, arena, context);
+            assert(response.ok && response.value.status == 204, response.error.message);
+            assert(arena.reset() == Status.ok);
+            if (round != 0)
+                fixture.replies[round - 1] = (MonoTime.currTime - started).total!"nsecs";
+            ++fixture.completed;
+        }
+        assert(fixture.transport.close().code == Status.ok);
+        owner.stop();
+    }
+
+    @("reactor-fiber exchanges with an origin slower than 200 µs are neither paced by a 1 ms poll nor spun for")
+    @system unittest
+    {
+        if (!setting("HTTP").length)
+            return;
+        ReactorOptions reactors;
+        reactors.cores = 1;
+        reactors.fiberPoolSize = 4;
+        auto loop = Reactor.create(reactors);
+        assert(loop.ok, loop.error.message);
+        auto fixture = new Delayed;
+        assert(fixture.transport.open(ClientOptions.init).code == Status.ok);
+        fixture.request = HttpRequest(HttpMethod.get, setting("HTTP") ~ "/delayed");
+        activeDelayed = cast(shared) fixture;
+        scope (exit)
+            activeDelayed = null;
+        assert(loop.value.post(0, &delayedExchanges, TaskContext(1)).code == Status.ok);
+        const ended = loop.value.run();
+        assert(ended.code == Status.ok, ended.message);
+        assert(fixture.completed == fixture.replies.length + 1);
+        long[100] sorted = fixture.replies;
+        foreach (index; 1 .. sorted.length)
+            for (size_t at = index; at > 0 && sorted[at] < sorted[at - 1]; --at)
+            {
+                const swap = sorted[at];
+                sorted[at] = sorted[at - 1];
+                sorted[at - 1] = swap;
+            }
+        const median = sorted[sorted.length / 2];
+        const stats = loop.value.workerStats(0);
+        assert(stats.ok);
+        // The origin answers after 300 µs. A 1 ms poll resumes the fiber only at its next poll, after
+        // the former 200 µs spin, so a reply surfaces about 1.2 ms after its request.
+        assertWallClock(median < 800_000, median.to!string ~ " ns median exchange against 800000 ns");
+        // Spinning for 200 µs of each wait costs at least 20 ms of worker CPU over 100 exchanges.
+        assertWallClock(stats.value.cpuNanos < 15_000_000,
+                stats.value.cpuNanos.to!string ~ " ns of worker CPU against 15000000 ns");
+    }
+
     private final class Stages
     {
         HttpClient transport;

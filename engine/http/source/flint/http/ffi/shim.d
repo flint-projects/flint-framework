@@ -87,6 +87,7 @@ extern (C) private @system nothrow @nogc
     int flint_http_release(NativeLoop* loop, ulong id);
     int flint_http_watch_snapshot(NativeLoop* loop, NativeWatch* output, size_t length, ulong* revision, size_t* count);
     int flint_http_due(NativeLoop* loop);
+    int flint_http_timer(NativeLoop* loop, ulong* remainingMs);
     int flint_http_poll(NativeLoop* loop, uint maxWaitMs);
     int flint_curl_socket(NativeLoop* loop, ptrdiff_t fd, int events);
     void flint_curl_free(NativeLoop* loop);
@@ -412,6 +413,14 @@ package(flint.http) struct Bridge
     package(flint.http) Error due() nothrow @nogc
     {
         return nativeError(invoke!flint_http_due(loop));
+    }
+
+    /// Milliseconds until libcurl's pending timer is due, zero when overdue, or ulong.max when none is set.
+    package(flint.http) Result!ulong timer() nothrow @nogc
+    {
+        ulong remaining = ulong.max;
+        const status = invoke!flint_http_timer(loop, &remaining);
+        return Result!ulong(remaining, nativeError(status));
     }
 
     package(flint.http) Error poll(uint maxWaitMs) nothrow @nogc

@@ -15,7 +15,7 @@ import flint.reactor.sys.workers : availableCpus, joinWorker, pinWorker, startWo
 
 public import flint.reactor.types : AcceptDelegate, AcceptFn, Backend, Completion, CompletionDelegate, CompletionFn,
     ConnectionId, IoId, ListenOptions, NativeInterest, NativeReadyFn, ReadDelegate, ReactorOptions,
-    ReadFn, TaskContext, TaskDelegate, TaskFn, TimerId, WorkerStats;
+    ReadFn, TaskContext, TaskDelegate, TaskFn, TaskWaker, TimerId, WorkerStats;
 
 @safe:
 
@@ -360,12 +360,53 @@ struct Reactor
         return runtime.workers[currentWorkerIndex].activeTask();
     }
 
-    /// Yield only from a task fiber. The same owner resumes it on deadline, cancellation, or shutdown.
+    /// Yield only from a task fiber. The same owner resumes it on deadline, `wake`, cancellation, or shutdown.
     Error yieldUntil(Deadline deadline) nothrow @nogc
     {
         if (runtime is null || currentRuntime !is runtime)
             return Error(Status.notFound, "no active fiber");
         return runtime.workers[currentWorkerIndex].yieldTask(deadline);
+    }
+
+    /// Yield like `yieldUntil`, and also resume as soon as the owner loop observes `watched` cancelled or
+    /// expired. Use it when the wait belongs to a context other than the task's own.
+    Error yieldUntil(Deadline deadline, ref scope const Context watched) nothrow @nogc
+    {
+        if (runtime is null || currentRuntime !is runtime)
+            return Error(Status.notFound, "no active fiber");
+        const early = watched.check();
+        if (early.code != Status.ok)
+            return early;
+        if (watched.deadline().monotonicNanoseconds < deadline.monotonicNanoseconds)
+            deadline = watched.deadline();
+        auto worker = &runtime.workers[currentWorkerIndex];
+        if (worker.activeFiber == noSlot)
+            return Error(Status.notFound, "no active fiber");
+        worker.fibers[worker.activeFiber].watched = watched;
+        worker.fibers[worker.activeFiber].watching = true;
+        const outcome = worker.yieldTask(deadline);
+        // The same worker owns the slot after resumption; release the retained cancellation identity.
+        worker.fibers[worker.activeFiber].watched = Context.init;
+        worker.fibers[worker.activeFiber].watching = false;
+        return outcome.code == Status.ok ? watched.check() : outcome;
+    }
+
+    /// A handle that resumes the active fiber from a later callback on this loop.
+    Result!TaskWaker currentWaker() const nothrow @nogc
+    {
+        if (runtime is null || currentRuntime !is runtime)
+            return Result!TaskWaker(TaskWaker.init, Error(Status.notFound, "no active fiber"));
+        return runtime.workers[currentWorkerIndex].activeWaker();
+    }
+
+    /// Mark a suspended fiber due, so the owner's next pass resumes it before blocking. Waking a running
+    /// or already due fiber is a no-op, so waiters re-check their condition before they yield. A handle
+    /// whose task ended is rejected with `notFound`. Callable only on the owner loop.
+    Error wake(TaskWaker waker) nothrow @nogc
+    {
+        if (runtime is null || currentRuntime !is runtime || waker.ownerCore != currentWorkerIndex)
+            return Error(Status.invalidArgument, "fiber wake requires its owner loop");
+        return runtime.workers[currentWorkerIndex].wakeTask(waker);
     }
 
     /// Create or update a Linux watch on the current worker. The caller keeps ownership of fd and
@@ -629,6 +670,11 @@ private struct FiberTask
     TaskDelegate boundTask;
     TaskContext context;
     Deadline wake;
+    /// Lifetime of the occupying task for `TaskWaker`, or zero while free.
+    ulong generation;
+    /// A caller context that also ends the current yield, valid while `watching`.
+    Context watched;
+    bool watching;
     uint next;
     /// Position in the worker's suspended list, or noSlot while free or running.
     uint suspendedAt = noSlot;
@@ -676,6 +722,8 @@ private struct Worker
     long acceptResumeAt;
     /// Earliest wake of a suspended fiber, long.min when one may be due, or long.max when none waits.
     long nextWake = long.max;
+    /// Last task lifetime issued on this worker.
+    ulong taskGeneration;
 
     version (Posix) Readiness readiness;
 
@@ -755,6 +803,26 @@ private struct Worker
         return Result!TaskContext(fibers[activeFiber].context);
     }
 
+    Result!TaskWaker activeWaker() const nothrow @nogc
+    {
+        if (activeFiber == noSlot)
+            return Result!TaskWaker(TaskWaker.init, Error(Status.notFound, "no active fiber"));
+        return Result!TaskWaker(TaskWaker(index, activeFiber, fibers[activeFiber].generation));
+    }
+
+    Error wakeTask(TaskWaker waker) nothrow @nogc
+    {
+        if (waker.generation == 0 || waker.slot >= fibers.length || fibers[waker.slot].generation != waker.generation)
+            return Error(Status.notFound, "fiber task already ended");
+        auto task = &fibers[waker.slot];
+        // A running fiber re-checks its condition before yielding; a due one is already resumable.
+        if (waker.slot == activeFiber || task.suspendedAt == noSlot)
+            return Error.init;
+        task.wake = Deadline(long.min);
+        nextWake = long.min;
+        return Error.init;
+    }
+
     Error yieldTask(Deadline deadline) nothrow @nogc
     {
         if (activeFiber == noSlot)
@@ -795,6 +863,7 @@ private struct Worker
         task.boundTask = message.boundTask;
         task.invokeIfCancelled = message.invokeIfCancelled;
         task.context = move(message.context);
+        task.generation = ++taskGeneration;
         ++activeFiberCount;
         resumeTask(slot);
     }
@@ -828,6 +897,7 @@ private struct Worker
             task.task = null;
             task.boundTask = null;
             task.context = TaskContext.init;
+            task.generation = 0;
             task.next = freeFiber;
             freeFiber = slot;
             --activeFiberCount;
@@ -854,7 +924,8 @@ private struct Worker
             const slot = suspended[position];
             auto task = &fibers[slot];
             if (stopping || task.wake.monotonicNanoseconds <= now.monotonicNanoseconds
-                    || task.context.cancellation.statusAt(now.monotonicNanoseconds) != Status.ok)
+                    || task.context.cancellation.statusAt(now.monotonicNanoseconds) != Status.ok
+                    || (task.watching && task.watched.statusAt(now.monotonicNanoseconds) != Status.ok))
             {
                 resumeTask(slot);
                 ++used;

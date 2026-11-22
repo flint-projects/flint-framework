@@ -8,7 +8,7 @@ import core.time : MonoTime, dur, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
 import flint.reactor : AcceptDelegate, Completion, CompletionDelegate, ConnectionId, ListenOptions,
-    ReadDelegate, Reactor, ReactorOptions, TaskContext, TaskDelegate;
+    ReadDelegate, Reactor, ReactorOptions, TaskContext, TaskDelegate, TaskWaker;
 import flint.web.dispatch : executeMatched, executeStream, failureResponse, lookupRoute;
 import flint.web.http2 : H2Runtime;
 import flint.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
@@ -16,7 +16,7 @@ import flint.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
 import flint.web.sys.ownership : launchDriver, releaseBytes, releaseConnectionSlots,
     reserveConnectionSlots, reserveH1;
-import flint.web.transport : TlsTransport, closePlain, readPlain, streamClock, streamWake, writePlain;
+import flint.web.transport : TlsTransport, awaitStream, closePlain, readPlain, wakeStream, writePlain;
 import flint.web.types : ErrorAdvice, Handler, Method, RequestContext, Response, RouteRegistration, ServerOptions;
 import flint.web.worker : WorkerLifecycle;
 import flint.web.wire : responseCode, validMediaType, writeChunk, writeHeader, writeStreamHeader;
@@ -81,6 +81,8 @@ private struct Connection
     string replyType;
     size_t bodySent;
     size_t writeBytes;
+    /// The streaming handler fiber while it waits for a read, write or close.
+    TaskWaker streamWaiter;
 
     void runHandler() nothrow @nogc
     {
@@ -613,6 +615,7 @@ private final class RuntimeDriver() : StreamEndpoint
         if (connection is null || connection.id != completion.connection || !connection.readActive)
             return;
         connection.readActive = false;
+        wakeStream(connection.streamWaiter);
         if (completion.status == Status.ok && bytes.length == 0 && halfClosed(connection))
             return;
         if (connection.closing || completion.status != Status.ok || bytes.length == 0 || requestCancelled(connection))
@@ -836,10 +839,9 @@ private final class RuntimeDriver() : StreamEndpoint
             return Result!size_t(0, streamUnavailable());
         if (!connection.streamRaw || output.length == 0)
             return Result!size_t(0, Error(Status.invalidArgument, "raw HTTP/1 stream receive requires an upgrade"));
-        const started = streamClock();
         while (connection.pendingCount == 0 && !connection.closing)
         {
-            const ready = waitForStream(context, started);
+            const ready = waitForStream(connection, context);
             if (ready.code != Status.ok)
                 return Result!size_t(0, ready);
         }
@@ -918,10 +920,9 @@ private final class RuntimeDriver() : StreamEndpoint
         const checked = context.check();
         if (checked.code != Status.ok)
             return checked;
-        const interim = streamClock();
         while (connection.continuing && connection.writeActive && !connection.closing)
         {
-            const resumed = waitForStream(context, interim);
+            const resumed = waitForStream(connection, context);
             if (resumed.code != Status.ok)
             {
                 close(connection);
@@ -937,10 +938,9 @@ private final class RuntimeDriver() : StreamEndpoint
             close(connection);
             return Error(Status.ioError, "unable to write HTTP stream bytes");
         }
-        const started = streamClock();
         while (connection.writeActive && !connection.closing)
         {
-            const resumed = waitForStream(context, started);
+            const resumed = waitForStream(connection, context);
             if (resumed.code != Status.ok)
             {
                 close(connection);
@@ -951,12 +951,13 @@ private final class RuntimeDriver() : StreamEndpoint
     }
     // dfmt on
 
-    private Error waitForStream(ref scope const Context context, long started) scope nothrow @nogc
+    /// Read and write completions and `close` wake the waiting handler fiber.
+    private Error waitForStream(scope Connection* connection, ref scope const Context context) scope nothrow @nogc
     {
         const checked = context.check();
         if (checked.code != Status.ok)
             return checked;
-        return reactor.yieldUntil(streamWake(started, context.deadline()));
+        return awaitStream(connection.streamWaiter, context);
     }
 
     /// Lock-free test for a closing connection or stopping server. The connection source has no deadline
@@ -1071,6 +1072,7 @@ private final class RuntimeDriver() : StreamEndpoint
         if (connection is null || connection.id != completion.connection || !connection.writeActive)
             return;
         connection.writeActive = false;
+        wakeStream(connection.streamWaiter);
         const interim = connection.continuing;
         connection.continuing = false;
         if (connection.closing || completion.status != Status.ok
@@ -1132,6 +1134,7 @@ private final class RuntimeDriver() : StreamEndpoint
 
     private void close(scope Connection* connection) scope nothrow @nogc
     {
+        wakeStream(connection.streamWaiter);
         if (!connection.closing)
         {
             connection.closing = true;
@@ -1171,6 +1174,7 @@ private final class RuntimeDriver() : StreamEndpoint
         connection.streamStarted = false;
         connection.streamEnded = false;
         connection.streamRaw = false;
+        connection.streamWaiter = TaskWaker.init;
         connection.id = ConnectionId.init;
     }
 }

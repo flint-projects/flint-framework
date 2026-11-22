@@ -157,6 +157,8 @@ int flint_http_release(flint_curl_loop *loop, uint64_t request_id);
 int flint_http_watch_snapshot(flint_curl_loop *loop, flint_http_watch *output, size_t capacity,
                                uint64_t *revision, size_t *count);
 int flint_http_due(flint_curl_loop *loop);
+/* Milliseconds until libcurl's pending timer is due, 0 when overdue, UINT64_MAX when none is set. */
+int flint_http_timer(flint_curl_loop *loop, uint64_t *remaining_ms);
 int flint_http_poll(flint_curl_loop *loop, uint32_t max_wait_ms);
 
 #ifdef __cplusplus

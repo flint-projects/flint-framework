@@ -2,13 +2,12 @@
 module flint.http.client;
 
 import core.atomic : atomicLoad, atomicOp, cas;
-import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Context, Deadline;
 import flint.http.ffi.shim : Bridge, NativeWatch, StreamView;
 import flint.http.types : ChunkConsumer, ClientOptions, DestinationPolicy, Header, HttpMethod,
     HttpRequest, HttpRequestView, HttpResponse, HttpStreamOptions;
-import flint.reactor : NativeInterest, NativeReadyFn, Reactor;
+import flint.reactor : NativeInterest, NativeReadyFn, Reactor, TaskWaker;
 
 @safe:
 
@@ -33,6 +32,7 @@ struct HttpClient
         const capacity = options.maxConnections * 6 + 16;
         opened.snapshot = new NativeWatch[capacity];
         opened.applied = new NativeWatch[capacity];
+        opened.waiters = new Waiter[options.maxConnections * waitersPerConnection + 16];
         opened.policy = options.destinationPolicy;
         opened.readyCallback = &opened.ready;
         const status = opened.bridge.open(options);
@@ -116,6 +116,7 @@ nothrow @nogc:
             return Result!HttpStream(HttpStream.init, started);
         published = true;
         ++client.inFlight;
+        client.syncTimer();
         return Result!HttpStream(HttpStream(client, id, context));
     }
 
@@ -261,7 +262,8 @@ nothrow @nogc:
     {
         if (output.length == 0)
             return Result!size_t(0, Error(Status.invalidArgument, "HTTP stream receive buffer is empty"));
-        const started = waitClock();
+        scope (exit)
+            settle();
         for (;;)
         {
             const live = progress(context);
@@ -270,7 +272,7 @@ nothrow @nogc:
             const read = state.bridge.streamRead(id, output);
             if (read.error.code != Status.unavailable)
                 return read;
-            const waited = state.wait(started);
+            const waited = state.wait(context);
             if (waited.code != Status.ok)
                 return Result!size_t(0, waited);
         }
@@ -280,7 +282,8 @@ nothrow @nogc:
     Error send(scope const(ubyte)[] input, ref scope const Context context) scope
     {
         size_t first;
-        auto started = waitClock();
+        scope (exit)
+            settle();
         do
         {
             const live = progress(context);
@@ -292,13 +295,12 @@ nothrow @nogc:
                 if (sent.value == 0)
                     return Error(Status.ioError, "HTTP stream returned an empty write");
                 first += sent.value;
-                started = waitClock();
             }
             else if (sent.error.code != Status.unavailable)
                 return sent.error;
             if (first < input.length)
             {
-                const waited = state.wait(started);
+                const waited = state.wait(context);
                 if (waited.code != Status.ok)
                     return waited;
             }
@@ -311,6 +313,8 @@ nothrow @nogc:
     Error finishSend(ref scope const Context context) scope
     {
         const live = progress(context);
+        scope (exit)
+            settle();
         return live.code == Status.ok ? state.bridge.finishStreamSend(id) : live;
     }
 
@@ -333,13 +337,7 @@ nothrow @nogc:
         if (retired.code != Status.ok && retired.code != Status.notFound)
             return retired;
         if (retired.code == Status.ok)
-        {
-            --state.inFlight;
-            if (state.inFlight == 0)
-                state.clearWatches();
-            else
-                state.refreshWatches();
-        }
+            state.transferRetired();
         state = null;
         id = 0;
         lifetime = Context.init;
@@ -360,9 +358,17 @@ nothrow @nogc:
         return driven.code == Status.ok ? state.bridge.streamView(id).error : driven;
     }
 
+    /// A fiber's own calls can move libcurl's timer ahead of the wake another waiting fiber expects.
+    private void settle() scope
+    {
+        if (state !is null)
+            state.syncTimer();
+    }
+
     private Result!StreamView fields(bool terminal, ref scope const Context context) scope
     {
-        const started = waitClock();
+        scope (exit)
+            settle();
         for (;;)
         {
             const live = progress(context);
@@ -374,7 +380,7 @@ nothrow @nogc:
             if (snapshot.complete)
                 return Result!StreamView(StreamView.init, Error(Status.unavailable,
                         "HTTP peer omitted the response head"));
-            const waited = state.wait(started);
+            const waited = state.wait(context);
             if (waited.code != Status.ok)
                 return Result!StreamView(StreamView.init, waited);
         }
@@ -396,6 +402,11 @@ private final class ClientState
     ulong watchRevision;
     uint inFlight;
     Error driverFault;
+    /// Fibers suspended in `wait` on this owner, with the deadline each wakes at unprompted.
+    Waiter[] waiters;
+    size_t waiterCount;
+    /// Earliest unprompted wake among `waiters`, or long.max while none waits.
+    long earliestWake = long.max;
 
 nothrow @nogc:
 
@@ -460,13 +471,13 @@ nothrow @nogc:
             clearWatches();
         else
             refreshWatches();
+        syncTimer();
     }
 
     Result!HttpResponse run(ulong id, ref scope RequestArena arena, ref Context context,
             scope ChunkConsumer consume, uint chunkBudget)
     {
         uint sentChunks;
-        auto started = waitClock();
         while (true)
         {
             const progress = drive(context);
@@ -480,7 +491,6 @@ nothrow @nogc:
                 const delivery = deliver(id, context, consume);
                 if (delivery.code != Status.ok)
                     return failed(delivery);
-                started = waitClock();
                 if (++sentChunks < chunkBudget)
                     continue;
                 sentChunks = 0;
@@ -496,7 +506,7 @@ nothrow @nogc:
                 continue;
             }
 
-            const waited = wait(started);
+            const waited = wait(context);
             if (waited.code != Status.ok)
                 return failed(waited);
         }
@@ -509,10 +519,16 @@ nothrow @nogc:
             return valid;
         if (driverFault.code != Status.ok)
             return driverFault;
+        const timer = bridge.timer();
+        if (!timer.ok())
+            return timer.error;
         const due = bridge.due();
         if (due.code != Status.ok)
             return due;
         refreshWatches();
+        // A timer that fired here may have advanced or completed another fiber's transfer.
+        if (timer.value == 0)
+            wakeWaiters();
         return driverFault;
     }
 
@@ -534,20 +550,82 @@ nothrow @nogc:
         return live.code == Status.ok ? bridge.follow(id) : live;
     }
 
-    /// Native readiness callbacks advance libcurl on the loop but cannot resume this fiber, and the
-    /// reactor rounds fiber deadlines up to whole milliseconds. Resume on every loop pass for a short
-    /// window after the last progress, which covers loopback and LAN exchanges, then poll each 1 ms.
-    Error wait(long started) scope
+    /// Suspend the calling fiber until libcurl may have progress for it: a native readiness callback,
+    /// a timer fired by another fiber, or another fiber's call that moves libcurl's timer earlier wakes
+    /// it through `wakeWaiters`, and it sleeps no later than libcurl's own next timer. The owner loop
+    /// also observes `context` on every pass. Off a reactor the caller's thread polls libcurl directly.
+    Error wait(ref scope const Context context) scope
     {
-        enum spinNanos = 200_000;
         auto reactor = Reactor.current();
         if (reactor.currentCore() == uint.max)
             return bridge.poll(5);
-        const now = waitClock();
-        const slept = reactor.yieldUntil(now - started < spinNanos ? Deadline(now) : Deadline.afterMillis(1));
+        const waker = reactor.currentWaker();
+        if (!waker.ok())
+            return waker.error;
+        // Calls this fiber made since its last wait may have moved the timer ahead of another waiter.
+        syncTimer();
+        const timer = bridge.timer();
+        if (!timer.ok())
+            return timer.error;
+        auto wake = Deadline.afterMillis(fallbackMillis);
+        if (timer.value < fallbackMillis)
+            wake = Deadline.afterMillis(timer.value);
+        if (waiterCount == waiters.length)
+        {
+            // More fibers wait than the provisioned list holds; this one polls as before the list existed.
+            const poll = Deadline.afterMillis(1);
+            if (poll.monotonicNanoseconds < wake.monotonicNanoseconds)
+                wake = poll;
+        }
+        else
+        {
+            waiters[waiterCount++] = Waiter(waker.value, wake.monotonicNanoseconds);
+            if (wake.monotonicNanoseconds < earliestWake)
+                earliestWake = wake.monotonicNanoseconds;
+        }
+        const slept = reactor.yieldUntil(wake, context);
+        leave(waker.value);
         if (slept.code == Status.unavailable)
             return Error(Status.cancelled, "HTTP transfer cancelled by reactor shutdown");
         return slept;
+    }
+
+    /// Resume every waiting fiber. Each re-drives libcurl and re-checks its own transfer.
+    void wakeWaiters() scope
+    {
+        if (waiterCount == 0)
+            return;
+        auto reactor = Reactor.current();
+        foreach (ref waiter; waiters[0 .. waiterCount])
+            reactor.wake(waiter.waker);
+        waiterCount = 0;
+        earliestWake = long.max;
+    }
+
+    /// Wake the waiters when libcurl's timer is now due before any of them would wake unprompted.
+    void syncTimer() scope
+    {
+        if (waiterCount == 0)
+            return;
+        const timer = bridge.timer();
+        if (!timer.ok() || (timer.value != ulong.max && (timer.value == 0
+                || Deadline.afterMillis(timer.value).monotonicNanoseconds < earliestWake)))
+            wakeWaiters();
+    }
+
+    private void leave(TaskWaker waker) scope
+    {
+        foreach (index, ref waiter; waiters[0 .. waiterCount])
+        {
+            if (waiter.waker != waker)
+                continue;
+            waiters[index] = waiters[--waiterCount];
+            earliestWake = long.max;
+            foreach (ref other; waiters[0 .. waiterCount])
+                if (other.wake < earliestWake)
+                    earliestWake = other.wake;
+            return;
+        }
     }
 
     void refreshWatches() scope
@@ -604,6 +682,8 @@ nothrow @nogc:
         if (driverFault.code == Status.ok)
             driverFault = bridge.ready(fd, cast(uint) events);
         refreshWatches();
+        // Readiness may advance or complete any transfer, and a fault must reach every waiter.
+        wakeWaiters();
     }
 
     void clearWatches() scope
@@ -616,9 +696,20 @@ nothrow @nogc:
     }
 }
 
-private long waitClock() nothrow @nogc
+/// Waiters are resumed by readiness, fired timers and timer changes, the owner loop observes their
+/// contexts on every pass, and each sleeps no later than libcurl's next timer, so this fallback only
+/// bounds the stall a missed wake would cause. It never fires on a correct path; at one resumption per
+/// second a fiber parked on an idle stream costs about a microsecond of CPU per second.
+private enum fallbackMillis = 1_000;
+
+/// Provisioned waiter entries per connection. A transfer beyond the connection limit queues inside
+/// libcurl, so this covers 16 fibers per connection before a further waiter falls back to 1 ms polling.
+private enum waitersPerConnection = 16;
+
+private struct Waiter
 {
-    return ticksToNSecs(MonoTime.currTime.ticks);
+    TaskWaker waker;
+    long wake;
 }
 
 private size_t findWatch(scope const NativeWatch[] watches, NativeWatch target) pure nothrow @nogc

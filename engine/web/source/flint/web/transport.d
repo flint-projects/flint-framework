@@ -6,7 +6,7 @@ import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Error, Status;
 import flint.conc : Context, Deadline;
 import flint.reactor : AcceptDelegate, Completion, CompletionDelegate, ConnectionId, ReadDelegate,
-    Reactor, TaskContext, TaskDelegate;
+    Reactor, TaskContext, TaskDelegate, TaskWaker;
 import flint.web.ffi.tls : TlsProgress, TlsServer, TlsSession;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
 import flint.web.types : ServerOptions;
@@ -494,21 +494,37 @@ private Deadline following(long delta) nothrow @nogc
     return Deadline(delta >= long.max - timestamp ? long.max - 1 : timestamp + delta);
 }
 
-/// Monotonic start of a stream wait, for `streamWake`.
-long streamClock() nothrow @nogc
+/// Stream waiters are resumed by `wakeStream` from the completion, close or protocol event they wait
+/// on, and the owner loop observes the wait context's cancellation and deadline on every pass. This
+/// fallback only bounds the stall a missed wake would cause. It never fires on a correct path, and at
+/// one resumption per second an idle stream costs about a microsecond of CPU per second, so ten
+/// thousand idle upgraded or HTTP/2 streams stay below 1% of one core.
+private enum streamFallbackNanos = 1_000_000_000L;
+
+/// Suspend the calling stream fiber until `wakeStream(waiter)`, cancellation or expiry of `context`, or
+/// the fallback. The caller re-checks its condition afterwards. `waiter` is cleared before returning, so
+/// no stale registration can cut short an unrelated later wait of the same fiber.
+Error awaitStream(ref TaskWaker waiter, ref scope const Context context) nothrow @nogc
 {
-    return ticksToNSecs(MonoTime.currTime.ticks);
+    auto reactor = Reactor.current();
+    const waker = reactor.currentWaker();
+    if (!waker.ok())
+        return waker.error;
+    waiter = waker.value;
+    const outcome = reactor.yieldUntil(following(streamFallbackNanos), context);
+    if (waiter == waker.value)
+        waiter = TaskWaker.init;
+    return outcome;
 }
 
-/// Owner fibers have no completion wake-up, and the reactor rounds fiber deadlines up to whole
-/// milliseconds. Resume on every loop pass for a short window, which covers loopback and LAN write
-/// completions and echo round trips, then fall back to a 1 ms poll for a stalled peer.
-Deadline streamWake(long started, Deadline caller) nothrow @nogc
+/// Resume the fiber registered by `awaitStream`, if any. The caller has just changed stream state.
+void wakeStream(ref TaskWaker waiter) nothrow @nogc
 {
-    enum spinNanos = 200_000;
-    const timestamp = streamClock();
-    const wake = timestamp - started < spinNanos ? Deadline(timestamp) : following(1_000_000);
-    return wake.monotonicNanoseconds < caller.monotonicNanoseconds ? wake : caller;
+    if (!waiter.valid)
+        return;
+    // A handle whose task ended is rejected harmlessly; the slot will register afresh.
+    Reactor.current().wake(waiter);
+    waiter = TaskWaker.init;
 }
 
 Status readPlain(TlsTransport tls, ConnectionId id, size_t limit, Context context, ReadDelegate done) nothrow @nogc
