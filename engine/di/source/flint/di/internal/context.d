@@ -121,8 +121,6 @@ private string startupStatements(scope const Graph graph)
 
         if (graph.bound[position])
             statements ~= "state." ~ fieldName(position) ~ " = " ~ bean ~ ";\n";
-        if (graph.hooks[position].cleanup.name.length != 0)
-            statements ~= "state.owned[" ~ number ~ "] = true;\n";
 
         const hook = graph.hooks[position].startup;
         if (hook.name.length != 0)
@@ -133,6 +131,10 @@ private string startupStatements(scope const Graph graph)
             else
                 statements ~= call ~ ";\n";
         }
+        // Only a bean whose PostConstruct returned successfully is initialized and
+        // therefore owed its PreDestroy; cleanup visits these in reverse startup order.
+        if (graph.hooks[position].cleanup.name.length != 0)
+            statements ~= "state.owned[" ~ number ~ "] = true;\n";
         statements ~= "}\n";
     }
     return statements;
@@ -209,7 +211,8 @@ struct AppContext(Beans...)
         return Error.init;
     }
 
-    /// Construct owned beans in dependency order. A failed context is closed.
+    /// Construct owned beans in dependency order. A failed context is closed after
+    /// destroying, in reverse order, only the beans whose initialization succeeded.
     Error initialize()
     {
         if (phase != Phase.idle)

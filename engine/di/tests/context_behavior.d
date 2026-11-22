@@ -249,7 +249,10 @@ private final class Unreachable
     }
 }
 
-@("failed PostConstruct unwinds constructor-complete beans in reverse order")
+// The specification destroys only successfully initialized owned beans: a bean
+// whose PostConstruct reported failure never finished initializing, so its
+// PreDestroy (11) must not run; the earlier, fully initialized A is destroyed.
+@("failed PostConstruct unwinds only fully initialized beans in reverse order")
 unittest
 {
     AppContext!(Unreachable, Failure, A, Journal) context;
@@ -257,11 +260,68 @@ unittest
     assert(context.provide(journal).code == Status.ok);
     const failure = context.initialize();
     assert(failure.code == Status.ioError && failure.offset == 77);
-    assert(journal.matches([1, 2, 3, 4, 11, 12]));
+    assert(journal.matches([1, 2, 3, 4, 12]));
     context.shutdown();
     context.shutdown();
-    assert(journal.matches([1, 2, 3, 4, 11, 12]));
+    assert(journal.matches([1, 2, 3, 4, 12]));
     assert(context.provide(journal).code == Status.conflict);
+}
+
+private final class B
+{
+    private Journal journal;
+
+    this(A first, Journal journal)
+    {
+        assert(first !is null);
+        this.journal = journal;
+        journal.record(3);
+    }
+
+    @PostConstruct void start()
+    {
+        journal.record(4);
+    }
+
+    @PreDestroy void stop() nothrow
+    {
+        journal.record(13);
+    }
+}
+
+private final class ThrowingStart
+{
+    private Journal journal;
+
+    this(B previous, Journal journal)
+    {
+        assert(previous !is null);
+        this.journal = journal;
+        journal.record(5);
+    }
+
+    @PostConstruct void start()
+    {
+        journal.record(6);
+        throw new Exception("fixture startup hook exception");
+    }
+
+    @PreDestroy void stop() nothrow
+    {
+        journal.record(14);
+    }
+}
+
+@("throwing PostConstruct skips its PreDestroy and destroys earlier beans in reverse init order")
+unittest
+{
+    AppContext!(ThrowingStart, B, A, Journal) context;
+    auto journal = new Journal;
+    assert(context.provide(journal).code == Status.ok);
+    assert(context.initialize().code == Status.unavailable);
+    assert(journal.matches([1, 2, 3, 4, 5, 6, 13, 12]));
+    context.shutdown();
+    assert(journal.matches([1, 2, 3, 4, 5, 6, 13, 12]));
 }
 
 private final class Throwing
