@@ -5,10 +5,13 @@ import flint.arena : Error, Result, Status;
 import flint.desktop.types : DesktopBackend, DesktopEvent, EventKind, WindowOptions;
 
 @safe:
+
+version (FlintNativeWebkitgtk) import flint.desktop.ffi.webkit : Webview, WebviewEvent, webviewClose, webviewEvaluate,
+    webviewEvent, webviewOpen, webviewPump, webviewRequestClose, webviewResize, webviewTake, webviewUri;
+
 nothrow @nogc:
 
 private struct SdlWindow;
-private struct WebkitWindow;
 
 package(flint.desktop) struct Identity
 {
@@ -50,18 +53,13 @@ extern (C) private @system
     int flint_window_poll(SdlWindow*, NativeEvent*);
     int flint_window_submit(SdlWindow*, const(ubyte)*, size_t);
     void flint_window_free(SdlWindow*);
-
-    WebkitWindow* flint_webkit_window_new(const(char)*, uint, uint, uint, uint, ulong,
-            const(char)*, const(ubyte)*, size_t, const(char)*);
-    int flint_webkit_window_poll(WebkitWindow*, NativeEvent*);
-    void flint_webkit_window_free(WebkitWindow*);
 }
 
 version (linux)
 {
     version (FlintNativeSdl3)
         version = FlintDesktopQueues;
-    else version (FlintDesktopWebkitGtk)
+    else version (FlintNativeWebkitgtk)
         version = FlintDesktopQueues;
 }
 
@@ -101,7 +99,7 @@ package(flint.desktop) bool backendAvailable(DesktopBackend backend)
         else
             return false;
     case DesktopBackend.systemWebView:
-        version (FlintDesktopWebkitGtk)
+        version (FlintNativeWebkitgtk)
             return true;
         else
             return false;
@@ -156,11 +154,11 @@ package(flint.desktop) struct NativeWindow
 nothrow @nogc:
 
     private SdlWindow* sdl;
-    private WebkitWindow* webkit;
+    version (FlintNativeWebkitgtk) private Webview* webview;
 
-    // SAFETY: The owner thread has validated the bounded inputs. C copies the strings and HTML
-    // during this call. Native handlers remain internal and cannot unwind through this boundary.
-    Error open(Identity who, WindowOptions options) @trusted nothrow @nogc
+    // SAFETY: The owner thread has validated the bounded inputs. C copies the title during this
+    // call. The webview borrows option slices that the owner slot retains until close.
+    Error open(ref const WindowOptions options) @trusted nothrow @nogc
     {
         char[257] title = 0;
         title[0 .. options.title.length] = options.title[];
@@ -170,31 +168,17 @@ nothrow @nogc:
                 sdl = flint_window_new(title.ptr, options.width, options.height, options.resizable);
             return sdl is null ? desktopError(Status.unavailable) : Error.init;
         }
-        version (FlintDesktopWebkitGtk)
-            return openWebview(who, options, title);
+        version (FlintNativeWebkitgtk)
+        {
+            webview = webviewOpen(title[0 .. options.title.length + 1], options);
+            return webview is null ? desktopError(Status.unavailable) : Error.init;
+        }
         else
             return desktopError(Status.unsupported);
     }
 
-    version (FlintDesktopWebkitGtk)
-    {
-        // SAFETY: All options are bounded by validation before the native call. Native owns
-        // copies and internal callbacks. The owner main thread is the only pointer accessor.
-        private Error openWebview(Identity who, WindowOptions options, scope const(char)[] title) @trusted nothrow @nogc
-        {
-            char[129] entry = 0;
-            char[513] origin = 0;
-            entry[0 .. options.entryAsset.length] = options.entryAsset[];
-            origin[0 .. options.httpsOrigin.length] = options.httpsOrigin[];
-            webkit = flint_webkit_window_new(title.ptr, options.width, options.height,
-                    options.resizable, who.slot, who.generation, entry.ptr,
-                    cast(const(ubyte)*) options.html.ptr, options.html.length, origin.ptr);
-            return webkit is null ? desktopError(Status.unavailable) : Error.init;
-        }
-    }
-
     // SAFETY: The live owner-thread pointer is held until the poll returns. C writes one POD
-    // event, retains no D storage, and may queue owned WebKit bytes through the C registry only.
+    // event and retains no D storage. Webview callbacks only fill the pinned native state.
     Result!DesktopEvent poll() @trusted nothrow @nogc
     {
         NativeEvent event;
@@ -204,16 +188,104 @@ nothrow @nogc:
             if (sdl !is null)
                 code = flint_window_poll(sdl, &event);
         }
-        version (FlintDesktopWebkitGtk)
+        version (FlintNativeWebkitgtk)
         {
-            if (webkit !is null)
-                code = flint_webkit_window_poll(webkit, &event);
+            if (webview !is null)
+                return pollWebview();
         }
         if (code < 0)
             return Result!DesktopEvent(DesktopEvent.init, desktopError((code >= -Status.max) ? -code : Status.ioError));
         if (code == 0)
             return Result!DesktopEvent(DesktopEvent.init, desktopError(Status.notFound));
         return Result!DesktopEvent(DesktopEvent(cast(EventKind) event.kind, event.x, event.y, event.keyCode));
+    }
+
+    version (FlintNativeWebkitgtk)
+    {
+        private Result!DesktopEvent pollWebview()
+        {
+            webviewPump();
+            int width, height;
+            final switch (webviewEvent(webview, width, height))
+            {
+            case WebviewEvent.none:
+                return Result!DesktopEvent(DesktopEvent.init, desktopError(Status.notFound));
+            case WebviewEvent.close:
+                return Result!DesktopEvent(DesktopEvent(EventKind.close));
+            case WebviewEvent.resize:
+                return Result!DesktopEvent(DesktopEvent(EventKind.resize, width, height));
+            case WebviewEvent.crashed:
+                return Result!DesktopEvent(DesktopEvent.init,
+                        Error(Status.ioError, "webview process terminated"));
+            }
+        }
+    }
+
+    /// Copy the next frontend frame and its page origin, if any.
+    bool takeFrame(scope ubyte[] bytes, out size_t length, scope char[] origin, out size_t originLength)
+    {
+        version (FlintNativeWebkitgtk)
+        {
+            if (webview !is null)
+                return webviewTake(webview, bytes, length, origin, originLength);
+        }
+        return false;
+    }
+
+    /// Evaluate trusted Flint bridge source in the page.
+    Error evaluate(scope const(char)[] script)
+    {
+        version (FlintNativeWebkitgtk)
+        {
+            if (webview !is null)
+            {
+                webviewEvaluate(webview, script);
+                return Error.init;
+            }
+        }
+        return desktopError(Status.unsupported);
+    }
+
+    /// Ask the native window to resize, as a window manager would.
+    void resize(int width, int height)
+    {
+        version (FlintNativeWebkitgtk)
+        {
+            if (webview !is null)
+                webviewResize(webview, width, height);
+        }
+    }
+
+    /// Ask the native window to close, as a window manager would.
+    void requestClose()
+    {
+        version (FlintNativeWebkitgtk)
+        {
+            if (webview !is null)
+                webviewRequestClose(webview);
+        }
+    }
+
+    /// Current page address copied into the caller's span.
+    const(char)[] location(return scope char[] storage)
+    {
+        version (FlintNativeWebkitgtk)
+        {
+            if (webview !is null)
+                return webviewUri(webview, storage);
+        }
+        return null;
+    }
+
+    /// Navigations and frames refused by the webview policy.
+    ulong refusals()
+    {
+        version (FlintNativeWebkitgtk)
+        {
+            if (webview !is null)
+                return webview.deniedNavigations + webview.droppedFrames;
+        }
+        return 0;
     }
 
     // SAFETY: The live SDL handle belongs to this thread. Its renderer validates and consumes
@@ -239,12 +311,11 @@ nothrow @nogc:
             if (owned !is null)
                 flint_window_free(owned);
         }
-        version (FlintDesktopWebkitGtk)
+        version (FlintNativeWebkitgtk)
         {
-            auto web = webkit;
-            webkit = null;
-            if (web !is null)
-                flint_webkit_window_free(web);
+            auto web = webview;
+            webview = null;
+            webviewClose(web);
         }
     }
 }

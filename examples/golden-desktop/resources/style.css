@@ -1,0 +1,7 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; display: grid; place-items: center; min-height: 100vh; }
+main { width: min(28rem, 100% - 2rem); }
+form, .counter { display: flex; gap: 0.5rem; align-items: center; }
+input { flex: 1; }
+output { min-width: 3ch; text-align: center; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+#log { font-size: 0.85rem; opacity: 0.8; }

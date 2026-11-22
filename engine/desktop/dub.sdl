@@ -8,6 +8,7 @@ dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
 dependency "flint:conc" version="*"
 dependency "flint:os" version="*"
+dependency "flint:serde" version="*"
 dependency "flint:wasm-bridge" version="*"
 
 configuration "library" {

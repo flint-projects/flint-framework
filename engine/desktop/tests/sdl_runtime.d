@@ -6,7 +6,7 @@ import core.time : dur;
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : Context, Deadline;
 import flint.conc.wait : replaceWaitHook;
-import flint.desktop : DesktopBackend, DesktopEvent, EventKind, Window, WindowOptions;
+import flint.desktop : Asset, DesktopBackend, DesktopEvent, EventKind, Window, WindowOptions;
 
 @safe:
 
@@ -177,17 +177,19 @@ version (FlintNativeSdl3)
     }
 }
 
-version (FlintDesktopWebkitGtk)
+version (FlintNativeWebkitgtk)
 {
 }
 else
 {
-    @("The SDL profile leaves WebKitGTK unavailable")
+    @("A profile without the WebKitGTK provider leaves the webview unavailable")
     unittest
     {
+        static immutable Asset[] files = [Asset("index.html", "<p>x")];
         Window window;
         auto options = WindowOptions.init;
         options.backend = DesktopBackend.systemWebView;
+        options.assets = files;
         assert(window.open(options).code == Status.unsupported);
     }
 }
