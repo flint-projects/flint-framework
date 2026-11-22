@@ -564,12 +564,12 @@ version (FlintNativeSqlite)
         return new Thread({ queueForLease(waiter); }).start();
     }
 
-    /// Acquire once with a 1 ms deadline and report the terminal status and its latency.
-    private Status probe(ref Pool pool, out long micros)
+    /// Acquire once with a deadline (1 ms by default) and report the terminal status and its latency.
+    private Status probe(ref Pool pool, out long micros, long deadlineMillis = 1)
     {
         import core.time : MonoTime;
 
-        auto source = CancelSource.create(Context.init, Deadline.afterMillis(1));
+        auto source = CancelSource.create(Context.init, Deadline.afterMillis(deadlineMillis));
         assert(source.ok());
         auto limited = source.value.context();
         const started = MonoTime.currTime;
@@ -640,9 +640,12 @@ version (FlintNativeSqlite)
                 pause *= 2;
         }
         assertWallClock(micros < 50_000, "full-queue rejection took " ~ micros.to!string ~ " us against 50000 us");
+        // A full queue must reject without waiting. These probes get a long deadline so that a host
+        // which deschedules this thread past a 1 ms deadline before acquire reaches the queue cannot
+        // turn the rejection into a timeout; a probe that wrongly queued would wait out the deadline.
         foreach (attempt; 0 .. 8)
         {
-            assert(probe(pool, micros) == Status.resourceExhausted);
+            assert(probe(pool, micros, 10_000) == Status.resourceExhausted);
             assertWallClock(micros < 50_000, "full-queue rejection took " ~ micros.to!string ~ " us against 50000 us");
         }
 
