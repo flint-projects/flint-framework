@@ -14,6 +14,7 @@ import flint.storage.response : field, maximumEtag, readIdentity;
 import flint.storage.types : CredentialProvider, ObjectInfo, StorageOptions;
 import flint.storage.wire : Operation, Request, Transport, responseStatus;
 import flint.storage.xml : Envelope, EnvelopeKind, copyXmlText, readEnvelope;
+import std.array : uninitializedArray;
 
 @safe:
 
@@ -129,9 +130,12 @@ private final class Session
 
     this()
     {
-        receipts = new PartReceipt[maximumParts];
+        // Worst-case completion buffers are read only after being written (receipts up to
+        // `submitted`, the document up to its encoded length), so leave their pages untouched
+        // until an upload actually reaches them instead of zero-filling ~19 MiB per session.
+        receipts = uninitializedArray!(PartReceipt[])(maximumParts);
         scratch = new ubyte[maxXml + 65_536];
-        xml = new char[maximumParts * (6 * maximumEtag + 100) + 128];
+        xml = uninitializedArray!(char[])(maximumParts * (6 * maximumEtag + 100) + 128);
     }
 
     void begin(ulong generation, string bucket, string key, string contentType) scope nothrow @nogc

@@ -27,7 +27,7 @@ this host and there are no AWS or R2 accounts or recorded fixtures, so provider 
 | presign_bounds — reject > 604800 s; accept exactly 604800 | `"presign_bounds: the published presigned GET URL matches and expiry is capped at seven days"` | added |
 | presign_bounds — reject expiry beyond the credential lifetime | real-HTTP test (601 s with 600 s credentials → `permissionDenied`); `tests/storage_behavior.d:"presign_bounds: temporary credentials bound expiry and the URL never carries the secret"` | covered / added |
 | presign_bounds — logged URL omits authentication query fields | the package has no logging dependency and never logs URLs, credentials or signatures; the URL never contains the secret (temporary-credentials presign test) | covered (no log path exists) |
-| storage_bench — upload/download 1 GiB with four 8 MiB buffers; live payload under 40 MiB plus fixed transport | `bench/loopback.py bench/build/probe-storage`: 1 GiB up and down, 128 parts, 4 buffers, matching SHA-256, peer peak 4 concurrent parts, `d_gc_bytes=0`; payload reservation 32 MiB. Client peak RSS 63.7 MB vs 42.2 MB for the libcurl baseline (`bench/baseline`) | covered (see finding) |
+| storage_bench — upload/download 1 GiB with four 8 MiB buffers; live payload under 40 MiB plus fixed transport | `bench/loopback.py bench/build/probe-storage`: 1 GiB up and down, 128 parts, 4 buffers, matching SHA-256, peer peak 4 concurrent parts, `d_gc_bytes=0`; payload reservation 32 MiB. Client peak RSS 43.8 MB vs 42.2 MB for the libcurl baseline (`bench/baseline`); 63.7 MB before the completion buffers were left uninitialised | covered + fixed |
 | Native boundary corpora under ASan / LDC sanitizer configuration | whole D suite under LDC `-fsanitize=address` (`--build=plain`) inside `tests/local_peer.py`; no storage-owned C code (HTTP/OpenSSL shims belong to http/security) | covered (run) |
 | Fuzz seeds: truncated input, maximum lengths, empty values, cancellation, generation reuse | XML test (truncated, entities, DTD, out-of-range character references); empty-object single PUT; abort with four live parts; stale upload write → `notFound`/`unavailable` | covered |
 | Compile-fail tests assert nonzero exit and stable diagnostic | `fixtures/negative/forge_upload.d`, `fixtures/negative/signing_internal.d`, run by `fixtures/negative/verify.py` (DMD and LDC) | added |
@@ -36,11 +36,11 @@ this host and there are no AWS or R2 accounts or recorded fixtures, so provider 
 
 No always-success paths found.
 
-Finding (not changed): each upload session preallocates worst-case completion metadata in its constructor:
-`receipts` (10,000 × 264 B ≈ 2.6 MB), `scratch` (≈ 1.1 MB) and `xml` (10,000 × 1,636 B ≈ 16.4 MB, filled with
-`char.init` by the GC, so every page is resident). That is about 20 MB per `maxUploads` session on top of the
-32 MiB payload buffers, and it explains the 21.5 MB RSS gap to the libcurl baseline in the 1 GiB probe. It is
-bounded and independent of object size. Sizing it lazily or leaving it uninitialised would remove the gap.
+Finding (fixed): each upload session preallocated worst-case completion metadata in its constructor:
+`receipts` (10,000 × 264 B ≈ 2.6 MB) and `xml` (10,000 × 1,636 B ≈ 16.4 MB), zero-filled by the GC so every page
+was resident. Both buffers are read only after being written, so `Session.this()` now allocates them with
+`uninitializedArray`; untouched pages stay non-resident. The 1 GiB probe's client peak RSS fell from 63.7 MB to
+43.8 MB (libcurl baseline 42.2 MB) with unchanged throughput.
 
 ## Commands
 
