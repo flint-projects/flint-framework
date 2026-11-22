@@ -441,45 +441,67 @@ private auto invokeMember(C, string name, size_t index, Method method, string pa
     static if (is(typeof(member) Parameters == function))
     {
         enum label = C.stringof ~ "." ~ name;
-        enum invocation = plan!(member, Parameters)(label, path);
-        mixin(invocation.locals);
+        import std.traits : ReturnType;
 
-        static foreach (slot; 0 .. Parameters.length)
+        alias Returned = ReturnType!member;
+        // One readable error per misuse: check the signature before any binding code is generated for it.
+        static if (!handlerReturn!Returned)
+            static assert(false,
+                    label ~ ": a handler returns Response, Error, Result!T or void, not `" ~ Returned.stringof ~ "`");
+        else static if (!isSafeHandler!member)
+            static assert(false, label ~ ": a handler must be @safe; put `@safe:` at the top of its module");
+        else
         {
-            {
-                enum binder = invocation.bindings[slot];
-                static if (binder.source != Source.context && binder.source != Source.request)
-                {
-                    Error failed;
-                    static if (binder.source == Source.path)
-                        failed = bindPath(request, context.arena, binder.name, mixin(localName(slot)));
-                    else static if (binder.source == Source.query)
-                        failed = bindQuery(request, context.arena, binder.name, binder.required,
-                                mixin(localName(slot)));
-                    else
-                        failed = bindBody(request, context.arena, mixin(localName(slot)));
-                    if (failed.code != Status.ok)
-                        return Result!Response(Response.init, failed);
+            enum invocation = plan!(member, Parameters)(label, path);
+            mixin(invocation.locals);
 
-                    static if (binder.validate)
+            static foreach (slot; 0 .. Parameters.length)
+            {
+                {
+                    enum binder = invocation.bindings[slot];
+                    static if (binder.source != Source.context && binder.source != Source.request)
                     {
-                        Result!Response rejected;
-                        if (!validateBody(mixin(localName(slot)), context.arena, rejected))
-                            return rejected;
+                        Error failed;
+                        static if (binder.source == Source.path)
+                            failed = bindPath(request, context.arena, binder.name, mixin(localName(slot)));
+                        else static if (binder.source == Source.query)
+                            failed = bindQuery(request, context.arena, binder.name,
+                                    binder.required, mixin(localName(slot)));
+                        else
+                            failed = bindBody(request, context.arena, mixin(localName(slot)));
+                        if (failed.code != Status.ok)
+                            return Result!Response(Response.init, failed);
+
+                        static if (binder.validate)
+                        {
+                            Result!Response rejected;
+                            if (!validateBody(mixin(localName(slot)), context.arena, rejected))
+                                return rejected;
+                        }
                     }
                 }
             }
-        }
 
-        enum invoke = "__traits(getOverloads, instance, name, true)[index](" ~ invocation.arguments ~ ")";
-        static if (is(typeof(mixin(invoke)) == void))
-        {
-            mixin(invoke);
-            return Result!Response(Response(204, null, Buffer.init));
+            enum invoke = "__traits(getOverloads, instance, name, true)[index](" ~ invocation.arguments ~ ")";
+            static if (is(typeof(mixin(invoke)) == void))
+            {
+                mixin(invoke);
+                return Result!Response(Response(204, null, Buffer.init));
+            }
+            else
+                return responseFor(mixin(invoke), context, method);
         }
-        else
-            return responseFor(mixin(invoke), context, method);
     }
+}
+
+/// The handler return types responseFor accepts.
+private enum handlerReturn(T) = is(T == void) || is(T == Response) || is(T == Error) || is(T == Result!V, V);
+
+private template isSafeHandler(alias member)
+{
+    import std.traits : FunctionAttribute, functionAttributes;
+
+    enum isSafeHandler = (functionAttributes!member & (FunctionAttribute.safe | FunctionAttribute.trusted)) != 0;
 }
 
 /// Copy a struct controller into stable startup storage or retain a class controller by identity.
