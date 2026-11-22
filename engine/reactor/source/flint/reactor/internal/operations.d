@@ -111,7 +111,9 @@ package(flint.reactor) struct OperationTable
         return Status.ok;
     }
 
-    Result!Completion finish(OperationId id, Status status, size_t bytes) nothrow @nogc
+    /// A requested cancellation replaces the final status, except for a read the kernel completed with
+    /// data first: those bytes are already consumed from the socket, so they are delivered as success.
+    Result!Completion finish(OperationId id, Status status, size_t bytes, bool read = false) nothrow @nogc
     {
         if (!contains(id))
             return Result!Completion(Completion.init, Error(Status.notFound, "invalid operation"));
@@ -119,7 +121,7 @@ package(flint.reactor) struct OperationTable
         if (slot.phase != Phase.inFlight && !(slot.phase == Phase.queued && slot.cancellation != Status.ok))
             return Result!Completion(Completion.init, Error(Status.conflict, "unexpected final completion"));
         slot.phase = Phase.ready;
-        if (slot.cancellation != Status.ok)
+        if (slot.cancellation != Status.ok && !(read && status == Status.ok && bytes != 0))
             status = slot.cancellation;
         return Result!Completion(Completion(slot.connection, status, bytes));
     }

@@ -63,3 +63,28 @@ unittest
     assert(table.retire(operation) == Status.notFound);
     assert(table.reserve(ConnectionId.init).error.code == Status.invalidArgument);
 }
+
+@("a read completed with data before cancellation took effect reports success; other outcomes stay cancelled")
+unittest
+{
+    auto table = OperationTable(1);
+    auto connection = ConnectionId(0, 0, 1);
+
+    Status finalStatus(Status kernel, size_t bytes, bool read)
+    {
+        auto operation = table.reserve(connection).value;
+        assert(table.start(operation) == Status.ok);
+        assert(table.requestCancellation(operation, Status.timedOut) == Status.ok);
+        const completion = table.finish(operation, kernel, bytes, read);
+        assert(completion.ok && completion.value.bytes == bytes);
+        assert(table.retire(operation) == Status.ok);
+        return completion.value.status;
+    }
+
+    assert(finalStatus(Status.ok, 17, true) == Status.ok);
+    assert(finalStatus(Status.ok, 0, true) == Status.timedOut, "EOF raced with cancellation stays cancelled");
+    assert(finalStatus(Status.cancelled, 0, true) == Status.timedOut);
+    assert(finalStatus(Status.ioError, 0, true) == Status.timedOut);
+    // A write's partial progress under cancellation is still reported as cancelled with its byte count.
+    assert(finalStatus(Status.ok, 17, false) == Status.timedOut);
+}

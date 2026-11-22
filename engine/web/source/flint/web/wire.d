@@ -1,6 +1,7 @@
 /// Bounded HTTP/1 response headers and fixed public status translation.
 module flint.web.wire;
 
+import core.stdc.time : time;
 import flint.arena : Status;
 import flint.web.stream : StreamField, validStreamFields;
 
@@ -39,14 +40,111 @@ package(flint.web) bool validMediaType(scope const(char)[] contentType) pure not
     return true;
 }
 
+/// Length of an RFC 9110 section 5.6.7 IMF-fixdate such as `Sun, 06 Nov 1994 08:49:37 GMT`.
+package(flint.web) enum httpDateBytes = 29;
+/// Capacity of the longest Allow value, `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`.
+package(flint.web) enum allowBytes = 48;
+
+// Module variables are thread-local, so each owner loop keeps its own copy. A response reads the
+// coarse wall clock once and reformats only when the second has changed.
+private char[httpDateBytes] cachedDate = "Thu, 01 Jan 1970 00:00:00 GMT";
+private long cachedSecond;
+
+/// The current Date field value for this worker thread, refreshed at most once per second.
+package(flint.web) const(char)[] httpDate() nothrow @nogc
+{
+    const now = cast(long) time(null);
+    if (now != cachedSecond)
+    {
+        formatHttpDate(now, cachedDate);
+        cachedSecond = now;
+    }
+    return cachedDate[];
+}
+
+/// Format Unix seconds as an IMF-fixdate in UTC, using the proleptic Gregorian civil calendar.
+package(flint.web) void formatHttpDate(long seconds, ref char[httpDateBytes] output) pure nothrow @nogc
+{
+    static immutable string weekdays = "SunMonTueWedThuFriSat";
+    static immutable string months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    long days = seconds / 86_400;
+    long clock = seconds % 86_400;
+    if (clock < 0)
+    {
+        clock += 86_400;
+        --days;
+    }
+    // 1970-01-01 was a Thursday.
+    const weekday = cast(size_t)(((days % 7) + 11) % 7);
+    // Days to civil date (H. Hinnant), with eras of 146,097 days starting on 0000-03-01.
+    const shifted = days + 719_468;
+    const era = (shifted >= 0 ? shifted : shifted - 146_096) / 146_097;
+    const dayOfEra = shifted - era * 146_097;
+    const yearOfEra = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36_524 - dayOfEra / 146_096) / 365;
+    const dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100);
+    const monthIndex = (5 * dayOfYear + 2) / 153;
+    const day = dayOfYear - (153 * monthIndex + 2) / 5 + 1;
+    const month = monthIndex < 10 ? monthIndex + 3 : monthIndex - 9;
+    long year = yearOfEra + era * 400 + (month <= 2 ? 1 : 0);
+    year = year < 0 ? 0 : (year > 9999 ? 9999 : year);
+
+    output[0 .. 3] = weekdays[weekday * 3 .. weekday * 3 + 3];
+    output[3 .. 5] = ", ";
+    twoDigits(output[5 .. 7], day);
+    output[7] = ' ';
+    output[8 .. 11] = months[cast(size_t)(month - 1) * 3 .. cast(size_t)(month - 1) * 3 + 3];
+    output[11] = ' ';
+    twoDigits(output[12 .. 14], year / 100);
+    twoDigits(output[14 .. 16], year % 100);
+    output[16] = ' ';
+    twoDigits(output[17 .. 19], clock / 3600);
+    output[19] = ':';
+    twoDigits(output[20 .. 22], clock / 60 % 60);
+    output[22] = ':';
+    twoDigits(output[23 .. 25], clock % 60);
+    output[25 .. 29] = " GMT";
+}
+
+private void twoDigits(scope char[] output, long value) pure nothrow @nogc
+{
+    output[0] = cast(char)('0' + value / 10);
+    output[1] = cast(char)('0' + value % 10);
+}
+
+/// Write the Allow value for a method bit set indexed by `Method`, in a fixed order. HEAD is listed
+/// only when its bit is set; the router sets it for a GET handler that serves HEAD.
+package(flint.web) size_t formatAllow(ubyte methods, ref char[allowBytes] output) pure nothrow @nogc
+{
+    // Method order: get, post, put, patch, delete_, head, options.
+    static immutable string[7] names = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+    static immutable ubyte[7] order = [0, 5, 1, 2, 3, 4, 6];
+    size_t length;
+    foreach (method; order)
+    {
+        if ((methods & (1 << method)) == 0)
+            continue;
+        if (length != 0)
+        {
+            output[length .. length + 2] = ", ";
+            length += 2;
+        }
+        const name = names[method];
+        output[length .. length + name.length] = name;
+        length += name.length;
+    }
+    return length;
+}
+
 package(flint.web) size_t writeHeader(scope ubyte[] output, ushort status, string contentType,
-        size_t length, bool persistent, ubyte versionMinor) nothrow @nogc
+        size_t length, bool persistent, ubyte versionMinor, ubyte allow = 0) nothrow @nogc
 {
     scope writer = HeaderWriter(output);
     writer.write(versionMinor == 0 ? "HTTP/1.0 " : "HTTP/1.1 ");
     writer.decimal(status);
     writer.write(" ");
     writer.write(reason(status));
+    writer.write("\r\nDate: ");
+    writer.write(httpDate());
     // RFC 9110 sections 8.6 and 15.4.5: 204 never carries Content-Length, and a 304 has no body to frame.
     if (status != 204 && status != 304)
     {
@@ -58,10 +156,21 @@ package(flint.web) size_t writeHeader(scope ubyte[] output, ushort status, strin
         writer.write("\r\nContent-Type: ");
         writer.write(contentType);
     }
+    // RFC 9110 section 15.5.6: a 405 lists the methods the target resource supports.
+    if (status == 405 && allow != 0)
+        writeAllow(writer, allow);
     writer.write("\r\nConnection: ");
     writer.write(persistent ? "keep-alive" : "close");
     writer.write("\r\n\r\n");
     return writer.full ? 0 : writer.offset;
+}
+
+// Kept out of line: inlined, this buffer cost every ordinary response head about 90 ns (LDC -O3).
+pragma(inline, false) private void writeAllow(ref scope HeaderWriter writer, ubyte allow) nothrow @nogc
+{
+    char[allowBytes] methods = void;
+    writer.write("\r\nAllow: ");
+    writer.write(methods[0 .. formatAllow(allow, methods)]);
 }
 
 package(flint.web) size_t writeStreamHeader(scope ubyte[] output, ushort status,
@@ -75,6 +184,12 @@ package(flint.web) size_t writeStreamHeader(scope ubyte[] output, ushort status,
     writer.write(" ");
     writer.write(status == 101 ? "Switching Protocols" : reason(status));
     writer.write("\r\n");
+    if (!upgrade && !hasField(fields, "date"))
+    {
+        writer.write("Date: ");
+        writer.write(httpDate());
+        writer.write("\r\n");
+    }
     foreach (ref field; fields)
     {
         writer.write(field.name);
@@ -90,6 +205,29 @@ package(flint.web) size_t writeStreamHeader(scope ubyte[] output, ushort status,
     }
     writer.write("\r\n");
     return writer.full ? 0 : writer.offset;
+}
+
+/// Whether an application field list already names `name` (ASCII case-insensitive).
+package(flint.web) bool hasField(scope const(StreamField)[] fields, scope const(char)[] name) pure nothrow @nogc
+{
+    foreach (ref field; fields)
+    {
+        if (field.name.length != name.length)
+            continue;
+        bool same = true;
+        foreach (index, character; field.name)
+        {
+            const lower = character >= 'A' && character <= 'Z' ? cast(char)(character + 32) : character;
+            if (lower != name[index])
+            {
+                same = false;
+                break;
+            }
+        }
+        if (same)
+            return true;
+    }
+    return false;
 }
 
 package(flint.web) size_t writeChunk(scope ubyte[] output, scope const(ubyte)[] body) nothrow @nogc
@@ -152,8 +290,8 @@ private struct Reason
 private immutable Reason[] reasons = [
     Reason(200, "OK"), Reason(201, "Created"), Reason(204, "No Content"), Reason(400,
             "Bad Request"), Reason(401, "Unauthorized"), Reason(403, "Forbidden"),
-    Reason(404, "Not Found"), Reason(408, "Request Timeout"), Reason(409, "Conflict"),
-    Reason(413, "Payload Too Large"), Reason(429, "Too Many Requests"),
+    Reason(404, "Not Found"), Reason(405, "Method Not Allowed"), Reason(408, "Request Timeout"),
+    Reason(409, "Conflict"), Reason(413, "Payload Too Large"), Reason(429, "Too Many Requests"),
     Reason(431, "Request Header Fields Too Large"), Reason(500, "Internal Server Error"),
     Reason(501, "Not Implemented"), Reason(503, "Service Unavailable"), Reason(504,
             "Gateway Timeout"), Reason(505, "HTTP Version Not Supported")
@@ -165,4 +303,40 @@ private string reason(ushort status) pure nothrow @nogc
         if (description.code == status)
             return description.text;
     return "";
+}
+
+@("IMF-fixdate formatting covers the RFC example, epoch, leap days and century boundaries")
+unittest
+{
+    char[httpDateBytes] text;
+    formatHttpDate(784_111_777, text);
+    assert(text[] == "Sun, 06 Nov 1994 08:49:37 GMT");
+    formatHttpDate(0, text);
+    assert(text[] == "Thu, 01 Jan 1970 00:00:00 GMT");
+    formatHttpDate(951_782_399, text);
+    assert(text[] == "Mon, 28 Feb 2000 23:59:59 GMT");
+    formatHttpDate(951_782_400, text);
+    assert(text[] == "Tue, 29 Feb 2000 00:00:00 GMT");
+    formatHttpDate(4_107_542_400, text);
+    assert(text[] == "Mon, 01 Mar 2100 00:00:00 GMT");
+    formatHttpDate(-1, text);
+    assert(text[] == "Wed, 31 Dec 1969 23:59:59 GMT");
+}
+
+@("the per-thread Date cache returns the current second without reformatting within it")
+unittest
+{
+    const first = httpDate();
+    assert(first.length == httpDateBytes && first[$ - 4 .. $] == " GMT");
+    const second = httpDate();
+    assert(first is second, "the cache must return its thread-local storage");
+}
+
+@("Allow lists registered methods in a fixed order")
+unittest
+{
+    char[allowBytes] text;
+    assert(text[0 .. formatAllow(0b0100001, text)] == "GET, HEAD");
+    assert(text[0 .. formatAllow(0b1111111, text)] == "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
+    assert(formatAllow(0, text) == 0);
 }

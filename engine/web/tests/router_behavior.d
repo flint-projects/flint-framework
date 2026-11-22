@@ -86,3 +86,30 @@ unittest
     assert(table.find(Method.get, cast(const(ubyte)[]) "/new").handler == action);
     assert(table.find(Method.get, cast(const(ubyte)[]) "/other").handler == action);
 }
+
+@("an unmatched method on an existing path reports every method its matching routes serve")
+unittest
+{
+    Handler handler = (ref scope Request, ref scope RequestContext) @safe nothrow @nogc {
+        return Result!Response(Response.init);
+    };
+    auto table = new RouteTable;
+    assert(table.insert(Method.post, "/items/new", handler).code == Status.ok);
+    assert(table.insert(Method.get, "/items/:id", handler).code == Status.ok);
+    assert(table.insert(Method.delete_, "/items/:id", handler).code == Status.ok);
+
+    enum bit = (Method method) => cast(ubyte)(1 << method);
+    // Backtracking still finds GET through the parameter route.
+    auto backtracked = table.find(Method.get, cast(const(ubyte)[]) "/items/new");
+    assert(backtracked.handler == handler && backtracked.allowed == 0);
+    auto refused = table.find(Method.put, cast(const(ubyte)[]) "/items/new");
+    assert(refused.error.code == Status.notFound && refused.handler is null);
+    assert(refused.allowed == (bit(Method.post) | bit(Method.get) | bit(Method.head) | bit(Method.delete_)));
+    auto parameter = table.find(Method.post, cast(const(ubyte)[]) "/items/7");
+    assert(parameter.allowed == (bit(Method.get) | bit(Method.head) | bit(Method.delete_)));
+    // HEAD is served by GET, so it never produces 405 here.
+    assert(table.find(Method.head, cast(const(ubyte)[]) "/items/7").handler == handler);
+    auto missing = table.find(Method.get, cast(const(ubyte)[]) "/items");
+    assert(missing.error.code == Status.notFound && missing.allowed == 0);
+    assert(table.find(Method.get, cast(const(ubyte)[]) "/other").allowed == 0);
+}

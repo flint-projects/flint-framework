@@ -70,6 +70,8 @@ private struct Connection
     bool continuing;
     bool continueSent;
     bool replyDeferred;
+    /// Methods for the Allow field of a router-generated 405.
+    ubyte allow;
     StreamMode streamMode;
     bool streamStarted;
     bool streamEnded;
@@ -745,6 +747,7 @@ private final class Runtime : StreamEndpoint
         const head = connection.parser.metadata.method == Method.head;
         const keep = connection.parser.keepAlive && !connection.parser.upgradeRequested;
         const response = executeMatched(routes, &connection.parser.metadata, connection.request, matched);
+        connection.allow = matched.allowed;
         connection.taskActive = false;
         if (requestCancelled(connection) || response.error.code == Status.cancelled
                 || (connection.peerClosed && !response.ok()))
@@ -1020,7 +1023,7 @@ private final class Runtime : StreamEndpoint
     {
         ubyte[ioBytes] wire;
         const length = writeHeader(wire[], response.status, response.contentType,
-                response.body.length(), connection.keepAlive, connection.parser.versionMinor);
+                response.body.length(), connection.keepAlive, connection.parser.versionMinor, connection.allow);
         if (length == 0)
             return false;
         if (response.body == Buffer.init)
@@ -1157,6 +1160,7 @@ private final class Runtime : StreamEndpoint
         connection.continuing = false;
         connection.continueSent = false;
         connection.replyDeferred = false;
+        connection.allow = 0;
         connection.replyType = null;
         connection.response = Buffer.init;
         connection.streamStarted = false;

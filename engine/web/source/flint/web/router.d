@@ -177,6 +177,8 @@ struct Match
     Error error;
     StreamHandler stream;
     StreamMode mode;
+    /// For an unmatched method on a path that exists: the methods it serves, as bits indexed by Method.
+    ubyte allowed;
 }
 
 /// The registry is populated during startup and read on each owner core.
@@ -321,6 +323,7 @@ final class RouteTable
             {
                 if (matchAction(actionFor(frame.node, method), captures[0 .. frame.captures], result))
                     return result;
+                result.allowed |= methodsAt(frame.node);
                 --height;
                 continue;
             }
@@ -366,10 +369,27 @@ final class RouteTable
         return &node.actions[selected];
     }
 
+    private ubyte methodsAt(uint nodeIndex) const nothrow @nogc
+    {
+        const node = &nodes[nodeIndex];
+        ubyte methods;
+        foreach (index, ref action; node.actions)
+        {
+            if (action.handler !is null || action.stream !is null)
+                methods |= cast(ubyte)(1 << index);
+        }
+        // HEAD reuses a GET handler, as actionFor selects it.
+        if (node.actions[Method.get].handler !is null)
+            methods |= 1 << Method.head;
+        return methods;
+    }
+
     private bool matchAction(const Endpoint* action, scope const(Capture)[] found, ref Match result) nothrow @nogc
     {
         if (action.handler is null && action.stream is null)
             return false;
+        // Methods seen on routes that were tried first describe only an unmatched request.
+        result.allowed = 0;
         result.handler = action.handler;
         result.stream = action.stream;
         result.mode = action.mode;

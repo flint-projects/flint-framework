@@ -16,7 +16,7 @@ import flint.web.stream_queues : StreamQueues;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
 import flint.web.transport : TlsTransport, closePlain, readPlain, streamClock, streamWake;
 import flint.web.types : HeaderRecord, Method, RequestContext, Response, ServerOptions, maximumFields;
-import flint.web.wire : responseCode, validMediaType;
+import flint.web.wire : allowBytes, formatAllow, httpDate, responseCode, validMediaType;
 
 @safe:
 
@@ -497,6 +497,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
             return;
         }
         auto result = executeMatched(routes, &stream.assembly.metadata, stream.request, matched);
+        const allowed = matched.allowed;
         stream.phase = StreamPhase.responding;
         if (discard(connection, stream))
             return;
@@ -512,7 +513,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
 
         Response response = result.ok() ? result.value
             : failureResponse(responseCode(result.error.code), stream.request.arena);
-        queueResponse(connection, stream, response);
+        queueResponse(connection, stream, response, allowed);
     }
 
     private void dispatchStream(Session* connection, Stream* stream, const ref Match matched) nothrow @nogc
@@ -725,7 +726,7 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         return true;
     }
 
-    private void queueResponse(Session* connection, Stream* stream, Response response) nothrow @nogc
+    private void queueResponse(Session* connection, Stream* stream, Response response, ubyte allow = 0) nothrow @nogc
     {
         if (response.status < 200 || response.status > 599 || !validMediaType(response.contentType)
                 || !liveBody(response.body, stream.request.arena))
@@ -735,11 +736,14 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         if (response.status == 204 || response.status == 304)
             response = Response(response.status, null, Buffer.init);
 
-        stream.response = response.body;
-        stream.offset = 0;
+        // HEAD keeps the representation's Content-Length but sends no content.
         const head = stream.assembly.metadata.method == Method.head;
-        if (!connection.native.reply(stream.number, response.status, response.contentType,
-                response.body.length(), head))
+        stream.response = head ? Buffer.init : response.body;
+        stream.offset = 0;
+        char[allowBytes] methods = void;
+        const allowed = response.status == 405 ? methods[0 .. formatAllow(allow, methods)] : null;
+        if (!connection.native.respond(stream.number, response.status, response.contentType,
+                response.body.length(), httpDate(), allowed))
             abort(connection);
         else
             flush(connection);
@@ -758,6 +762,8 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         }
         if (stream.phase != StreamPhase.responding)
             return H2Chunk.init;
+        if (stream.response == Buffer.init)
+            return H2Chunk(0, true);
 
         size_t stored;
         const copied = stream.request.arena.read(stream.response, (scope const(ubyte)[] bytes) @safe nothrow @nogc {

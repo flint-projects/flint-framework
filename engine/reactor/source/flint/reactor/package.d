@@ -1302,7 +1302,7 @@ private struct Worker
     {
         auto work = &workItems[id.slot];
         assert(work.id == id && !work.pending);
-        const done = operations.finish(id, status, bytes);
+        const done = operations.finish(id, status, bytes, work.callbacks.reading);
         assert(done.ok);
 
         const slot = work.connection.slot;

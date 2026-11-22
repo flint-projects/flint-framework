@@ -73,6 +73,13 @@ final class JetStream
     private size_t maximumPayload;
     // busy: a command owns the socket. delivering: a handler borrows the delivery workspace.
     private bool live, busy, delivering;
+    // Reconnection (ADR-017 decision 12): after a transport error or timeout the socket is dropped and
+    // the next operation reconnects, waiting at most for the capped backoff within its own deadline.
+    private Endpoint remote;
+    private string trustBundle, identity;
+    private ubyte[] decoderMemory;
+    private bool closed;
+    private long retryAt, backoff;
 
     Error open(QueueOptions options)
     {
@@ -92,12 +99,16 @@ final class JetStream
             if (!ready)
                 socket.close();
         }
-        auto context = Context.init.withDeadline(Deadline.afterMillis(5000));
+        auto context = Context.init.withDeadline(Deadline.afterMillis(connectMillis));
         started = connect(address, options.caBundle, options.clientId, context);
         if (started.code == Status.ok)
         {
             ready = true;
             live = true;
+            remote = address;
+            trustBundle = options.caBundle;
+            identity = options.clientId;
+            backoff = firstBackoffNanos;
         }
         return started;
     }
@@ -108,7 +119,8 @@ final class JetStream
             return nativeError(Status.invalidArgument);
         auto memory = new ubyte[bytes];
         const half = bytes / 2;
-        decoder = NatsDecoder(memory[0 .. half]);
+        decoderMemory = memory[0 .. half];
+        decoder = NatsDecoder(decoderMemory);
         deliveryMemory = memory[half .. $];
         ubyte[16] random;
         const generated = fillSecureRandom(random[]);
@@ -125,37 +137,38 @@ nothrow @nogc:
         return !busy && !delivering;
     }
 
+    /// Close for good: no later operation reconnects.
     void close()
     {
-        socket.close();
-        live = false;
-        outputUsed = 0;
+        closed = true;
+        drop();
     }
 
     // dfmt off
     Result!PublishReceipt publish(scope const(char)[] subject, scope const(ubyte)[] key,
             scope const(ubyte)[] payload, scope const(char)[] dedup, ref scope const Context context)
     {
-        if (!live || busy)
+        if (closed || busy)
             return publishFailure(nativeError(Status.conflict));
         busy = true;
         scope (exit)
             busy = false;
+        const connected = ensureLive(context);
+        if (connected.code != Status.ok)
+            return publishFailure(connected);
         return publishRecord(subject, key, payload, dedup, context);
     }
 
     Error poll(string stream, string consumer, string deadLetter, bool confirmed,
             ref scope const Context context, scope NatsHandler handler)
     {
-        if (!live || busy || delivering)
+        if (closed || busy || delivering)
             return nativeError(Status.conflict);
         delivering = true;
         scope (exit)
             delivering = false;
-        busy = true;
         auto arena = RequestArena(deliveryMemory);
-        auto record = pull(stream, consumer, context, arena);
-        busy = false;
+        auto record = pullLive(stream, consumer, context, arena);
         if (!record.ok())
             return record.error;
         // The pulled frame is retired and copied, so the handler may publish on this client.
@@ -163,24 +176,102 @@ nothrow @nogc:
         const requested = handler(message, arena);
         if (!requested.ok())
             return requested.error;
+        return settle(record.value.reply, message, arena, requested.value, deadLetter, confirmed, context);
+    }
+
+    private Result!Record pullLive(string stream, string consumer, ref scope const Context context,
+            ref scope RequestArena arena)
+    {
+        busy = true;
+        scope (exit)
+            busy = false;
+        const connected = ensureLive(context);
+        if (connected.code != Status.ok)
+            return Result!Record(Record.init, connected);
+        return pull(stream, consumer, context, arena);
+    }
+
+    private Error settle(Buffer reply, ref Message message, ref scope RequestArena arena, AckAction action,
+            string deadLetter, bool confirmed, ref scope const Context context)
+    {
         while (busy && live)
         {
             const waited = waitTurn(context);
             if (waited.code != Status.ok)
                 return waited;
         }
+        // The broker redelivers an unacknowledged message after its ack wait.
         if (!live)
-            return nativeError(Status.conflict);
+            return closed ? nativeError(Status.conflict) : Error(Status.unavailable,
+                    "JetStream connection lost before acknowledgement; the broker will redeliver");
         busy = true;
         scope (exit)
             busy = false;
-        if (requested.value == AckAction.reject)
+        if (action == AckAction.reject)
         {
             const delivered = deadLetterRecord(deadLetter, message, arena, context);
             if (delivered.code != Status.ok)
                 return delivered;
         }
-        return acknowledge(record.value.reply, arena, requested.value, confirmed, context);
+        return acknowledge(reply, arena, action, confirmed, context);
+    }
+
+    /// Release the transport and every partial frame; a later operation may reconnect unless closed.
+    private void drop()
+    {
+        socket.close();
+        live = false;
+        outputUsed = 0;
+        inputPosition = inputUsed = 0;
+        decoder = NatsDecoder(decoderMemory);
+    }
+
+    /// Reconnect after a dropped transport, waiting for the capped backoff only within the caller's deadline.
+    private Error ensureLive(ref scope const Context context)
+    {
+        while (!live)
+        {
+            // A client that never connected has no endpoint to return to.
+            if (closed || remote.port == 0)
+                return nativeError(Status.conflict);
+            const now = Deadline.afterMillis(0).monotonicNanoseconds;
+            if (now < retryAt)
+            {
+                if (context.deadline().monotonicNanoseconds <= retryAt)
+                    return reconnectPending;
+                const waited = waitTurn(context);
+                if (waited.code == Status.timedOut)
+                    return reconnectPending;
+                if (waited.code != Status.ok)
+                    return waited;
+                continue;
+            }
+            const attempt = reconnect(context);
+            if (attempt.code == Status.cancelled)
+                return attempt;
+            if (attempt.code != Status.ok)
+            {
+                retryAt = Deadline.afterMillis(0).monotonicNanoseconds + backoff;
+                backoff = backoff >= maximumBackoffNanos / 2 ? maximumBackoffNanos : backoff * 2;
+            }
+        }
+        return Error.init;
+    }
+
+    private Error reconnect(ref scope const Context context)
+    {
+        auto limit = context.withDeadline(Deadline.afterMillis(connectMillis));
+        auto started = socket.open(remote.host, remote.port);
+        if (started.code == Status.ok)
+            started = connect(remote, trustBundle, identity, limit);
+        if (started.code != Status.ok)
+        {
+            drop();
+            return started;
+        }
+        live = true;
+        backoff = firstBackoffNanos;
+        return Error.init;
     }
 
     private Error connect(Endpoint address, string bundle, string clientId, ref scope const Context context)
@@ -412,7 +503,11 @@ nothrow @nogc:
         if (asked.code == Status.ok)
             asked = relevant(context);
         if (asked.code != Status.ok)
-            close();
+        {
+            // A late reply would desynchronize this stream, so any failure retires the transport.
+            drop();
+            return transportFailure(asked);
+        }
         return asked;
     }
 
@@ -517,7 +612,10 @@ nothrow @nogc:
                 result = transmit(subject, null, null, cast(const(ubyte)[]) "+ACK", context);
         });
         if (result.code != Status.ok)
-            close();
+        {
+            drop();
+            result = transportFailure(result);
+        }
         return read == Status.ok ? result : nativeError(read);
     }
 
@@ -535,6 +633,22 @@ nothrow @nogc:
         return ok ? Error.init : nativeError(Status.ioError);
     }
     // dfmt on
+}
+
+private enum connectMillis = 5000;
+private enum firstBackoffNanos = 25_000_000L;
+private enum maximumBackoffNanos = 2_000_000_000L;
+private enum connectionLost = Error(Status.unavailable,
+            "JetStream connection lost; the request outcome may be ambiguous and the client will reconnect");
+private enum reconnectPending = Error(Status.unavailable, "JetStream connection is down; reconnect pending");
+
+/// Keep deadline, cancellation, validation and broker refusals; report anything else as a lost connection.
+private Error transportFailure(Error failure) pure nothrow @nogc
+{
+    const code = failure.code;
+    const kept = code == Status.timedOut || code == Status.cancelled || code == Status.invalidArgument
+        || code == Status.permissionDenied || code == Status.resourceExhausted;
+    return kept ? failure : connectionLost;
 }
 
 private Error supported(ServerInfo info, bool secure) pure nothrow @nogc

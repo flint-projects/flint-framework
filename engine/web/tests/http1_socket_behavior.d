@@ -394,3 +394,98 @@ unittest
     // Each round trip waits for one receive and one send completion: 1 ms polls need over 200 ms.
     assert(elapsed < dur!"msecs"(100), elapsed.toString());
 }
+
+/// Return a response field's value, matching the name case-insensitively.
+package string fieldValue(string head, string name)
+{
+    import std.uni : toLower;
+
+    size_t start;
+    foreach (index; 0 .. head.length)
+    {
+        if (index + 1 < head.length && head[index] == '\r' && head[index + 1] == '\n')
+        {
+            const line = head[start .. index];
+            if (line.length > name.length && line[name.length] == ':' && toLower(line[0 .. name.length]) == toLower(
+                    name))
+            {
+                size_t value = name.length + 1;
+                while (value < line.length && line[value] == ' ')
+                    ++value;
+                return line[value .. $];
+            }
+            start = index + 2;
+        }
+    }
+    return null;
+}
+
+/// Assert an RFC 9110 IMF-fixdate within a few seconds of the current UTC time.
+package void assertCurrentDate(string head)
+{
+    import core.time : abs;
+    import std.datetime.systime : Clock, parseRFC822DateTime;
+    import std.datetime.timezone : UTC;
+
+    const value = fieldValue(head, "date");
+    assert(value.length == 29, "missing or malformed Date: " ~ head);
+    assert(value[3 .. 5] == ", " && value[$ - 4 .. $] == " GMT", value);
+    const parsed = parseRFC822DateTime(value);
+    assert(abs(parsed - Clock.currTime(UTC())) < dur!"seconds"(5), value);
+}
+
+@("HTTP/1 responses carry a current Date; a known path with another method is 405 with Allow")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    string head;
+    char[] pending;
+
+    sendAll(socket, "GET /empty HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    readResponse(socket, pending, head);
+    assert(head[0 .. 12] == "HTTP/1.1 204", head);
+    assertCurrentDate(head);
+
+    sendAll(socket, "POST /large HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n");
+    readResponse(socket, pending, head);
+    assert(head[0 .. 12] == "HTTP/1.1 405", head);
+    assert(fieldValue(head, "allow") == "GET, HEAD", head);
+    assert(contains(head, "Connection: keep-alive"), head);
+    assertCurrentDate(head);
+
+    // /echo registers POST and a GET upgrade stream; a stream route does not imply HEAD.
+    sendAll(socket, "DELETE /echo HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    readResponse(socket, pending, head);
+    assert(head[0 .. 12] == "HTTP/1.1 405", head);
+    assert(fieldValue(head, "allow") == "GET, POST", head);
+
+    sendAll(socket, "GET /missing HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    readResponse(socket, pending, head);
+    assert(head[0 .. 12] == "HTTP/1.1 404", head);
+    assert(fieldValue(head, "allow") is null, head);
+    assertCurrentDate(head);
+
+    // Streamed response heads carry the Date field too.
+    auto streamed = fixture.connect();
+    scope (exit)
+        streamed.close();
+    sendAll(streamed, "GET /stream HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    const received = cast(string) readUntilClosed(streamed).idup;
+    size_t end;
+    while (end + 4 <= received.length && received[end .. end + 4] != "\r\n\r\n")
+        ++end;
+    assert(end + 4 <= received.length, "no streamed response head");
+    assertCurrentDate(received[0 .. end + 4]);
+
+    // The connection is still usable after the error responses.
+    sendAll(socket, "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\nok");
+    assert(readResponse(socket, pending, head) == "ok");
+    assert(head[0 .. 15] == "HTTP/1.1 200 OK", head);
+    assertCurrentDate(head);
+}

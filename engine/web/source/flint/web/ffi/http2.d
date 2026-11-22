@@ -3,6 +3,7 @@ module flint.web.ffi.http2;
 
 import flint.arena : Error, Result, Status;
 import flint.web.stream : StreamField, validStreamFields;
+import flint.web.wire : hasField, httpDate;
 
 @safe:
 
@@ -187,6 +188,45 @@ package(flint.web) struct H2Session
             return false;
     }
 
+    // Every span is bounded and valid for this call. nghttp2 copies all names and values before returning,
+    // so the stack digits and borrowed media, date and allow text are not retained; content comes later
+    // SAFETY: from the generation-checked body relay. The live owner-local session is outside callbacks.
+    bool respond(int stream, ushort status, scope const(char)[] media, size_t length,
+            scope const(char)[] date, scope const(char)[] allow) scope @trusted nothrow @nogc
+    {
+        version (FlintNativeNghttp2)
+        {
+            if (native is null || activeToken != 0 || stream <= 0 || media.length > 256
+                    || date.length > 64 || allow.length > 64)
+                return false;
+            char[20] digits;
+            size_t first = digits.length;
+            size_t remaining = length;
+            do
+            {
+                digits[--first] = cast(char)('0' + remaining % 10);
+                remaining /= 10;
+            }
+            while (remaining != 0);
+            NativeField[4] fields;
+            size_t count;
+            // RFC 9110 sections 8.6 and 15.4.5: 204 never carries Content-Length, and a 304 frames no body.
+            if (status != 204 && status != 304)
+                fields[count++] = NativeField("content-length".ptr, 14, &digits[first], digits.length - first);
+            if (media.length != 0)
+                fields[count++] = NativeField("content-type".ptr, 12, media.ptr, media.length);
+            if (date.length != 0)
+                fields[count++] = NativeField("date".ptr, 4, date.ptr, date.length);
+            if (allow.length != 0)
+                fields[count++] = NativeField("allow".ptr, 5, allow.ptr, allow.length);
+            return flint_h2_stream_headers(native, stream, status, fields.ptr, count) == 0;
+        }
+        else
+            return false;
+    }
+
+    // A response head gains the worker's Date field unless the application supplied one, while the
+    // provider's 32-field table has room. Trailers (status 0) are passed through unchanged.
     // SAFETY: A live owner-local session validates the bounded field spans. The provider copies the
     // response fields or makes a native-owned trailer record before returning. No D pointer is retained.
     bool streamHeaders(int stream, ushort status, scope const(StreamField)[] fields) scope @trusted nothrow @nogc
@@ -198,7 +238,13 @@ package(flint.web) struct H2Session
             NativeField[32] converted;
             foreach (index, ref field; fields)
                 converted[index] = NativeField(field.name.ptr, field.name.length, field.value.ptr, field.value.length);
-            return flint_h2_stream_headers(native, stream, status, converted.ptr, fields.length) == 0;
+            size_t count = fields.length;
+            if (status != 0 && count < converted.length && !hasField(fields, "date"))
+            {
+                const date = httpDate();
+                converted[count++] = NativeField("date".ptr, 4, date.ptr, date.length);
+            }
+            return flint_h2_stream_headers(native, stream, status, converted.ptr, count) == 0;
         }
         else
             return false;

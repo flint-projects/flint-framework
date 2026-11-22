@@ -39,6 +39,9 @@ package(flint.web) Error executeStream(scope RequestMetadata* metadata,
 package(flint.web) Result!Response executeMatched(RouteTable routes, scope RequestMetadata* metadata,
         ref scope RequestContext context, const ref Match matched) nothrow @nogc
 {
+    // RFC 9110 section 15.5.6: the path exists under other methods; the transport adds Allow.
+    if (matched.error.code == Status.notFound && matched.allowed != 0)
+        return Result!Response(failureResponse(405, context.arena));
     if (matched.error.code != Status.ok)
         return Result!Response(Response.init, Error(matched.error.code, "invalid or unmatched HTTP route"));
     if (matched.handler is null)
