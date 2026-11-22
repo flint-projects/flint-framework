@@ -1,18 +1,50 @@
 /// Shared equivalent-work SMTP measurement input and acceptance checks.
 module probe_workload;
 
-import core.stdc.stdio : printf;
+import core.stdc.stdio : FILE, fclose, fopen, fread, printf;
 import core.stdc.stdlib : getenv;
 import core.stdc.string : strlen;
 import flint.arena : Buffer, RequestArena, Status;
 import std.digest : toHexString;
 import std.digest.sha : sha256Of;
-import std.file : readText;
-import std.json : parseJSON;
 
 @safe:
 
 alias Deliver = long function(scope string, scope string, ref scope RequestArena, Buffer) @safe;
+
+// SAFETY: The path is copied with a terminating NUL; fread writes at most the length of the live
+// local chunk, and the stream is closed before returning.
+private string readText(string path) @trusted
+{
+    FILE* stream = fopen((path ~ '\0').ptr, "rb");
+    if (stream is null)
+        throw new Exception("could not open " ~ path);
+    scope (exit)
+        fclose(stream);
+    char[] text;
+    char[65_536] chunk;
+    for (;;)
+    {
+        const count = fread(chunk.ptr, 1, chunk.length, stream);
+        text ~= chunk[0 .. count];
+        if (count < chunk.length)
+            break;
+    }
+    return cast(string) text;
+}
+
+private string decimal(size_t value) pure nothrow
+{
+    char[20] digits;
+    size_t start = digits.length;
+    do
+    {
+        digits[--start] = cast(char)('0' + value % 10);
+        value /= 10;
+    }
+    while (value != 0);
+    return digits[start .. $].idup;
+}
 
 private long peakMemory()
 {
@@ -91,8 +123,9 @@ int exercise(string[] args, scope Deliver deliver)
     if (elapsed < 0)
         return 5;
     const after = peakMemory();
-    const observed = parseJSON(readText(record ~ ".bytes.json"));
-    if (observed["length"].integer != byteCount || observed["sha256"].str != expected)
+    // The fixture writes this record with Go's encoding/json, whose output for the struct is exactly these
+    // bytes, so the whole record is compared rather than parsed.
+    if (readText(record ~ ".bytes.json") != `{"length":` ~ decimal(byteCount) ~ `,"sha256":"` ~ expected ~ `"}`)
         return 7;
     report(byteCount, expected, before, after, elapsed);
     return before > 0 && after >= before ? 0 : 8;

@@ -267,7 +267,7 @@ package(flint) size_t acceptedInput(scope const(char)[] text, size_t maxBytes)
 
 /// Check a Unicode scalar for direct insertion into a terminal text field.
 // UTF-8 code units of a scalar that `printable` accepted, as std.utf.encode writes them.
-private size_t encodeScalar(ref char[4] buffer, dchar scalar) pure nothrow @nogc
+package(flint) size_t encodeScalar(ref char[4] buffer, dchar scalar) pure nothrow @nogc
 {
     if (scalar < 0x80)
     {

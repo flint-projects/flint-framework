@@ -9,7 +9,7 @@ import std.math.traits : isFinite;
 @safe:
 
 // Decimal text of a page number, as std.conv.to!string writes it.
-private string decimal(size_t value) pure nothrow
+package(flint) string decimal(size_t value) pure nothrow
 {
     char[20] digits;
     size_t start = digits.length;

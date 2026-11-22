@@ -7,8 +7,8 @@ import flint.prompt.types : Answer, Field, FormOptions;
 import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
 import flint.validate : NotBlank, Violation, validate;
 import flint.widgets : TextInput;
+import flint.widgets.display : decimal;
 import flint.widgets.editing : graphemeCount;
-import std.conv : to;
 
 @safe:
 package(flint.prompt):
@@ -215,6 +215,6 @@ struct Group
         if (frame.rows > 2 && feedback.length != 0)
             frame.put(0, 2, feedback);
         if (frame.rows > 3 && fields.length > 1)
-            frame.put(0, 3, (index + 1).to!string ~ "/" ~ fields.length.to!string);
+            frame.put(0, 3, decimal(index + 1) ~ "/" ~ decimal(fields.length));
     }
 }

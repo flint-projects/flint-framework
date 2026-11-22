@@ -4,8 +4,7 @@ module flint.prompt.secret;
 import flint.arena : Error, Status;
 import flint.prompt.sys.secret : NativeSecret, allocate, append, count, readBytes = read, retire, trim, wipe;
 import flint.tui : Event, EventKind, KeyCode;
-import flint.widgets.editing : acceptedInput, printable, priorBoundary;
-import std.utf : encode;
+import flint.widgets.editing : acceptedInput, encodeScalar, printable, priorBoundary;
 
 @safe:
 
@@ -81,7 +80,7 @@ struct Secret
             char[4] scratch;
             scope (exit)
                 wipe(scratch[]);
-            const used = encode(scratch, event.key.character);
+            const used = encodeScalar(scratch, event.key.character);
             insert(scratch[0 .. used], capacity);
         }
     }
