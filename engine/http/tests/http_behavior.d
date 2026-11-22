@@ -526,6 +526,74 @@ version (FlintNativeCurl)
         }
     }
 
+    private final class Sequential
+    {
+        HttpClient transport;
+        HttpRequest request;
+        long elapsedNanos;
+        uint completed;
+    }
+
+    private shared Sequential activeSequential;
+
+    // SAFETY: The harness publishes one live fixture before starting the sole worker; the
+    // worker has exclusive access until the main thread joins it and withdraws publication.
+    private Sequential sequentialFixture() @trusted nothrow @nogc
+    {
+        return cast(Sequential) activeSequential;
+    }
+
+    private void sequential() nothrow @nogc
+    {
+        import core.time : MonoTime;
+
+        auto owner = Reactor.current();
+        auto fixture = sequentialFixture();
+        ubyte[4096] memory;
+        auto arena = RequestArena(memory[]);
+        auto deadline = CancelSource.create(Context.init, Deadline.afterMillis(10_000));
+        assert(deadline.ok);
+        auto context = deadline.value.context();
+        // The first exchange opens the reused connection; only later exchanges are timed.
+        foreach (round; 0 .. 101)
+        {
+            const started = MonoTime.currTime;
+            const response = fixture.transport.send(fixture.request, arena, context);
+            assert(response.ok && response.value.status == 204, response.error.message);
+            assert(arena.reset() == Status.ok);
+            if (round != 0)
+                fixture.elapsedNanos += (MonoTime.currTime - started).total!"nsecs";
+            ++fixture.completed;
+        }
+        assert(fixture.transport.close().code == Status.ok);
+        owner.stop();
+    }
+
+    @("sequential reactor-fiber exchanges on a reused connection are not paced by a millisecond poll")
+    @system unittest
+    {
+        if (!setting("HTTP").length)
+            return;
+        ReactorOptions reactors;
+        reactors.cores = 1;
+        reactors.fiberPoolSize = 4;
+        auto loop = Reactor.create(reactors);
+        assert(loop.ok, loop.error.message);
+        auto fixture = new Sequential;
+        assert(fixture.transport.open(ClientOptions.init).code == Status.ok);
+        fixture.request = HttpRequest(HttpMethod.get, setting("HTTP") ~ "/zero");
+        activeSequential = cast(shared) fixture;
+        scope (exit)
+            activeSequential = null;
+        assert(loop.value.post(0, &sequential, TaskContext(1)).code == Status.ok);
+        const ended = loop.value.run();
+        assert(ended.code == Status.ok, ended.message);
+        assert(fixture.completed == 101);
+        // A loopback HTTP/1.1 exchange takes tens of microseconds; 1 ms polls cost several per exchange.
+        const average = fixture.elapsedNanos / 100;
+        assert(average < 1_000_000, average.to!string ~ " ns per exchange");
+    }
+
     private final class Stages
     {
         HttpClient transport;

@@ -14,7 +14,7 @@ import flint.web.router : Match, RouteTable;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamToken;
 import flint.web.stream_queues : StreamQueues;
 import flint.web.sys.ownership : releaseBytes, reserveBytes;
-import flint.web.transport : TlsTransport, closePlain, readPlain;
+import flint.web.transport : TlsTransport, closePlain, readPlain, streamClock, streamWake;
 import flint.web.types : HeaderRecord, Method, RequestContext, Response, ServerOptions, maximumFields;
 import flint.web.wire : responseCode, validMediaType;
 
@@ -600,9 +600,10 @@ package(flint.web) final class H2Runtime : StreamEndpoint
             return Result!size_t(0, unavailable());
         if (!stream.duplex || output.length == 0)
             return Result!size_t(0, Error(Status.invalidArgument, "HTTP/2 receive requires a duplex stream"));
+        const started = streamClock();
         while (stream.queues.inbound == 0 && !stream.inputEnded)
         {
-            const resumed = waitForStream(stream, context);
+            const resumed = waitForStream(stream, context, started);
             if (resumed.code != Status.ok)
                 return Result!size_t(0, resumed);
         }
@@ -633,9 +634,10 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         size_t offset;
         while (offset < bytes.length)
         {
+            const started = streamClock();
             while (stream.queues.outbound != 0)
             {
-                const available = waitForStream(stream, context);
+                const available = waitForStream(stream, context, started);
                 if (available.code != Status.ok)
                     return available;
             }
@@ -700,17 +702,14 @@ package(flint.web) final class H2Runtime : StreamEndpoint
         return Error.init;
     }
 
-    private Error waitForStream(scope Stream* stream, ref scope const Context context) scope nothrow @nogc
+    private Error waitForStream(scope Stream* stream, ref scope const Context context, long started) scope nothrow @nogc
     {
         const checked = context.check();
         if (checked.code != Status.ok)
             return checked;
         if (stream.providerClosed)
             return unavailable();
-        const waiting = following(1_000_000);
-        const deadline = context.deadline();
-        return Reactor.current()
-            .yieldUntil(waiting.monotonicNanoseconds < deadline.monotonicNanoseconds ? waiting : deadline);
+        return Reactor.current().yieldUntil(streamWake(started, context.deadline()));
     }
 
     private bool discard(Session* connection, Stream* stream) nothrow @nogc

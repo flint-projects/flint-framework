@@ -1,6 +1,7 @@
 /// Owner-local TLS transport. Applications receive only HTTP plaintext completions.
 module flint.web.transport;
 
+import core.lifetime : move;
 import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Error, Status;
 import flint.conc : Context, Deadline;
@@ -489,17 +490,34 @@ private Deadline following(long delta) nothrow @nogc
     return Deadline(delta >= long.max - timestamp ? long.max - 1 : timestamp + delta);
 }
 
+/// Monotonic start of a stream wait, for `streamWake`.
+long streamClock() nothrow @nogc
+{
+    return ticksToNSecs(MonoTime.currTime.ticks);
+}
+
+/// Owner fibers have no completion wake-up, and the reactor rounds fiber deadlines up to whole
+/// milliseconds. Resume on every loop pass for a short window, which covers loopback and LAN write
+/// completions and echo round trips, then fall back to a 1 ms poll for a stalled peer.
+Deadline streamWake(long started, Deadline caller) nothrow @nogc
+{
+    enum spinNanos = 200_000;
+    const timestamp = streamClock();
+    const wake = timestamp - started < spinNanos ? Deadline(timestamp) : following(1_000_000);
+    return wake.monotonicNanoseconds < caller.monotonicNanoseconds ? wake : caller;
+}
+
 Status readPlain(TlsTransport tls, ConnectionId id, size_t limit, Context context, ReadDelegate done) nothrow @nogc
 {
-    return tls is null ? Reactor.current().readWith(id, limit, context, done).error.code
-        : tls.read(id, limit, context, done);
+    return tls is null ? Reactor.current().readWith(id, limit, move(context), done).error.code
+        : tls.read(id, limit, move(context), done);
 }
 
 Status writePlain(TlsTransport tls, ConnectionId id, scope const(ubyte)[] bytes, Context context,
         CompletionDelegate done) nothrow @nogc
 {
-    return tls is null ? Reactor.current().writeWith(id, bytes, context, done).error.code
-        : tls.write(id, bytes, context, done);
+    return tls is null ? Reactor.current().writeWith(id, bytes, move(context), done).error.code
+        : tls.write(id, bytes, move(context), done);
 }
 
 void closePlain(TlsTransport tls, ConnectionId id) nothrow @nogc

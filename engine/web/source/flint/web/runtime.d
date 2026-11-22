@@ -16,7 +16,7 @@ import flint.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
 import flint.web.sys.ownership : launchDriver, releaseBytes, releaseConnectionSlots,
     reserveConnectionSlots, reserveH1;
-import flint.web.transport : TlsTransport, closePlain, readPlain, writePlain;
+import flint.web.transport : TlsTransport, closePlain, readPlain, streamClock, streamWake, writePlain;
 import flint.web.types : ErrorAdvice, Handler, Method, RequestContext, Response, RouteRegistration, ServerOptions;
 import flint.web.worker : WorkerLifecycle;
 import flint.web.wire : responseCode, validMediaType, writeChunk, writeHeader, writeStreamHeader;
@@ -66,11 +66,17 @@ private struct Connection
     bool writeActive;
     bool taskActive;
     bool closing;
+    bool peerClosed;
+    bool continuing;
+    bool continueSent;
+    bool replyDeferred;
     StreamMode streamMode;
     bool streamStarted;
     bool streamEnded;
     bool streamRaw;
     Buffer response;
+    ushort replyStatus;
+    string replyType;
     size_t bodySent;
     size_t writeBytes;
 
@@ -145,6 +151,15 @@ struct Server
     package(flint.web) uint ownerCount() const nothrow @nogc
     {
         return driver is null ? 0 : driver.limits.cores;
+    }
+
+    /// Port selected by the prepared listener, for package fixtures that bind port zero.
+    package(flint.web) ushort listenPort() const nothrow @nogc
+    {
+        if (driver is null)
+            return 0;
+        const selected = driver.reactor.localPort();
+        return selected.ok() ? selected.value : 0;
     }
 
     package(flint.web) Error attachWorker(WorkerLifecycle worker)
@@ -529,7 +544,17 @@ private final class Runtime : StreamEndpoint
         connection.pending = payload[nameEnd .. $];
         const opened = connection.parser.open(id.generation, payload[arenaBytes .. nameEnd],
                 limits.maxHeaderBytes, limits.maxBodyBytes);
-        if (opened.code != Status.ok || !newRequest(connection))
+        // One source spans the connection: a request is cancelled only by disconnect or shutdown,
+        // both of which retire the connection, so keep-alive requests share it.
+        auto source = CancelSource.create(serverContext, Deadline.none());
+        if (opened.code != Status.ok || !source.ok())
+        {
+            close(connection);
+            return;
+        }
+        move(source.value, connection.cancellation);
+        connection.request.cancellation = connection.cancellation.context();
+        if (!newRequest(connection))
         {
             close(connection);
             return;
@@ -541,27 +566,34 @@ private final class Runtime : StreamEndpoint
 
     private bool newRequest(Connection* connection) nothrow @nogc
     {
-        auto source = CancelSource.create(serverContext, Deadline.none());
-        if (!source.ok() || !connection.parser.begin())
+        if (!connection.parser.begin())
             return false;
-        move(source.value, connection.cancellation);
-        connection.request.cancellation = connection.cancellation.context();
         connection.request.requestId = 0;
         connection.hasHeaderDeadline = false;
+        connection.continueSent = false;
         connection.phase = ConnectionPhase.reading;
         return true;
     }
 
     private void readMore(scope Connection* connection) scope nothrow @nogc
     {
+        if (connection.peerClosed)
+        {
+            // After peer EOF only already buffered requests can complete; an incomplete one never will.
+            if (connection.phase == ConnectionPhase.reading)
+                close(connection);
+            return;
+        }
         if (connection.closing || connection.readActive || connection.pendingCount == connection.pending.length)
             return;
-        auto context = connection.request.cancellation.withDeadline(following(limits.idleTimeoutNanos));
+        auto deadline = following(limits.idleTimeoutNanos);
         if (connection.phase == ConnectionPhase.reading && connection.hasHeaderDeadline
-                && connection.parser.awaitingHeaders())
-            context = context.withDeadline(connection.headerDeadline);
+                && connection.parser.awaitingHeaders()
+                && connection.headerDeadline.monotonicNanoseconds < deadline.monotonicNanoseconds)
+            deadline = connection.headerDeadline;
+        auto context = connection.request.cancellation.withDeadline(deadline);
         const maximum = connection.pending.length - connection.pendingCount;
-        const queued = readPlain(tls, connection.id, maximum, context, readDone);
+        const queued = readPlain(tls, connection.id, maximum, move(context), readDone);
         if (queued == Status.ok)
             connection.readActive = true;
         else
@@ -574,8 +606,9 @@ private final class Runtime : StreamEndpoint
         if (connection is null || connection.id != completion.connection || !connection.readActive)
             return;
         connection.readActive = false;
-        if (connection.closing || completion.status != Status.ok || bytes.length == 0
-                || connection.request.cancellation.cancelled())
+        if (completion.status == Status.ok && bytes.length == 0 && halfClosed(connection))
+            return;
+        if (connection.closing || completion.status != Status.ok || bytes.length == 0 || requestCancelled(connection))
         {
             close(connection);
             return;
@@ -596,6 +629,19 @@ private final class Runtime : StreamEndpoint
         readMore(connection);
     }
 
+    /// EOF may be a request-side half-close. A running handler observes it as disconnect through its
+    /// cancelled context, but a successful response and any buffered pipeline still drain.
+    private bool halfClosed(Connection* connection) nothrow @nogc
+    {
+        if (connection.closing || requestCancelled(connection)
+                || (connection.phase != ConnectionPhase.handling && connection.phase != ConnectionPhase.writing))
+            return false;
+        connection.peerClosed = true;
+        if (connection.phase == ConnectionPhase.handling)
+            connection.cancellation.cancel();
+        return true;
+    }
+
     private void receive(Connection* connection, scope const(ubyte)[] bytes) nothrow @nogc
     {
         if (!connection.hasHeaderDeadline)
@@ -611,7 +657,11 @@ private final class Runtime : StreamEndpoint
         final switch (read)
         {
         case ReadOutcome.more:
-            readMore(connection);
+            if (connection.parser.wantsContinue() && !connection.continueSent
+                    && !connection.peerClosed)
+                sendContinue(connection);
+            else
+                readMore(connection);
             return;
         case ReadOutcome.rejected:
             reply(connection, failure(connection,
@@ -649,6 +699,19 @@ private final class Runtime : StreamEndpoint
         }
     }
 
+    /// Solicit an expected request body. Reads resume after the interim response is accepted.
+    private void sendContinue(Connection* connection) nothrow @nogc
+    {
+        static immutable ubyte[] interim = cast(immutable(ubyte)[]) "HTTP/1.1 100 Continue\r\n\r\n";
+        connection.continueSent = true;
+        if (connection.writeActive || !submitWrite(connection, interim))
+        {
+            close(connection);
+            return;
+        }
+        connection.continuing = true;
+    }
+
     private size_t bodyLimitForRoute(Method method, Buffer path, ref scope RequestArena arena) nothrow @nogc
     {
         size_t selected = limits.maxBodyBytes;
@@ -665,7 +728,7 @@ private final class Runtime : StreamEndpoint
         auto connection = checked(id, ConnectionPhase.handling);
         if (connection is null)
             return;
-        if (connection.request.cancellation.check().code != Status.ok)
+        if (requestCancelled(connection))
         {
             connection.taskActive = false;
             close(connection);
@@ -677,17 +740,14 @@ private final class Runtime : StreamEndpoint
             dispatchStreaming(connection, matched);
             return;
         }
-        if (connection.parser.upgradeRequested)
-        {
-            connection.taskActive = false;
-            reply(connection, failure(connection, 400), false, false);
-            return;
-        }
+        // RFC 9110 section 7.8: an ordinary route ignores a body-less Upgrade offer such as h2c. The parser
+        // stopped at the upgrade boundary, so the connection closes after this HTTP/1.1 response.
         const head = connection.parser.metadata.method == Method.head;
-        const keep = connection.parser.keepAlive;
+        const keep = connection.parser.keepAlive && !connection.parser.upgradeRequested;
         const response = executeMatched(routes, &connection.parser.metadata, connection.request, matched);
         connection.taskActive = false;
-        if (connection.request.cancellation.cancelled() || response.error.code == Status.cancelled)
+        if (requestCancelled(connection) || response.error.code == Status.cancelled
+                || (connection.peerClosed && !response.ok()))
         {
             close(connection);
             return;
@@ -698,12 +758,6 @@ private final class Runtime : StreamEndpoint
 
     private void dispatchStreaming(Connection* connection, const ref Match matched) nothrow @nogc
     {
-        if (connection.parser.upgradeRequested && matched.mode != StreamMode.upgrade)
-        {
-            connection.taskActive = false;
-            reply(connection, failure(connection, 400), false, false);
-            return;
-        }
         connection.phase = ConnectionPhase.streaming;
         connection.streamMode = matched.mode;
         const index = cast(ulong) connection.id.ownerCore * limits.maxConnectionsPerCore + connection.id.slot;
@@ -774,9 +828,10 @@ private final class Runtime : StreamEndpoint
             return Result!size_t(0, streamUnavailable());
         if (!connection.streamRaw || output.length == 0)
             return Result!size_t(0, Error(Status.invalidArgument, "raw HTTP/1 stream receive requires an upgrade"));
+        const started = streamClock();
         while (connection.pendingCount == 0 && !connection.closing)
         {
-            const ready = waitForStream(context);
+            const ready = waitForStream(context, started);
             if (ready.code != Status.ok)
                 return Result!size_t(0, ready);
         }
@@ -855,6 +910,18 @@ private final class Runtime : StreamEndpoint
         const checked = context.check();
         if (checked.code != Status.ok)
             return checked;
+        const interim = streamClock();
+        while (connection.continuing && connection.writeActive && !connection.closing)
+        {
+            const resumed = waitForStream(context, interim);
+            if (resumed.code != Status.ok)
+            {
+                close(connection);
+                return resumed;
+            }
+        }
+        if (connection.closing)
+            return streamUnavailable();
         if (connection.writeActive)
             return Error(Status.conflict, "HTTP/1 response write is already pending");
         if (!submitWrite(connection, bytes))
@@ -862,9 +929,10 @@ private final class Runtime : StreamEndpoint
             close(connection);
             return Error(Status.ioError, "unable to write HTTP stream bytes");
         }
+        const started = streamClock();
         while (connection.writeActive && !connection.closing)
         {
-            const resumed = waitForStream(context);
+            const resumed = waitForStream(context, started);
             if (resumed.code != Status.ok)
             {
                 close(connection);
@@ -875,14 +943,21 @@ private final class Runtime : StreamEndpoint
     }
     // dfmt on
 
-    private Error waitForStream(ref scope const Context context) scope nothrow @nogc
+    private Error waitForStream(ref scope const Context context, long started) scope nothrow @nogc
     {
         const checked = context.check();
         if (checked.code != Status.ok)
             return checked;
-        const waiting = following(1_000_000);
-        const caller = context.deadline();
-        return reactor.yieldUntil(waiting.monotonicNanoseconds < caller.monotonicNanoseconds ? waiting : caller);
+        return reactor.yieldUntil(streamWake(started, context.deadline()));
+    }
+
+    /// Lock-free test for a closing connection or stopping server. The connection source has no deadline
+    /// and is cancelled by `close`, which sets `closing` first, or by peer EOF while a handler runs, which
+    /// sets `peerClosed` and still drains that handler's successful response. Its only ancestor, the
+    /// server root, has no deadline and is cancelled only by `stop` after the phase leaves `active`.
+    private bool requestCancelled(scope const Connection* connection) const scope nothrow @nogc
+    {
+        return connection.closing || atomicLoad(phase) >= DriverPhase.stopping;
     }
 
     private ulong nextId() nothrow @nogc
@@ -919,6 +994,19 @@ private final class Runtime : StreamEndpoint
         connection.keepAlive = keep;
         connection.suppressBody = head;
         connection.bodySent = 0;
+        if (connection.continuing && connection.writeActive)
+        {
+            // The interim 100 response is still in flight; its completion sends this final response.
+            connection.replyStatus = response.status;
+            connection.replyType = response.contentType;
+            connection.replyDeferred = true;
+            return;
+        }
+        sendReply(connection, response);
+    }
+
+    private void sendReply(Connection* connection, Response response) nothrow @nogc
+    {
         if (queueHeaders(connection, response))
             return;
 
@@ -955,8 +1043,12 @@ private final class Runtime : StreamEndpoint
 
     private bool submitWrite(scope Connection* connection, scope const(ubyte)[] bytes) scope nothrow @nogc
     {
-        auto context = connection.request.cancellation.withDeadline(following(limits.idleTimeoutNanos));
-        const submitted = writePlain(tls, connection.id, bytes, context, writeDone);
+        // After peer EOF the request context may be cancelled, but the admitted response still drains
+        // under the idle deadline. Closing or stopping the server still retires the connection.
+        auto context = connection.peerClosed ? Context.init.withDeadline(following(
+                limits.idleTimeoutNanos)) : connection.request.cancellation.withDeadline(
+                following(limits.idleTimeoutNanos));
+        const submitted = writePlain(tls, connection.id, bytes, move(context), writeDone);
         if (submitted == Status.ok)
         {
             connection.writeBytes = bytes.length;
@@ -968,17 +1060,29 @@ private final class Runtime : StreamEndpoint
     private void written(Completion completion) nothrow @nogc
     {
         auto connection = slot(completion.connection);
-        if (connection is null || connection.id != completion.connection
-                || (connection.phase != ConnectionPhase.writing && connection.phase != ConnectionPhase.streaming))
+        if (connection is null || connection.id != completion.connection || !connection.writeActive)
             return;
         connection.writeActive = false;
+        const interim = connection.continuing;
+        connection.continuing = false;
         if (connection.closing || completion.status != Status.ok
-                || completion.bytes != connection.writeBytes || connection.request.cancellation.cancelled())
+                || completion.bytes != connection.writeBytes || requestCancelled(connection))
         {
             close(connection);
             return;
         }
 
+        if (interim)
+        {
+            if (connection.replyDeferred)
+            {
+                connection.replyDeferred = false;
+                sendReply(connection, Response(connection.replyStatus, connection.replyType, connection.response));
+            }
+            else if (connection.phase == ConnectionPhase.reading)
+                readMore(connection);
+            return;
+        }
         if (connection.phase == ConnectionPhase.writing)
             writeNext(connection);
     }
@@ -1049,6 +1153,12 @@ private final class Runtime : StreamEndpoint
         connection.writeActive = false;
         connection.taskActive = false;
         connection.closing = false;
+        connection.peerClosed = false;
+        connection.continuing = false;
+        connection.continueSent = false;
+        connection.replyDeferred = false;
+        connection.replyType = null;
+        connection.response = Buffer.init;
         connection.streamStarted = false;
         connection.streamEnded = false;
         connection.streamRaw = false;

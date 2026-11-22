@@ -2,6 +2,7 @@
 module flint.http.client;
 
 import core.atomic : atomicLoad, atomicOp, cas;
+import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Context, Deadline;
 import flint.http.ffi.shim : Bridge, NativeWatch, StreamView;
@@ -260,6 +261,7 @@ nothrow @nogc:
     {
         if (output.length == 0)
             return Result!size_t(0, Error(Status.invalidArgument, "HTTP stream receive buffer is empty"));
+        const started = waitClock();
         for (;;)
         {
             const live = progress(context);
@@ -268,7 +270,7 @@ nothrow @nogc:
             const read = state.bridge.streamRead(id, output);
             if (read.error.code != Status.unavailable)
                 return read;
-            const waited = state.wait();
+            const waited = state.wait(started);
             if (waited.code != Status.ok)
                 return Result!size_t(0, waited);
         }
@@ -278,6 +280,7 @@ nothrow @nogc:
     Error send(scope const(ubyte)[] input, ref scope const Context context) scope
     {
         size_t first;
+        auto started = waitClock();
         do
         {
             const live = progress(context);
@@ -289,12 +292,13 @@ nothrow @nogc:
                 if (sent.value == 0)
                     return Error(Status.ioError, "HTTP stream returned an empty write");
                 first += sent.value;
+                started = waitClock();
             }
             else if (sent.error.code != Status.unavailable)
                 return sent.error;
             if (first < input.length)
             {
-                const waited = state.wait();
+                const waited = state.wait(started);
                 if (waited.code != Status.ok)
                     return waited;
             }
@@ -358,6 +362,7 @@ nothrow @nogc:
 
     private Result!StreamView fields(bool terminal, ref scope const Context context) scope
     {
+        const started = waitClock();
         for (;;)
         {
             const live = progress(context);
@@ -369,7 +374,7 @@ nothrow @nogc:
             if (snapshot.complete)
                 return Result!StreamView(StreamView.init, Error(Status.unavailable,
                         "HTTP peer omitted the response head"));
-            const waited = state.wait();
+            const waited = state.wait(started);
             if (waited.code != Status.ok)
                 return Result!StreamView(StreamView.init, waited);
         }
@@ -461,6 +466,7 @@ nothrow @nogc:
             scope ChunkConsumer consume, uint chunkBudget)
     {
         uint sentChunks;
+        auto started = waitClock();
         while (true)
         {
             const progress = drive(context);
@@ -474,6 +480,7 @@ nothrow @nogc:
                 const delivery = deliver(id, context, consume);
                 if (delivery.code != Status.ok)
                     return failed(delivery);
+                started = waitClock();
                 if (++sentChunks < chunkBudget)
                     continue;
                 sentChunks = 0;
@@ -489,7 +496,7 @@ nothrow @nogc:
                 continue;
             }
 
-            const waited = wait();
+            const waited = wait(started);
             if (waited.code != Status.ok)
                 return failed(waited);
         }
@@ -527,12 +534,17 @@ nothrow @nogc:
         return live.code == Status.ok ? bridge.follow(id) : live;
     }
 
-    Error wait() scope
+    /// Native readiness callbacks advance libcurl on the loop but cannot resume this fiber, and the
+    /// reactor rounds fiber deadlines up to whole milliseconds. Resume on every loop pass for a short
+    /// window after the last progress, which covers loopback and LAN exchanges, then poll each 1 ms.
+    Error wait(long started) scope
     {
+        enum spinNanos = 200_000;
         auto reactor = Reactor.current();
         if (reactor.currentCore() == uint.max)
             return bridge.poll(5);
-        const slept = reactor.yieldUntil(Deadline.afterMillis(1));
+        const now = waitClock();
+        const slept = reactor.yieldUntil(now - started < spinNanos ? Deadline(now) : Deadline.afterMillis(1));
         if (slept.code == Status.unavailable)
             return Error(Status.cancelled, "HTTP transfer cancelled by reactor shutdown");
         return slept;
@@ -602,6 +614,11 @@ nothrow @nogc:
         appliedCount = 0;
         watchRevision = 0;
     }
+}
+
+private long waitClock() nothrow @nogc
+{
+    return ticksToNSecs(MonoTime.currTime.ticks);
 }
 
 private size_t findWatch(scope const NativeWatch[] watches, NativeWatch target) pure nothrow @nogc

@@ -1,0 +1,396 @@
+module flint.web.http1_socket_behavior;
+
+import core.time : MonoTime, dur;
+import flint.arena : Buffer, Error, Result, Status;
+import flint.conc : Context, Deadline;
+import flint.web.runtime : Server;
+import flint.web.stream : StreamField, StreamMode, StreamRoute, StreamToken;
+import flint.web.types : Method, Request, RequestContext, Response, ServerOptions;
+import std.socket : InternetAddress, Socket, SocketOptionLevel, SocketOption, SocketShutdown, TcpSocket;
+
+@safe:
+
+private enum largeBytes = 100_000;
+private enum streamBytes = 4 * 1024 * 1024;
+
+private final class Routes
+{
+    Result!Response large(ref scope Request request, ref scope RequestContext context) nothrow @nogc
+    {
+        auto block = context.arena.allocate(largeBytes, 1);
+        if (!block.ok())
+            return Result!Response(Response.init, block.error);
+        const filled = context.arena.write(block.value, (scope ubyte[] bytes) @safe nothrow @nogc {
+            foreach (index, ref value; bytes)
+                value = cast(ubyte)('a' + index % 23);
+        });
+        if (filled != Status.ok)
+            return Result!Response(Response.init, Error(filled, "unable to fill test body"));
+        return Result!Response(Response(200, "text/plain", block.value));
+    }
+
+    Result!Response echo(ref scope Request request, ref scope RequestContext context) nothrow @nogc
+    {
+        const 
+        body = request.body();
+        if (!body.ok())
+            return Result!Response(Response.init, body.error);
+        return Result!Response(Response(200, "text/plain", body.value));
+    }
+
+    Result!Response empty(ref scope Request request, ref scope RequestContext context) nothrow @nogc
+    {
+        return Result!Response(Response(204, null, Buffer.init));
+    }
+
+    Error stream(ref scope Request request, ref scope RequestContext context, scope StreamToken token) nothrow @nogc
+    {
+        const begun = token.begin(200, null, context.cancellation);
+        if (begun.code != Status.ok)
+            return begun;
+        ubyte[16_384] block = 'x';
+        foreach (_; 0 .. streamBytes / block.length)
+        {
+            const sent = token.send(block[], context.cancellation);
+            if (sent.code != Status.ok)
+                return sent;
+        }
+        return token.finish(null, context.cancellation);
+    }
+
+    Error echo(ref scope Request request, ref scope RequestContext context, scope StreamToken token) nothrow @nogc
+    {
+        const StreamField[2] fields = [
+            StreamField("connection", "upgrade"), StreamField("upgrade", "flint-echo")
+        ];
+        const begun = token.begin(101, fields[], context.cancellation);
+        if (begun.code != Status.ok)
+            return begun;
+        ubyte[256] buffer;
+        for (;;)
+        {
+            const received = token.receive(buffer[], context.cancellation);
+            if (!received.ok())
+                return received.error;
+            if (received.value == 0)
+                return Error.init;
+            const sent = token.send(buffer[0 .. received.value], context.cancellation);
+            if (sent.code != Status.ok)
+                return sent;
+        }
+    }
+}
+
+private struct Fixture
+{
+    Server server;
+    ushort port;
+
+    void open()
+    {
+        ServerOptions options;
+        options.port = 0;
+        options.cores = 1;
+        options.maxConnectionsPerCore = 16;
+        options.http2 = false;
+        assert(server.start(options).code == Status.ok);
+        auto routes = new Routes;
+        assert(server.route(Method.get, "/large", &routes.large).code == Status.ok);
+        assert(server.route(Method.post, "/echo", &routes.echo).code == Status.ok);
+        assert(server.route(Method.get, "/empty", &routes.empty).code == Status.ok);
+        const streamed = StreamRoute(Method.get, "/stream", StreamMode.response, &routes.stream);
+        assert(server.routeStream(streamed).code == Status.ok);
+        const echoed = StreamRoute(Method.get, "/echo", StreamMode.upgrade, &routes.echo);
+        assert(server.routeStream(echoed).code == Status.ok);
+        port = server.listenPort();
+        assert(port != 0);
+        Context context;
+        assert(server.poll(context).code == Status.ok);
+    }
+
+    void close()
+    {
+        server.shutdown(Deadline.afterMillis(5_000).monotonicNanoseconds);
+    }
+
+    Socket connect()
+    {
+        auto socket = new TcpSocket(new InternetAddress("127.0.0.1", port));
+        socket.setOption(SocketOptionLevel.SOCKET, SocketOption.RCVTIMEO, dur!"msecs"(3_000));
+        return socket;
+    }
+}
+
+private bool interrupted() @trusted
+{
+    import core.stdc.errno : EINTR, errno;
+
+    return errno == EINTR;
+}
+
+/// Receive, retrying when a druntime GC signal interrupts the blocking call.
+private ptrdiff_t receiveSome(Socket socket, scope void[] buffer)
+{
+    for (;;)
+    {
+        const count = socket.receive(buffer);
+        if (count != Socket.ERROR || !interrupted())
+            return count;
+    }
+}
+
+private void sendAll(Socket socket, scope const(char)[] text)
+{
+    const(ubyte)[] bytes = cast(const(ubyte)[]) text;
+    while (bytes.length != 0)
+    {
+        const sent = socket.send(bytes);
+        if (sent == Socket.ERROR && interrupted())
+            continue;
+        assert(sent > 0);
+        bytes = bytes[sent .. $];
+    }
+}
+
+/// Read until EOF, a receive timeout, or the deadline.
+private ubyte[] readUntilClosed(Socket socket)
+{
+    ubyte[] received;
+    ubyte[8192] chunk;
+    const deadline = MonoTime.currTime + dur!"seconds"(5);
+    while (MonoTime.currTime < deadline)
+    {
+        const count = receiveSome(socket, chunk[]);
+        if (count <= 0)
+            break;
+        received ~= chunk[0 .. count];
+    }
+    return received;
+}
+
+/// Read until the response head and its Content-Length body are complete, keeping any suffix.
+private string readResponse(Socket socket, ref char[] received, out string head)
+{
+    char[4096] chunk;
+    const deadline = MonoTime.currTime + dur!"seconds"(5);
+    while (MonoTime.currTime < deadline)
+    {
+        for (size_t index; index + 4 <= received.length; ++index)
+        {
+            if (received[index .. index + 4] != "\r\n\r\n")
+                continue;
+            const length = contentLength(received[0 .. index + 4].idup);
+            if (received.length < index + 4 + length)
+                break;
+            head = received[0 .. index + 4].idup;
+            const 
+            body = received[index + 4 .. index + 4 + length].idup;
+            received = received[index + 4 + length .. $].dup;
+            return
+            body;
+        }
+        const count = receiveSome(socket, chunk[]);
+        if (count <= 0)
+            break;
+        received ~= chunk[0 .. count];
+    }
+    head = received.idup;
+    return null;
+}
+
+private size_t contentLength(string head)
+{
+    enum field = "\r\nContent-Length: ";
+    foreach (index; 0 .. head.length >= field.length ? head.length - field.length + 1 : 0)
+    {
+        if (head[index .. index + field.length] != field)
+            continue;
+        size_t value;
+        foreach (character; head[index + field.length .. $])
+        {
+            if (character < '0' || character > '9')
+                break;
+            value = value * 10 + (character - '0');
+        }
+        return value;
+    }
+    return 0;
+}
+
+private bool contains(scope const(char)[] text, scope const(char)[] needle)
+{
+    foreach (index; 0 .. text.length >= needle.length ? text.length - needle.length + 1 : 0)
+        if (text[index .. index + needle.length] == needle)
+            return true;
+    return false;
+}
+
+@("HTTP/1 completes a multi-write response after the client half-closes its request side")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    foreach (_; 0 .. 4)
+    {
+        auto socket = fixture.connect();
+        scope (exit)
+            socket.close();
+        sendAll(socket, "GET /large HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        socket.shutdown(SocketShutdown.SEND);
+        const received = cast(const(char)[]) readUntilClosed(socket);
+        assert(received.length > 4 && received[0 .. 15] == "HTTP/1.1 200 OK");
+        size_t split;
+        while (split + 4 <= received.length && received[split .. split + 4] != "\r\n\r\n")
+            ++split;
+        assert(split + 4 <= received.length);
+        assert(contentLength(received[0 .. split + 4].idup) == largeBytes);
+        assert(received.length - split - 4 == largeBytes);
+    }
+}
+
+@("HTTP/1 answers Expect 100-continue before the client sends its body")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.RCVTIMEO, dur!"msecs"(500));
+    foreach (_; 0 .. 2)
+    {
+        sendAll(socket,
+                "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n" ~ "Expect: 100-continue\r\n\r\n");
+        char[25] interim;
+        size_t have;
+        while (have < interim.length)
+        {
+            const count = receiveSome(socket, interim[have .. $]);
+            assert(count > 0, "no interim 100 Continue response");
+            have += count;
+        }
+        assert(interim[] == "HTTP/1.1 100 Continue\r\n\r\n");
+        sendAll(socket, "hello");
+        string head;
+        char[] pending;
+        assert(readResponse(socket, pending, head) == "hello");
+        assert(head[0 .. 15] == "HTTP/1.1 200 OK");
+    }
+
+    // A request whose body arrived with its head needs no interim response.
+    sendAll(socket,
+            "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n" ~ "Expect: 100-continue\r\n\r\nabc");
+    string head;
+    char[] pending;
+    assert(readResponse(socket, pending, head) == "abc");
+    assert(head[0 .. 15] == "HTTP/1.1 200 OK");
+
+    // An oversized declared body is refused instead of solicited.
+    sendAll(socket,
+            "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2000000\r\n" ~ "Expect: 100-continue\r\n\r\n");
+    readResponse(socket, pending, head);
+    assert(head.length >= 12 && head[0 .. 12] == "HTTP/1.1 413", head);
+}
+
+@("HTTP/1 204 responses omit Content-Length and keep the connection reusable")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    sendAll(socket, "GET /empty HTTP/1.1\r\nHost: localhost\r\n\r\nPOST /echo HTTP/1.1\r\n"
+            ~ "Host: localhost\r\nContent-Length: 2\r\n\r\nok");
+    string head;
+    char[] pending;
+    assert(readResponse(socket, pending, head).length == 0);
+    assert(head[0 .. 12] == "HTTP/1.1 204", head);
+    assert(!contains(head, "Content-Length"), head);
+    assert(!contains(head, "Content-Type"), head);
+    assert(readResponse(socket, pending, head) == "ok");
+    assert(head[0 .. 15] == "HTTP/1.1 200 OK");
+}
+
+@("HTTP/1 serves an ordinary route normally when the client offers a protocol upgrade")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    // curl --http2 against a cleartext URL offers h2c this way; RFC 9110 section 7.8 lets a server ignore it.
+    sendAll(socket, "GET /large HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade, HTTP2-Settings\r\n"
+            ~ "Upgrade: h2c\r\nHTTP2-Settings: AAMAAABkAARAAAAAAAIAAAAA\r\n\r\n");
+    string head;
+    char[] pending;
+    const received = readResponse(socket, pending, head);
+    assert(head.length >= 15 && head[0 .. 15] == "HTTP/1.1 200 OK", head);
+    assert(received.length == largeBytes);
+    assert(contains(head, "Connection: close"), head);
+    assert(readUntilClosed(socket).length == 0);
+}
+
+@("HTTP/1 response streams are paced by write completions rather than a millisecond poll")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    const started = MonoTime.currTime;
+    sendAll(socket, "GET /stream HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    const received = cast(const(char)[]) readUntilClosed(socket);
+    const elapsed = MonoTime.currTime - started;
+    assert(received.length > streamBytes && received[0 .. 15] == "HTTP/1.1 200 OK", elapsed.toString());
+    assert(received[$ - 5 .. $] == "0\r\n\r\n");
+    // About 1,000 transport writes: a 1 ms poll per write needs over a second.
+    assert(elapsed < dur!"msecs"(400), elapsed.toString());
+}
+
+@("HTTP/1 upgraded streams echo without a millisecond receive poll")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    sendAll(socket, "GET /echo HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: flint-echo\r\n\r\n");
+    char[] pending;
+    string head;
+    readResponse(socket, pending, head);
+    assert(head.length >= 12 && head[0 .. 12] == "HTTP/1.1 101", head);
+    enum rounds = 200;
+    char[16] reply;
+    const started = MonoTime.currTime;
+    foreach (round; 0 .. rounds)
+    {
+        sendAll(socket, "0123456789abcdef");
+        size_t have;
+        while (have < reply.length)
+        {
+            const count = receiveSome(socket, reply[have .. $]);
+            assert(count > 0);
+            have += count;
+        }
+        assert(reply[] == "0123456789abcdef");
+    }
+    const elapsed = MonoTime.currTime - started;
+    // Each round trip waits for one receive and one send completion: 1 ms polls need over 200 ms.
+    assert(elapsed < dur!"msecs"(100), elapsed.toString());
+}

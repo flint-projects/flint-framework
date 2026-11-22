@@ -47,8 +47,12 @@ package(flint.web) size_t writeHeader(scope ubyte[] output, ushort status, strin
     writer.decimal(status);
     writer.write(" ");
     writer.write(reason(status));
-    writer.write("\r\nContent-Length: ");
-    writer.decimal(length);
+    // RFC 9110 sections 8.6 and 15.4.5: 204 never carries Content-Length, and a 304 has no body to frame.
+    if (status != 204 && status != 304)
+    {
+        writer.write("\r\nContent-Length: ");
+        writer.decimal(length);
+    }
     if (contentType.length != 0)
     {
         writer.write("\r\nContent-Type: ");

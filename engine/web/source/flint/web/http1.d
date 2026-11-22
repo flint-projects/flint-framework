@@ -45,6 +45,7 @@ package(flint.web) struct Http1Reader
     private bool sawHost;
     private bool sawLength;
     private bool sawTransfer;
+    private bool sawContinue;
 
     Error open(ulong token, ubyte[] names, size_t maxHeaderBytes, size_t maxBodyBytes) nothrow @nogc
     {
@@ -156,12 +157,19 @@ package(flint.web) struct Http1Reader
         sawHost = false;
         sawLength = false;
         sawTransfer = false;
+        sawContinue = false;
         return true;
     }
 
     bool awaitingHeaders() const nothrow @nogc
     {
         return readingHeaders;
+    }
+
+    /// An HTTP/1.1 request past its header block asked for 100 (Continue) before sending its body.
+    bool wantsContinue() const nothrow @nogc
+    {
+        return sawContinue && versionMinor == 1 && !readingHeaders;
     }
 
     void close() nothrow @nogc
@@ -401,6 +409,8 @@ package(flint.web) struct Http1Reader
                 return Status.invalidArgument;
             sawTransfer = true;
         }
+        else if (sameName(name, "expect") && isContinue(arena, value))
+            sawContinue = true;
         return Status.ok;
     }
 
@@ -443,7 +453,17 @@ private bool headerContainsValue(ref scope RequestArena arena, Buffer buffer) no
 
 private bool isChunked(ref scope RequestArena arena, Buffer buffer) nothrow @nogc
 {
-    bool supported;
+    return trimmedValueIs(arena, buffer, "chunked");
+}
+
+private bool isContinue(ref scope RequestArena arena, Buffer buffer) nothrow @nogc
+{
+    return trimmedValueIs(arena, buffer, "100-continue");
+}
+
+private bool trimmedValueIs(ref scope RequestArena arena, Buffer buffer, string expected) nothrow @nogc
+{
+    bool matched;
     const result = arena.read(buffer, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
         size_t first;
         size_t last = bytes.length;
@@ -451,7 +471,7 @@ private bool isChunked(ref scope RequestArena arena, Buffer buffer) nothrow @nog
             ++first;
         while (last > first && (bytes[last - 1] == ' ' || bytes[last - 1] == '\t'))
             --last;
-        supported = sameName(bytes[first .. last], "chunked");
+        matched = sameName(bytes[first .. last], expected);
     });
-    return result == Status.ok && supported;
+    return result == Status.ok && matched;
 }
