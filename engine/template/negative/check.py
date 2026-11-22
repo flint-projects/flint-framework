@@ -40,6 +40,11 @@ CASES = (
     ("cycle", '{% include "./test.html" %}', "template include cycle"),
     ("deep", '{% include "n1.html" %}', "include depth exceeds 16"),
     ("expanded-cap", '{% include "a.html" %}{% include "a.html" %}', "expanded template exceeds"),
+    ("root", "{{text}}", "must start with model or a loop binding"),
+    ("renderer-local", "{{fileName}}", "must start with model or a loop binding"),
+    ("loop-scope", "{% for item in model.text %}{% end %}{{item}}", "must start with model or a loop binding"),
+    ("shadow", "{% for item in model.text %}{% for item in model.text %}{% end %}{% end %}", "invalid template loop binding"),
+    ("split-tag", '{% include "lt.html" %}script>{{model.text}}</script>', "incomplete HTML markup"),
 )
 
 
@@ -57,6 +62,7 @@ def main():
                 source = '{% include "n' + str(index + 1) + '.html" %}'
             (directory / f"n{index}.html").write_text(source)
         (directory / "a.html").write_text("x" * 524_288)
+        (directory / "lt.html").write_text("<")
         driver = directory / "driver.d"
         driver.write_text(DRIVER)
         command = [args.compiler, "-preview=dip1000", "-c", "-o-", *imports, "-J" + temp, driver]

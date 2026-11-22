@@ -154,8 +154,11 @@ struct Context
 
     private string open(string text, ref size_t cursor)
     {
-        if (text[cursor++] != '<' || cursor == text.length)
+        if (text[cursor++] != '<')
             return null;
+        // A resource that ends in `<` would let the including resource complete a tag the tracker never saw.
+        if (cursor == text.length)
+            return "incomplete HTML markup at end of template resource";
         if (starts(text, cursor, "!--"))
         {
             cursor += 3;

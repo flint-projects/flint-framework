@@ -301,3 +301,39 @@ version (FlintNativeCurl)
         assert(count("NORMAL", "connections") == before);
     }
 }
+
+@("Structured provider JSON fits any text body that fits the MIME limit")
+unittest
+{
+    import flint.mail.provider_payload : encodeProvider;
+
+    // Providers reserve 1.5 times the MIME limit for JSON. A line-oriented body that passes the
+    // MIME check must not be refused because every line break expanded into a six-byte escape.
+    enum limit = 4 * 1024 * 1024;
+    auto storage = new ubyte[3 * 1024 * 1024];
+    auto arena = RequestArena(storage);
+    auto lines = new ubyte[2 * 1024 * 1024 + 512 * 1024];
+    foreach (index, ref value; lines)
+        value = index % 2 ? '\n' : '\r';
+    MailMessage message;
+    message.from = MailAddress("sender@example.test");
+    message.to = [MailAddress("visible@example.test")];
+    message.subject = "lines";
+    message.text = arena.copyIn(lines).value;
+    assert(validate(message).code == Status.ok);
+    Boundaries parts;
+    size_t mime;
+    assert(emitMime(message, parts, arena, limit, null, mime).code == Status.ok && mime <= limit);
+
+    auto target = new ubyte[limit + limit / 2 + 8192];
+    foreach (backend; [MailBackend.resend, MailBackend.postmark])
+    {
+        size_t length;
+        const encoded = encodeProvider(backend, message, parts, arena, target, limit, length);
+        assert(encoded.code == Status.ok, encoded.message);
+        const document = parseJSON(cast(const(char)[]) target[0 .. length]);
+        const text = document[backend == MailBackend.resend ? "text" : "TextBody"].str;
+        assert(text.length == lines.length && text[0 .. 4] == "\r\n\r\n");
+        assert(document[backend == MailBackend.resend ? "subject" : "Subject"].str == "lines");
+    }
+}

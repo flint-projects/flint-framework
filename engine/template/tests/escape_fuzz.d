@@ -37,3 +37,62 @@ unittest
         assert(escapeHtml(bytes[0 .. length], large).value.length() == length);
     }
 }
+
+@("ASCII escaping matches a byte-by-byte reference at every run length and position")
+unittest
+{
+    static string reference(ubyte value) pure nothrow @nogc
+    {
+        switch (value)
+        {
+        case '&':
+            return "&amp;";
+        case '<':
+            return "&lt;";
+        case '>':
+            return "&gt;";
+        case '"':
+            return "&quot;";
+        case '\'':
+            return "&#39;";
+        case 0:
+            return "&#xfffd;";
+        default:
+            return null;
+        }
+    }
+
+    ubyte[96] input;
+    char[96 * 8] expected;
+    ubyte[96 * 8] scratch;
+    uint random = 1_234_567;
+    foreach (round; 0 .. 2_000)
+    {
+        random = random * 1_664_525U + 1_013_904_223U;
+        const length = (random >> 8) % input.length;
+        foreach (ref value; input[0 .. length])
+        {
+            random = random * 1_664_525U + 1_013_904_223U;
+            // Mostly plain text with occasional special bytes, so runs of every length occur.
+            value = (random >> 28) == 0 ? "&<>\"'\0"[(random >> 8) % 6] : cast(ubyte)(0x20 + (random >> 9) % 0x5f);
+        }
+        size_t used;
+        foreach (value; input[0 .. length])
+        {
+            const mapped = reference(value);
+            if (mapped is null)
+                expected[used++] = cast(char) value;
+            else
+            {
+                expected[used .. used + mapped.length] = mapped;
+                used += mapped.length;
+            }
+        }
+        scope arena = RequestArena(scratch[]);
+        const escaped = escapeHtml(input[0 .. length], arena);
+        assert(escaped.ok());
+        assert(arena.read(escaped.value, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
+                assert(bytes == cast(const(ubyte)[]) expected[0 .. used]);
+            }) == Status.ok);
+    }
+}

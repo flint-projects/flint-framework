@@ -79,6 +79,11 @@ struct Writer
         size_t cursor;
         while (cursor < text.length)
         {
+            // Skip the common run of ASCII bytes that need neither escaping nor UTF-8 decoding.
+            while (cursor < text.length && plainByte[cast(ubyte) text[cursor]])
+                ++cursor;
+            if (cursor == text.length)
+                break;
             const start = cursor;
             const byte_ = cast(ubyte) text[cursor];
             if (byte_ >= 0x80)
@@ -174,6 +179,14 @@ struct Writer
         append(digits[cursor .. $]);
     }
 }
+
+/// ASCII bytes copied unchanged: everything below 0x80 except the bytes `entity` rewrites.
+private static immutable bool[256] plainByte = () {
+    bool[256] table;
+    foreach (index; 0 .. 0x80)
+        table[index] = entity(cast(char) index) is null;
+    return table;
+}();
 
 private string entity(char value) pure nothrow @nogc
 {

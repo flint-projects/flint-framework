@@ -43,6 +43,7 @@ private struct Block
 {
     Kind kind;
     bool alternative;
+    string binding;
 }
 
 Parsed parse(string filename, string source)
@@ -133,6 +134,8 @@ private struct Parser
                 return "interpolation is forbidden in this HTML context";
             if (!path(expression))
                 return "expected a typed field path";
+            if (!rooted(expression))
+                return "template field path must start with model or a loop binding";
             nodes ~= Node(Kind.interpolation, expression, null, at, which);
             return null;
         }
@@ -149,6 +152,8 @@ private struct Parser
         case "if":
             if (!path(rest))
                 return "expected a boolean field path";
+            if (!rooted(rest))
+                return "template field path must start with model or a loop binding";
             return begin(Node(Kind.condition, rest, null, at));
         case "for":
             return loop(rest, at);
@@ -180,7 +185,7 @@ private struct Parser
     {
         if (blocks.length == maxBlocks)
             return "template block nesting exceeds 64";
-        blocks ~= Block(node.kind);
+        blocks ~= Block(node.kind, false, node.binding);
         nodes ~= node;
         return null;
     }
@@ -188,7 +193,7 @@ private struct Parser
     private string loop(string rest, size_t at)
     {
         const name = word(rest);
-        if (!identifier(name) || name == "model" || starts(name, 0, "__flint"))
+        if (!identifier(name) || name == "model" || starts(name, 0, "__flint") || bound(name))
             return "invalid template loop binding";
         const tail = strip(rest[name.length .. $]);
         if (word(tail) != "in")
@@ -196,7 +201,30 @@ private struct Parser
         const source = strip(tail[2 .. $]);
         if (!path(source))
             return "expected an array field path";
+        if (!rooted(source))
+            return "template field path must start with model or a loop binding";
         return begin(Node(Kind.loop, source, name, at));
+    }
+
+    /// Whether a name is bound by an enclosing loop block.
+    private bool bound(scope const(char)[] name) const pure nothrow @nogc
+    {
+        foreach (block; blocks)
+        {
+            if (block.kind == Kind.loop && block.binding == name)
+                return true;
+        }
+        return false;
+    }
+
+    /// Paths address the model or an enclosing loop binding, never renderer locals or module symbols.
+    private bool rooted(string expression) const pure nothrow @nogc
+    {
+        const root = word(expression);
+        size_t end;
+        while (end < root.length && root[end] != '.')
+            ++end;
+        return root[0 .. end] == "model" || bound(root[0 .. end]);
     }
 
     private string include_(string rest, size_t at)

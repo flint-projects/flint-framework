@@ -48,6 +48,12 @@ nothrow @nogc:
             item('\\');
             item(byteValue);
         }
+        else if (byteValue == '\n' || byteValue == '\r' || byteValue == '\t')
+        {
+            // Two-byte escapes keep line-oriented bodies inside the 1.5x JSON reservation.
+            item('\\');
+            item(byteValue == '\n' ? 'n' : byteValue == '\r' ? 'r' : 't');
+        }
         else if (byteValue < 32)
         {
             text("\\u00");
