@@ -6,6 +6,8 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <poll.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -40,6 +42,9 @@ static int start_next(flint_mq_socket *transport)
         const int fd = socket(address->ai_family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
         if (fd < 0)
             continue;
+        /* Broker commands are small request/response frames; do not wait for delayed ACKs. */
+        const int one = 1;
+        (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
         const int status = connect(fd, address->ai_addr, address->ai_addrlen);
         if (status == 0 || errno == EINPROGRESS) {
             transport->fd = fd;
