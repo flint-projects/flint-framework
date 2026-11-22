@@ -2,7 +2,6 @@ module flint.style.internal.layout;
 
 import flint.style.internal.text : Output, Row, Scanner, Token, clip, maximumBytes, maximumCells, reset, rows;
 import flint.style.types : Alignment, Border, Color, Style, TextMetrics;
-import std.format : format;
 
 @safe:
 
@@ -126,6 +125,21 @@ private Glyphs glyphs(Border border) pure nothrow @nogc
     }
 }
 
+/// Decimal text of one colour channel, as `%s` formats it.
+private string decimal(ubyte value) pure nothrow
+{
+    char[3] digits;
+    size_t start = digits.length;
+    uint rest = value;
+    do
+    {
+        digits[--start] = cast(char)('0' + rest % 10);
+        rest /= 10;
+    }
+    while (rest != 0);
+    return digits[start .. $].idup;
+}
+
 private string paint(Style style)
 {
     string ansi;
@@ -133,7 +147,8 @@ private string paint(Style style)
     {
         const fg = style.foreground;
         const bg = style.background;
-        ansi = format!("\x1b[38;2;%s;%s;%sm\x1b[48;2;%s;%s;%sm")(fg.red, fg.green, fg.blue, bg.red, bg.green, bg.blue);
+        ansi = "\x1b[38;2;" ~ decimal(fg.red) ~ ";" ~ decimal(fg.green) ~ ";" ~ decimal(
+                fg.blue) ~ "m\x1b[48;2;" ~ decimal(bg.red) ~ ";" ~ decimal(bg.green) ~ ";" ~ decimal(bg.blue) ~ "m";
     }
     if (style.bold)
         ansi ~= "\x1b[1m";

@@ -56,6 +56,10 @@ unittest
     style.foreground = Color(17, 34, 205);
     const painted = render("A", style, 1);
     assert(painted.canFind("\x1b[38;2;17;34;205m") && painted.endsWith("\x1b[0m"));
+    Style edges;
+    edges.foreground = Color(0, 10, 255);
+    edges.background = Color(9, 99, 100);
+    assert(render("A", edges, 1).canFind("\x1b[38;2;0;10;255m\x1b[48;2;9;99;100mA"));
     assert(measure(painted).cells == 1);
     const combined = joinHorizontal([painted, "B\nC"], 1);
     assert(measure(combined) == TextMetrics(3, 2));
