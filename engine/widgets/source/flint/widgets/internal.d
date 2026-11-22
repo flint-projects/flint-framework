@@ -4,7 +4,6 @@ module flint.widgets.internal;
 import flint.arena : Error, Result, Status;
 import flint.style : Style, visitGraphemes;
 import flint.tui : Event, EventKind, Frame, KeyCode;
-import std.array : appender;
 
 @safe:
 package(flint.widgets):
@@ -41,15 +40,15 @@ Error paintLine(ref Frame frame, uint column, uint row, uint width, scope const(
     }
     else
     {
-        auto shown = appender!string;
+        string shown;
         visitGraphemes(prefix, (scope const(char)[] glyph, uint size, bool lineBreak) @safe {
             if (lineBreak || size > width - cells)
                 return false;
-            shown.put(glyph);
+            shown ~= glyph;
             cells += size;
             return cells < width;
         });
-        drawn = frame.put(column, row, shown.data, style);
+        drawn = frame.put(column, row, shown, style);
     }
     if (drawn.code != Status.ok || !pad)
         return drawn;

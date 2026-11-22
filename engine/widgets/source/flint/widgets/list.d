@@ -5,7 +5,6 @@ import flint.arena : Error, Status;
 import flint.style : Style, foldGraphemes;
 import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
 import flint.widgets.internal : fit, paintLine;
-import std.string : indexOf;
 
 @safe:
 
@@ -220,7 +219,20 @@ private size_t[] filtered(scope const(ListItem)[] items, string query)
 private bool foldedContains(scope const(char)[] label, scope const(char)[] keyword)
 {
     string name;
-    return foldGraphemes(label, name) && name.indexOf(keyword) >= 0;
+    return foldGraphemes(label, name) && containsBytes(name, keyword);
+}
+
+// Byte-wise substring test, the case-sensitive std.string.indexOf(...) >= 0 on two UTF-8 strings.
+private bool containsBytes(scope const(char)[] text, scope const(char)[] part) pure nothrow @nogc
+{
+    if (part.length > text.length)
+        return false;
+    foreach (start; 0 .. text.length - part.length + 1)
+    {
+        if (text[start .. start + part.length] == part)
+            return true;
+    }
+    return false;
 }
 
 private enum asciiLabelLimit = 1_048_576;

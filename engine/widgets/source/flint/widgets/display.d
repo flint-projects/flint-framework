@@ -4,10 +4,23 @@ module flint.widgets.display;
 import flint.arena : Error, Status;
 import flint.tui : Effects, Event, EventKind, Frame;
 import flint.widgets.internal : fit, lineCount, navigate, paintLine, paintLines;
-import std.conv : to;
 import std.math.traits : isFinite;
 
 @safe:
+
+// Decimal text of a page number, as std.conv.to!string writes it.
+private string decimal(size_t value) pure nothrow
+{
+    char[20] digits;
+    size_t start = digits.length;
+    do
+    {
+        digits[--start] = cast(char)('0' + value % 10);
+        value /= 10;
+    }
+    while (value != 0);
+    return digits[start .. $].idup;
+}
 
 /// A scrollable snapshot of multiline text.
 struct Viewport
@@ -93,6 +106,6 @@ struct Paginator
         if (!area.ok() || pageCount == 0)
             return area.error;
         const current = page < pageCount ? page + 1 : pageCount;
-        return paintLine(frame, column, row, area.value.columns, current.to!string ~ "/" ~ pageCount.to!string);
+        return paintLine(frame, column, row, area.value.columns, decimal(current) ~ "/" ~ decimal(pageCount));
     }
 }

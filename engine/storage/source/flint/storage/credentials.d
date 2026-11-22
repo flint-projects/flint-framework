@@ -8,12 +8,15 @@ import flint.arena : Error, Result, Status;
 import flint.conc : CancelSource, Context, Deadline, startManagedBackground;
 import flint.storage.sigv4 : CredentialView, validCredentials;
 import flint.storage.types : CredentialProvider, Credentials;
-import std.datetime.systime : Clock, stdTimeToUnixTime;
 
 @safe:
 
+// std.datetime is imported here rather than at module scope so that applications importing flint.storage do not
+// instantiate its (and std.uni's) module-level templates.
 package(flint.storage) long unixSeconds() nothrow @nogc
 {
+    import std.datetime.systime : Clock, stdTimeToUnixTime;
+
     return stdTimeToUnixTime(Clock.currStdTime);
 }
 

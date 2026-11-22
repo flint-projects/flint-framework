@@ -5,8 +5,6 @@ import flint.arena : Error, Status;
 import flint.style : visitGraphemeRanges;
 import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
 import flint.widgets.internal : fit, nextLine, paintLine, paintLines;
-import std.array : appender;
-import std.utf : encode;
 
 @safe:
 
@@ -107,7 +105,7 @@ private struct Editor
             else if (!event.key.control && !event.key.alt && printable(event.key.character))
             {
                 char[4] buffer;
-                const length = encode(buffer, event.key.character);
+                const length = encodeScalar(buffer, event.key.character);
                 insert(value, buffer[0 .. length], capacity, multiline);
             }
             break;
@@ -204,15 +202,15 @@ private string normalized(scope const(char)[] text, size_t limit, bool multiline
 {
     if (text.length == 0 || limit == 0)
         return null;
-    auto output = appender!string;
+    string output;
     visitGraphemeRanges(text, (scope const(char)[] raw, bool lineBreak, bool bad) @safe {
         const glyph = lineBreak ? (multiline ? "\n" : " ") : bad ? "\uFFFD" : raw;
-        if (glyph.length > limit - output.data.length)
+        if (glyph.length > limit - output.length)
             return false;
-        output.put(glyph);
+        output ~= glyph;
         return true;
     });
-    return output.data;
+    return output;
 }
 
 private size_t boundaryAt(scope const(char)[] text, size_t offset)
@@ -268,6 +266,34 @@ package(flint) size_t acceptedInput(scope const(char)[] text, size_t maxBytes)
 }
 
 /// Check a Unicode scalar for direct insertion into a terminal text field.
+// UTF-8 code units of a scalar that `printable` accepted, as std.utf.encode writes them.
+private size_t encodeScalar(ref char[4] buffer, dchar scalar) pure nothrow @nogc
+{
+    if (scalar < 0x80)
+    {
+        buffer[0] = cast(char) scalar;
+        return 1;
+    }
+    if (scalar < 0x800)
+    {
+        buffer[0] = cast(char)(0xC0 | (scalar >> 6));
+        buffer[1] = cast(char)(0x80 | (scalar & 0x3F));
+        return 2;
+    }
+    if (scalar < 0x10000)
+    {
+        buffer[0] = cast(char)(0xE0 | (scalar >> 12));
+        buffer[1] = cast(char)(0x80 | ((scalar >> 6) & 0x3F));
+        buffer[2] = cast(char)(0x80 | (scalar & 0x3F));
+        return 3;
+    }
+    buffer[0] = cast(char)(0xF0 | (scalar >> 18));
+    buffer[1] = cast(char)(0x80 | ((scalar >> 12) & 0x3F));
+    buffer[2] = cast(char)(0x80 | ((scalar >> 6) & 0x3F));
+    buffer[3] = cast(char)(0x80 | (scalar & 0x3F));
+    return 4;
+}
+
 package(flint) bool printable(dchar scalar) pure nothrow @nogc
 {
     return scalar >= ' ' && scalar <= 0x10ffff && !(scalar >= 0x7f && scalar <= 0x9f)

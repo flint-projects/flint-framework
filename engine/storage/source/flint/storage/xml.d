@@ -2,8 +2,6 @@
 module flint.storage.xml;
 
 import flint.arena : Error, Status;
-import std.typecons : Yes;
-import std.utf : encode;
 
 @safe:
 
@@ -248,6 +246,37 @@ private EnvelopeKind rootKind(scope const(char)[] name) pure nothrow @nogc
     }
 }
 
+// UTF-8 code units of a scalar, as std.utf.encode!(Yes.useReplacementDchar) writes them: surrogates and values
+// beyond U+10FFFF become U+FFFD.
+private size_t encodeReplacing(ref char[4] buffer, dchar scalar) pure nothrow @nogc
+{
+    if (scalar <= 0x7F)
+    {
+        buffer[0] = cast(char) scalar;
+        return 1;
+    }
+    if (scalar <= 0x7FF)
+    {
+        buffer[0] = cast(char)(0xC0 | (scalar >> 6));
+        buffer[1] = cast(char)(0x80 | (scalar & 0x3F));
+        return 2;
+    }
+    if (scalar <= 0xFFFF || scalar > 0x10FFFF)
+    {
+        if ((scalar >= 0xD800 && scalar <= 0xDFFF) || scalar > 0x10FFFF)
+            scalar = 0xFFFD;
+        buffer[0] = cast(char)(0xE0 | (scalar >> 12));
+        buffer[1] = cast(char)(0x80 | ((scalar >> 6) & 0x3F));
+        buffer[2] = cast(char)(0x80 | (scalar & 0x3F));
+        return 3;
+    }
+    buffer[0] = cast(char)(0xF0 | (scalar >> 18));
+    buffer[1] = cast(char)(0x80 | ((scalar >> 12) & 0x3F));
+    buffer[2] = cast(char)(0x80 | ((scalar >> 6) & 0x3F));
+    buffer[3] = cast(char)(0x80 | (scalar & 0x3F));
+    return 4;
+}
+
 // dfmt off
 package(flint.storage) Error copyXmlText(scope const(char)[] raw, Span span,
         scope char[] target, out size_t used) pure nothrow @nogc
@@ -265,7 +294,7 @@ package(flint.storage) Error copyXmlText(scope const(char)[] raw, Span span,
             if (!scalar)
                 return malformed(cursor);
             char[4] encoded;
-            const count = encode!(Yes.useReplacementDchar)(encoded, scalar);
+            const count = encodeReplacing(encoded, scalar);
             if (count > target.length - used)
                 return Error(Status.resourceExhausted, "S3 XML field exceeds its limit", cursor);
             target[used .. used + count] = encoded[0 .. count];

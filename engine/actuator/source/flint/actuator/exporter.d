@@ -12,8 +12,6 @@ import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline, startBackground;
 import flint.http : ClientOptions, Header, HttpClient, HttpMethod, HttpRequest;
 import flint.reactor : Reactor;
-import std.datetime.systime : Clock;
-import std.datetime.timezone : UTC;
 
 @safe:
 
@@ -115,6 +113,11 @@ package(flint.actuator) final class Exporter
 
     this(ActuatorOptions options, Metrics metrics, Spans spans)
     {
+        // Imported here rather than at module scope so that applications importing flint.actuator do not
+        // instantiate std.datetime's (and std.uni's) module-level templates.
+        import std.datetime.systime : Clock;
+        import std.datetime.timezone : UTC;
+
         this.metrics = metrics;
         this.spans = spans;
         batch = new SpanRecord[options.maxBatchSpans];
