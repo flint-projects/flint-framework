@@ -200,3 +200,89 @@ unittest
     scope RequestArena unused;
     assert(lease.value.execute("SELECT 1", [], unused, context).ok());
 }
+
+/// Hold the migration lock on one pool and migrate through another; nothing may be applied or leaked.
+private void exerciseLockTimeout(ref Pool holder, ref Pool contender, ref Context context, string lockSql,
+        string unlockSql, string relationCount)
+{
+    auto held = holder.acquire(context);
+    assert(held.ok(), held.error.message);
+    auto lease = held.value;
+    // A failed assertion must not leave the lease out, or the pool's close would wait for it forever.
+    scope (exit)
+        cast(void) holder.release(lease);
+    scope RequestArena unused;
+    assert(lease.execute(lockSql, [], unused, context).ok());
+    const plan = [
+        program(1, "CREATE TABLE lock_victim (id BIGINT); INSERT INTO lock_victim VALUES (1);")
+    ];
+    MigrationOptions options;
+    options.lockTimeoutNanos = 150_000_000;
+    import core.time : MonoTime;
+
+    const started = MonoTime.currTime;
+    const blocked = migrate(contender, plan, options, context);
+    const waited = (MonoTime.currTime - started).total!"msecs";
+    assert(blocked.error.code == Status.timedOut, blocked.error.message);
+    assert(waited >= 100 && waited < 3000);
+    assert(blocked.value.applied == 0 && blocked.value.currentVersion == 0);
+    assert(lease.execute(unlockSql, [], unused, context).ok());
+    assert(holder.release(lease).code == Status.ok);
+
+    // The contender's single connection came back and no history or migration object was created.
+    assert(count(contender, context, relationCount) == 0);
+    const applied = migrate(contender, plan, MigrationOptions.init, context);
+    assert(applied.ok() && applied.value.applied == 1, applied.error.message);
+    assert(count(contender, context, "SELECT COUNT(*) FROM lock_victim") == 1);
+}
+
+version (FlintNativeSqlite) @("lock_timeout: a held SQLite write lock times out with no partial work or leaked lease")
+unittest
+{
+    import std.file : exists, remove, tempDir;
+    import std.path : buildPath;
+
+    const path = buildPath(tempDir(), "flint-migrate-lock-" ~ randomUUID().toString() ~ ".sqlite");
+    scope (exit)
+    {
+        foreach (suffix; ["", "-journal", "-wal", "-shm"])
+            if (exists(path ~ suffix))
+                remove(path ~ suffix);
+    }
+    auto holder = open(Driver.sqlite, path);
+    auto contender = open(Driver.sqlite, path);
+    Context context;
+    scope (exit)
+    {
+        assert(contender.close(context).code == Status.ok);
+        assert(holder.close(context).code == Status.ok);
+    }
+    exerciseLockTimeout(holder, contender, context, "BEGIN IMMEDIATE", "ROLLBACK",
+            "SELECT COUNT(*) FROM main.sqlite_schema WHERE name IN ('flint_schema_history', 'lock_victim')");
+}
+
+version (FlintNativeLibpq) @(
+        "lock_timeout: a held PostgreSQL advisory lock times out with no partial work or leaked lease")
+unittest
+{
+    const address = environment.get("FLINT_MIGRATE_PG_TEST_DSN");
+    if (address.length == 0)
+        return;
+    auto holder = open(Driver.postgres, address);
+    auto contender = open(Driver.postgres, address);
+    Context context;
+    scope (exit)
+    {
+        assert(contender.close(context).code == Status.ok);
+        assert(holder.close(context).code == Status.ok);
+    }
+    const schema = "flint_migration_" ~ randomUUID().toString().replace("-", "");
+    command(contender, context, "CREATE SCHEMA " ~ schema);
+    scope (exit)
+        command(contender, context, "DROP SCHEMA " ~ schema ~ " CASCADE");
+    command(contender, context, "SET search_path=" ~ schema);
+    exerciseLockTimeout(holder, contender, context, "SELECT pg_advisory_lock(5065504281656773959)",
+            "SELECT pg_advisory_unlock(5065504281656773959)",
+            "SELECT COUNT(*) FROM information_schema.tables"
+            ~ " WHERE table_schema=current_schema() AND table_name IN ('flint_schema_history', 'lock_victim')");
+}

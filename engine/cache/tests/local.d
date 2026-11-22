@@ -228,3 +228,123 @@ private void waitForParticipants(ref Cache cache, uint count)
         }) == Status.ok);
     assert(fresh, "a stale loader result replaced a newer put");
 }
+
+private ubyte[2] numbered(uint index) nothrow @nogc
+{
+    return [cast(ubyte)(index >> 8), cast(ubyte) index];
+}
+
+private uint present(ref Cache cache, uint keys, ref scope RequestArena arena, ref Context context) nothrow @nogc
+{
+    uint found;
+    foreach (index; 0 .. keys)
+    {
+        const key = numbered(index);
+        if (cache.get(key[], arena, context).ok)
+            ++found;
+        assert(arena.reset() == Status.ok);
+    }
+    return found;
+}
+
+@("capacity_bound: an entry capacity below the stripe count stays bounded across every stripe")
+unittest
+{
+    Cache cache;
+    Context context;
+    ubyte[64] scratch;
+    scope RequestArena arena = RequestArena(scratch[]);
+    simulated = 0;
+    auto options = settings(1 << 20, 10);
+    options.stripes = 64;
+    assert(cache.open(options).code == Status.ok);
+    scope (exit)
+        cache.close();
+    // 256 distinct keys reach every stripe, including stripes that own no entry slot.
+    foreach (index; 0 .. 256)
+    {
+        const key = numbered(index);
+        assert(cache.put(key[], cast(const(ubyte)[]) "v", 99, context).code == Status.ok);
+    }
+    const kept = present(cache, 256, arena, context);
+    assert(kept > 0 && kept <= 10);
+    foreach (_; 0 .. 128)
+        assert(cache.sweep(context).code == Status.ok);
+}
+
+@("capacity_bound: entry and byte caps hold across 64 stripes under 8x entry and 16x byte pressure")
+unittest
+{
+    Cache cache;
+    Context context;
+    ubyte[64] scratch;
+    scope RequestArena arena = RequestArena(scratch[]);
+    simulated = 0;
+    auto options = settings(1 << 20, 128);
+    options.stripes = 64;
+    assert(cache.open(options).code == Status.ok);
+    scope (exit)
+        cache.close();
+    foreach (index; 0 .. 1024)
+    {
+        const key = numbered(index);
+        assert(cache.put(key[], cast(const(ubyte)[]) "value", 99, context).code == Status.ok);
+    }
+    const kept = present(cache, 1024, arena, context);
+    assert(kept > 0 && kept <= 128);
+
+    // Byte cap: 32 records of 2 + 30 bytes fill 1 KiB exactly; any further record evicts.
+    Cache bytes;
+    auto tight = settings(1024, 4096);
+    tight.stripes = 64;
+    assert(bytes.open(tight).code == Status.ok);
+    scope (exit)
+        bytes.close();
+    ubyte[30] payload = 7;
+    foreach (index; 0 .. 32)
+    {
+        const key = numbered(index);
+        assert(bytes.put(key[], payload[], 99, context).code == Status.ok);
+    }
+    assert(present(bytes, 32, arena, context) == 32);
+    foreach (index; 32 .. 512)
+    {
+        const key = numbered(index);
+        const stored = bytes.put(key[], payload[], 99, context);
+        // A stripe whose own list cannot free enough bytes reports exhaustion instead of evicting elsewhere.
+        assert(stored.code == Status.ok || stored.code == Status.resourceExhausted);
+    }
+    assert(present(bytes, 512, arena, context) <= 32);
+}
+
+@("binary_keys: empty, NUL-prefixed and NUL-suffixed keys and values never alias across 64 stripes")
+unittest
+{
+    Cache cache;
+    Context context;
+    ubyte[256] scratch;
+    scope RequestArena arena = RequestArena(scratch[]);
+    simulated = 0;
+    auto options = settings(4096, 64);
+    options.stripes = 64;
+    assert(cache.open(options).code == Status.ok);
+    scope (exit)
+        cache.close();
+    static immutable string[8] keys = ["", "\0", "\0\0", "a", "a\0", "\0a", "a\0b", "a\0c"];
+    static immutable string[8] values = ["k0", "", "\0", "\0\0\0", "a", "x\0y", "\0", "zz\0"];
+    foreach (index, key; keys)
+        assert(cache.put(cast(const(ubyte)[]) key, cast(const(ubyte)[]) values[index], 99, context).code == Status.ok);
+    foreach (index, key; keys)
+    {
+        const found = cache.get(cast(const(ubyte)[]) key, arena, context);
+        assert(found.ok);
+        assert(found.value.length() == values[index].length);
+        bool equal;
+        assert(arena.read(found.value, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
+                equal = bytes == cast(const(ubyte)[]) values[index];
+            }) == Status.ok);
+        assert(equal);
+    }
+    assert(cache.get(cast(const(ubyte)[]) "\0\0\0", arena, context).error.code == Status.notFound);
+    assert(cache.get(cast(const(ubyte)[]) "a\0bc", arena, context).error.code == Status.notFound);
+}

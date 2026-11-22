@@ -150,6 +150,9 @@ class Peer(BaseHTTPRequestHandler):
         assert [item[1].text for item in root] == [f'"local-{p}"' for p in part_numbers]
         if owner.endswith("/finish-fails"):
             return self.respond(200, b"\r\n<Error><Code>InternalError</Code></Error>")
+        if owner.endswith("/finish-malformed"):
+            # A truncated success envelope on HTTP 200 must not be treated as a completed upload.
+            return self.respond(200, b"<CompleteMultipartUploadResult><ETag>&quot;x&quot;</ETag>")
         with self.lock:
             data = self.uploads.pop(owner)
             assert all(len(data[number]) >= 5 * 1024 * 1024 for number in part_numbers[:-1])
@@ -192,6 +195,8 @@ def main():
         raise SystemExit(f"linked S3 fixture failed: exit={result.returncode}, peer={Peer.errors}")
     assert Peer.retry[PATH, 1] == 2
     assert Peer.requests["DELETE", "/flint-test/finish-fails"] == 1
+    assert Peer.requests["POST", "/flint-test/finish-malformed"] == 2
+    assert Peer.requests["DELETE", "/flint-test/finish-malformed"] == 1
     assert Peer.requests["PUT", "/flint-test/empty"] == 1
     assert Peer.requests["POST", "/flint-test/empty"] == 0
     assert Peer.requests["presign"] == 1

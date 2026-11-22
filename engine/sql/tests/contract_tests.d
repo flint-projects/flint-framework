@@ -343,8 +343,10 @@ version (FlintNativeLibpq)
         scope (exit)
             assert(pool.release(killer.value).code == Status.ok);
         scope RequestArena arena;
+        uint calls;
         const outcome = withTransaction(pool, Isolation.readCommitted, context,
                 (ref Connection lease) @safe nothrow @nogc {
+            ++calls;
             const backend = scalar(lease, "SELECT pg_backend_pid()", context);
             const SqlValue[1] target = [SqlValue(ValueKind.int64, backend)];
             const terminated = killer.value.execute("SELECT pg_terminate_backend($1::int4, 250)",
@@ -353,6 +355,8 @@ version (FlintNativeLibpq)
             return Error.init;
         });
         assert(outcome.code == Status.unavailable && outcome.message == "SQL commit outcome is unknown");
+        // The ambiguous outcome is surfaced once; the framework never re-runs the transaction body.
+        assert(calls == 1);
         assert(killer.value.execute("SELECT 42", [], arena, context).ok());
     }
 
@@ -384,4 +388,279 @@ version (FlintNativeLibpq)
         assert(outcome.code == Status.conflict, "a commit answered with ROLLBACK was reported as success");
     }
 
+}
+
+private void exerciseBindInjection(Driver driver, string address)
+{
+    Pool pool;
+    assert(pool.open(options(driver, address)).code == Status.ok);
+    Context context;
+    scope (exit)
+        assert(pool.close(context).code == Status.ok);
+    auto acquired = pool.acquire(context);
+    assert(acquired.ok());
+    auto lease = acquired.value;
+    scope (exit)
+        assert(pool.release(lease).code == Status.ok);
+    ubyte[8192] scratch;
+    scope arena = RequestArena(scratch[]);
+    assert(lease.execute("CREATE TEMP TABLE injection_test(k text, b bytea)", [], arena, context).ok());
+    static immutable string[5] payloads = [
+        "x'); DROP TABLE injection_test; --", "' OR '1'='1", "/* comment */ SELECT 1",
+        "; DELETE FROM injection_test;", "$1 ? :name"
+    ];
+    const insert = driver == Driver.postgres
+        ? "INSERT INTO injection_test VALUES($1,$2)" : "INSERT INTO injection_test VALUES(?,?)";
+    foreach (payload; payloads)
+    {
+        const SqlValue[2] params = [
+            stored(arena, ValueKind.text, payload), stored(arena, ValueKind.bytes, "nul\0;'--")
+        ];
+        const inserted = lease.execute(insert, params[], arena, context);
+        assert(inserted.ok() && inserted.value == 1, inserted.error.message);
+    }
+    // Every payload is stored verbatim, the table still exists and nothing was deleted.
+    assert(scalar(lease, "SELECT count(*) FROM injection_test", context) == payloads.length);
+    const match = driver == Driver.postgres
+        ? "SELECT k, b FROM injection_test WHERE k = $1" : "SELECT k, b FROM injection_test WHERE k = ?";
+    foreach (payload; payloads)
+    {
+        const SqlValue[1] key = [stored(arena, ValueKind.text, payload)];
+        uint found;
+        const read = lease.query(match, key[], arena, context, (ref Row row) @safe nothrow @nogc {
+            const k = row.value(0, arena);
+            const b = row.value(1, arena);
+            assert(k.ok() && isText(arena, k.value, payload));
+            assert(b.ok() && b.value.kind == ValueKind.bytes && isText(arena, b.value, "nul\0;'--"));
+            ++found;
+            return Error.init;
+        });
+        assert(read.code == Status.ok && found == 1, read.message);
+    }
+    // A tautology payload is compared as one literal value, not spliced into the predicate.
+    const SqlValue[1] tautology = [stored(arena, ValueKind.text, "nobody' OR '1'='1")];
+    uint matched;
+    assert(lease.query(match, tautology[], arena, context, (ref Row row) @safe nothrow @nogc {
+            ++matched;
+            return Error.init;
+        }).code == Status.ok);
+    assert(matched == 0);
+}
+
+private void exerciseNullKinds(Driver driver, string address)
+{
+    Pool pool;
+    assert(pool.open(options(driver, address)).code == Status.ok);
+    Context context;
+    scope (exit)
+        assert(pool.close(context).code == Status.ok);
+    auto acquired = pool.acquire(context);
+    assert(acquired.ok());
+    auto lease = acquired.value;
+    scope (exit)
+        assert(pool.release(lease).code == Status.ok);
+    ubyte[4096] scratch;
+    scope arena = RequestArena(scratch[]);
+    assert(lease.execute("CREATE TEMP TABLE null_kinds(id bigint, k text, b bytea, z bigint, f boolean)",
+            [], arena, context).ok());
+    const insert = driver == Driver.postgres
+        ? "INSERT INTO null_kinds VALUES($1,$2,$3,$4,$5)" : "INSERT INTO null_kinds VALUES(?,?,?,?,?)";
+    // Row 1 holds NULL in every column; row 2 holds the empty or zero value of each column's type.
+    const SqlValue[5] nulls = [
+        SqlValue(ValueKind.int64, 1), SqlValue.init, SqlValue.init, SqlValue.init, SqlValue.init
+    ];
+    const SqlValue[5] empties = [
+        SqlValue(ValueKind.int64, 2), stored(arena, ValueKind.text, ""),
+        stored(arena, ValueKind.bytes, ""), SqlValue(ValueKind.int64, 0),
+        SqlValue(ValueKind.boolean, 0)
+    ];
+    assert(lease.execute(insert, nulls[], arena, context).ok());
+    assert(lease.execute(insert, empties[], arena, context).ok());
+    static immutable ValueKind[4] emptyKinds = [
+        ValueKind.text, ValueKind.bytes, ValueKind.int64, ValueKind.boolean
+    ];
+    uint rows;
+    const read = lease.query("SELECT id, k, b, z, f FROM null_kinds ORDER BY id", [], arena,
+            context, (ref Row row) @safe nothrow @nogc {
+        const id = row.value(0, arena);
+        assert(id.ok());
+        foreach (column; 1 .. 5)
+        {
+            const cell = row.value(column, arena);
+            assert(cell.ok());
+            if (id.value.integer == 1)
+                assert(cell.value.kind == ValueKind.null_);
+            else
+            {
+                assert(cell.value.kind == emptyKinds[column - 1]);
+                assert(cell.value.integer == 0);
+                if (cell.value.kind == ValueKind.text || cell.value.kind == ValueKind.bytes)
+                    assert(isText(arena, cell.value, ""));
+            }
+        }
+        ++rows;
+        return Error.init;
+    });
+    assert(read.code == Status.ok && rows == 2, read.message);
+    // The database itself distinguishes each NULL from the empty value of that type.
+    assert(scalar(lease,
+            "SELECT count(*) FROM null_kinds WHERE k IS NULL AND b IS NULL AND z IS NULL AND f IS NULL", context) == 1);
+    assert(scalar(lease, "SELECT count(*) FROM null_kinds WHERE k = '' AND z = 0 AND f = false", context) == 1);
+}
+
+version (FlintNativeSqlite)
+{
+    @("bind_injection: SQLite quote, comment, semicolon and NUL payloads stay data")
+    unittest
+    {
+        exerciseBindInjection(Driver.sqlite, ":memory:");
+    }
+
+    @("value_nulls: SQLite NULL, empty text, empty blob, zero and false stay distinct")
+    unittest
+    {
+        exerciseNullKinds(Driver.sqlite, ":memory:");
+    }
+
+    import core.thread : Thread;
+
+    private struct Waiter
+    {
+        Pool* pool;
+        Context context;
+        Status outcome = Status.invalidArgument;
+        uint exhaustedRetries;
+    }
+
+    private void queueForLease(Waiter* waiter) nothrow
+    {
+        import core.time : usecs;
+
+        for (;;)
+        {
+            auto acquired = waiter.pool.acquire(waiter.context);
+            // Until the probe reports a full queue, the probe itself may hold the last queue position.
+            if (acquired.error.code == Status.resourceExhausted)
+            {
+                ++waiter.exhaustedRetries;
+                Thread.sleep(50.usecs);
+                continue;
+            }
+            waiter.outcome = acquired.error.code;
+            if (acquired.ok())
+            {
+                auto lease = acquired.value;
+                if (waiter.pool.release(lease).code != Status.ok)
+                    waiter.outcome = Status.ioError;
+            }
+            return;
+        }
+    }
+
+    private Thread startWaiter(Waiter* waiter) @system
+    {
+        return new Thread({ queueForLease(waiter); }).start();
+    }
+
+    /// Acquire once with a 1 ms deadline and report the terminal status and its latency.
+    private Status probe(ref Pool pool, out long micros)
+    {
+        import core.time : MonoTime;
+
+        auto source = CancelSource.create(Context.init, Deadline.afterMillis(1));
+        assert(source.ok());
+        auto limited = source.value.context();
+        const started = MonoTime.currTime;
+        auto acquired = pool.acquire(limited);
+        micros = (MonoTime.currTime - started).total!"usecs";
+        assert(!acquired.ok());
+        return acquired.error.code;
+    }
+
+    @("pool_saturation: 16 leases and 256 queued waiters stay bounded, waiter 257 fails and cancelled waiters leave")
+    @system unittest
+    {
+        import core.time : MonoTime, msecs;
+
+        auto setup = options(Driver.sqlite, ":memory:", 16);
+        assert(setup.maxWaiters == 256);
+        Pool pool;
+        assert(pool.open(setup).code == Status.ok);
+        Context context;
+        scope (exit)
+            assert(pool.close(context).code == Status.ok);
+        Connection[16] leases;
+        foreach (ref lease; leases)
+        {
+            auto acquired = pool.acquire(context);
+            assert(acquired.ok());
+            lease = acquired.value;
+        }
+
+        auto first = CancelSource.create(Context.init, Deadline.none());
+        auto second = CancelSource.create(Context.init, Deadline.none());
+        assert(first.ok() && second.ok());
+        enum victimA = 17, victimB = 200;
+        auto waiters = new Waiter[256];
+        auto threads = new Thread[256];
+        foreach (index, ref waiter; waiters)
+        {
+            waiter.pool = &pool;
+            if (index == victimA)
+                waiter.context = first.value.context();
+            else if (index == victimB)
+                waiter.context = second.value.context();
+            threads[index] = startWaiter(&waiter);
+        }
+
+        // Waiter 257 is the probe: once every worker is queued it is rejected immediately.
+        long micros;
+        const queued = MonoTime.currTime;
+        Status status;
+        while ((status = probe(pool, micros)) != Status.resourceExhausted)
+        {
+            assert(status == Status.timedOut);
+            assert(MonoTime.currTime - queued < 4000.msecs, "256 waiters never filled the queue");
+        }
+        assert(micros < 50_000, "a full lease queue did not reject promptly");
+        foreach (attempt; 0 .. 8)
+        {
+            assert(probe(pool, micros) == Status.resourceExhausted);
+            assert(micros < 50_000);
+        }
+
+        // Cancelled waiters return and withdraw their queue positions.
+        first.value.cancel();
+        second.value.cancel();
+        threads[victimA].join();
+        threads[victimB].join();
+        assert(waiters[victimA].outcome == Status.cancelled);
+        assert(waiters[victimB].outcome == Status.cancelled);
+        assert(probe(pool, micros) == Status.timedOut, "a cancelled waiter kept its queue position");
+
+        foreach (ref lease; leases)
+            assert(pool.release(lease).code == Status.ok);
+        foreach (index, thread; threads)
+        {
+            thread.join();
+            if (index != victimA && index != victimB)
+                assert(waiters[index].outcome == Status.ok);
+        }
+        auto after = pool.acquire(context);
+        assert(after.ok());
+        assert(pool.release(after.value).code == Status.ok);
+    }
+}
+
+version (FlintNativeLibpq)
+{
+    @("bind_injection and value_nulls: PostgreSQL payloads stay data and NULLs stay distinct")
+    unittest
+    {
+        const address = environment.get("FLINT_SQL_PG_TEST_DSN");
+        if (address.length == 0)
+            return;
+        exerciseBindInjection(Driver.postgres, address);
+        exerciseNullKinds(Driver.postgres, address);
+    }
 }
