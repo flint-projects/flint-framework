@@ -29,8 +29,24 @@ private size_t residentBytes() @trusted nothrow @nogc
             return 0;
         return cast(size_t) resident * pageSize;
     }
+    else version (OSX)
+    {
+        // <mach/task_info.h> MACH_TASK_BASIC_INFO: virtual, resident and maximum resident sizes first.
+        enum int machTaskBasicInfo = 20;
+        ulong[6] info;
+        uint count = info.sizeof / uint.sizeof;
+        if (task_info(mach_task_self_, machTaskBasicInfo, info.ptr, &count) != 0)
+            return 0;
+        return cast(size_t) info[1];
+    }
     else
         return 0;
+}
+
+version (OSX)
+{
+    private extern (C) extern __gshared uint mach_task_self_;
+    private extern (C) int task_info(uint task, int flavor, ulong* info, uint* count) @system nothrow @nogc;
 }
 
 private void measure() @safe nothrow @nogc
@@ -68,7 +84,7 @@ unittest
     assert(atomicLoad(finished) == tasks);
     const stats = server.value.workerStats(0);
     assert(stats.ok && stats.value.gcAllocated == 0);
-    version (linux)
+    version (Posix)
     {
         // Eagerly written initial frames made one page per pooled fiber resident.
         const inside = atomicLoad(residentInside);

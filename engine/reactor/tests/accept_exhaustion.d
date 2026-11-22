@@ -1,5 +1,6 @@
 module flint.reactor.accept_exhaustion_test;
 
+import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.thread : Thread;
 import core.time : msecs;
@@ -8,7 +9,8 @@ import flint.conc : Deadline;
 import flint.reactor : Backend, ConnectionId, ListenOptions, Reactor, ReactorOptions;
 import std.socket : InternetAddress, TcpSocket;
 
-version (linux)
+// Linux epoll and io_uring, and macOS kqueue (ADR-024).
+version (Posix)
 {
     private shared uint admitted;
 
@@ -98,6 +100,16 @@ version (linux)
             Thread.sleep(50.msecs);
             // Free one descriptor; the pending connection must then be admitted.
             closeDescriptor(spare);
+            version (OSX)
+            {
+                // XNU drops a connection whose accept failed with EMFILE instead of leaving it in the
+                // backlog (accept_nocancel), so the reactor must keep serving and admit the next one.
+                peer.close();
+                auto next = new TcpSocket;
+                scope (exit)
+                    next.close();
+                next.connect(new InternetAddress("127.0.0.1", port));
+            }
             foreach (_; 0 .. 3_000)
             {
                 if (atomicLoad(admitted) != 0)
@@ -115,7 +127,7 @@ version (linux)
     @("epoll keeps serving and admits a backlogged connection after descriptor exhaustion")
     unittest
     {
-        exhaust(Backend.epoll);
+        exhaust(readinessBackend);
     }
 
     version (FlintNativeLiburing)
@@ -176,7 +188,7 @@ version (linux)
     @("epoll admits connections with TCP_NODELAY set")
     unittest
     {
-        acceptOneAndInspect(Backend.epoll);
+        acceptOneAndInspect(readinessBackend);
     }
 
     version (FlintNativeLiburing)

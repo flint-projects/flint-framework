@@ -2,7 +2,13 @@ module flint.reactor.sys.nativewatch;
 
 @safe:
 
+// Linux nests an epoll descriptor in the owner's poller; macOS nests a kqueue the same way.
 version (linux)
+    version = ReactorNativeWatches;
+else version (OSX)
+    version = ReactorNativeWatches;
+
+version (ReactorNativeWatches)
 {
     import flint.arena : Error, Status;
     import flint.reactor.sys.readiness : Readiness, ReadyEvent, destroyReadiness, poll, setNativeInterest;

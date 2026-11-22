@@ -1,5 +1,6 @@
 module flint.reactor.write_drain_test;
 
+import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import core.thread : Thread;
 import core.time : msecs;
@@ -104,12 +105,13 @@ private void testDrain(Backend backend)
     assert(stats.ok && stats.value.outstandingOperations == 0);
 }
 
-version (linux)
+// Linux epoll and io_uring, and macOS kqueue (ADR-024).
+version (Posix)
 {
     @("epoll closes a socket only after its backpressured write callback retires")
     unittest
     {
-        testDrain(Backend.epoll);
+        testDrain(readinessBackend);
     }
 
     version (FlintNativeLiburing)

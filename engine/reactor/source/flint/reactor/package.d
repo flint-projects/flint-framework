@@ -19,6 +19,12 @@ public import flint.reactor.types : AcceptDelegate, AcceptFn, Backend, Completio
 
 @safe:
 
+// Native descriptor watches nest a poller in the owner's: epoll on Linux, kqueue on macOS.
+version (linux)
+    version = ReactorNativeWatches;
+else version (OSX)
+    version = ReactorNativeWatches;
+
 version (Posix)
 {
     import flint.reactor.sys.sockets : Socket, acceptConnection, bindListener, closeSocket, receive,
@@ -34,7 +40,10 @@ version (linux)
     import flint.reactor.sys.scratch : Scratch;
 }
 else version (OSX)
+{
     version = ReactorReadinessOnly;
+    import flint.reactor.sys.nativewatch : NativeWatches;
+}
 else version (Windows)
     import flint.reactor.sys.windows : CompletionPort, KernelEvent, Socket, bindListener,
         cancelKernel, closeCompletionPort,
@@ -409,11 +418,11 @@ struct Reactor
         return runtime.workers[currentWorkerIndex].wakeTask(waker);
     }
 
-    /// Create or update a Linux watch on the current worker. The caller keeps ownership of fd and
+    /// Create or update a Linux or macOS watch on the current worker. The caller keeps ownership of fd and
     /// removes the watch before releasing the descriptor or callback. Error readiness is always delivered.
     Error watchNative(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
     {
-        version (linux)
+        version (ReactorNativeWatches)
         {
             enum valid = NativeInterest.read | NativeInterest.write | NativeInterest.error;
             if (fd < 0 || callback is null || interest == NativeInterest.none || (interest & ~valid) != 0)
@@ -423,13 +432,13 @@ struct Reactor
             return runtime.workers[currentWorkerIndex].watchNative(fd, interest, callback);
         }
         else
-            return Error(Status.unsupported, "native descriptor watches require Linux");
+            return Error(Status.unsupported, "native descriptor watches require Linux or macOS");
     }
 
-    /// Drop a Linux watch from its owner loop. Remains available during cancellation and shutdown.
+    /// Drop a native watch from its owner loop. Remains available during cancellation and shutdown.
     Error unwatchNative(int fd) nothrow @nogc
     {
-        version (linux)
+        version (ReactorNativeWatches)
         {
             if (fd < 0)
                 return Error(Status.invalidArgument, "invalid native descriptor");
@@ -438,7 +447,7 @@ struct Reactor
             return Error(runtime.workers[currentWorkerIndex].nativeWatches.remove(fd));
         }
         else
-            return Error(Status.unsupported, "native descriptor watches require Linux");
+            return Error(Status.unsupported, "native descriptor watches require Linux or macOS");
     }
 
     /// Return the port selected by a successful listen.
@@ -727,9 +736,9 @@ private struct Worker
 
     version (Posix) Readiness readiness;
 
+    version (ReactorNativeWatches) NativeWatches nativeWatches;
     version (linux)
     {
-        NativeWatches nativeWatches;
         bool nativePending;
         bool nativeCancelSent;
     }
@@ -771,6 +780,8 @@ private struct Worker
         }
         else
         {
+            version (ReactorNativeWatches)
+                nativeWatches.reserve(options.maxNativeWatchesPerCore);
             buffers = new ubyte[bytes];
             return Status.ok;
         }
@@ -1033,14 +1044,13 @@ private struct Worker
         {
             closeCompletionPort(completions);
         }
-        version (linux)
-        {
+        version (ReactorNativeWatches)
             nativeWatches.release();
+        version (linux)
             buffers.release();
-        }
     }
 
-    version (linux)
+    version (ReactorNativeWatches)
     {
         Error watchNative(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
         {
@@ -1066,6 +1076,16 @@ private struct Worker
             return Error(nativeWatches.update(fd, interest, callback));
         }
 
+        private void notifyNativeWatches() nothrow @nogc
+        {
+            const outcome = nativeWatches.notify(runtime.options.completionsPerTick);
+            if (outcome.code != Status.ok)
+                fail(outcome);
+        }
+    }
+
+    version (linux)
+    {
         private void advanceNativeWatch() nothrow @nogc
         {
             if (!nativeWatches.receiver.valid || nativePending)
@@ -1075,13 +1095,6 @@ private struct Worker
                 nativePending = true;
             else if (outcome != Status.unavailable)
                 fail(Error(outcome, "could not submit native descriptor readiness"));
-        }
-
-        private void notifyNativeWatches() nothrow @nogc
-        {
-            const outcome = nativeWatches.notify(runtime.options.completionsPerTick);
-            if (outcome.code != Status.ok)
-                fail(outcome);
         }
 
         private void completeNativeWatch(Status status) nothrow @nogc
@@ -1450,7 +1463,7 @@ private struct Worker
             {
                 if (atomicLoad(runtime.state) != State.running)
                     return;
-                version (linux)
+                version (ReactorNativeWatches)
                 {
                     if (event.token == nativeWatchToken)
                     {

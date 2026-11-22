@@ -1,6 +1,7 @@
 module flint.reactor.native_watch_test;
 
-version (linux)
+// Linux epoll and io_uring, and macOS kqueue (ADR-024).
+version (Posix)
 {
     import core.atomic : atomicLoad, atomicOp, atomicStore;
     import core.sys.posix.sys.socket : AF_UNIX, SHUT_WR, SOCK_STREAM, send, shutdown, socketpair;
@@ -8,6 +9,7 @@ version (linux)
     import flint.arena : Status;
     import flint.conc : Deadline;
     import flint.reactor : Backend, NativeInterest, NativeReadyFn, Reactor, ReactorOptions;
+    import flint.reactor.test_support : readinessBackend;
 
     private shared int watched;
     private shared int quietFd;
@@ -94,7 +96,7 @@ version (linux)
     @("borrowed descriptors notify outside fibers and survive reactor shutdown")
     @system unittest
     {
-        exercise(Backend.epoll);
+        exercise(readinessBackend);
         version (FlintNativeLiburing)
             exercise(Backend.ioUring);
     }

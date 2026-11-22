@@ -42,6 +42,20 @@ final class PoolFiber : Fiber
             if (madvise(m_pmem + pageSize, m_size - pageSize, adviseDontNeed) == 0)
                 parked = true;
         }
+        else version (OSX)
+        {
+            import core.memory : pageSize;
+            import core.sys.posix.sys.mman : MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE,
+                PROT_READ, PROT_WRITE, mmap;
+
+            if (parked || state != Fiber.State.HOLD || m_pmem is null || m_size <= pageSize)
+                return;
+            // Darwin's MADV_DONTNEED leaves the pages resident. A fresh fixed anonymous mapping over the
+            // same range, with the same protection, gives them back and reads as zero until primed.
+            if (mmap(m_pmem + pageSize, m_size - pageSize, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) != MAP_FAILED)
+                parked = true;
+        }
     }
 
     /// Rewrite the initial frame of a parked fiber before its first resume.

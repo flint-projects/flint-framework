@@ -98,6 +98,43 @@ package(flint.reactor) Usage workerUsage() @trusted nothrow @nogc
         const micros = cast(ulong)(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec);
         return Usage(seconds * 1_000_000_000 + micros * 1000, usage.ru_nvcsw, usage.ru_nivcsw);
     }
+    else version (OSX)
+    {
+        // Darwin has no RUSAGE_THREAD. The Mach thread's basic info carries its CPU time; per-thread
+        // context switch counts are not exposed, so they stay zero.
+        import core.sys.posix.pthread : pthread_self;
+
+        ThreadBasicInfo info;
+        uint count = ThreadBasicInfo.sizeof / int.sizeof;
+        if (thread_info(pthread_mach_thread_np(pthread_self()), threadBasicInfo, &info, &count) != 0)
+            return Usage.init;
+        const seconds = cast(ulong) info.userSeconds + cast(ulong) info.systemSeconds;
+        const micros = cast(ulong) info.userMicros + cast(ulong) info.systemMicros;
+        return Usage(seconds * 1_000_000_000 + micros * 1000, 0, 0);
+    }
     else
         return Usage.init;
+}
+
+version (OSX)
+{
+    import core.sys.posix.pthread : pthread_t;
+
+    // <mach/thread_info.h> THREAD_BASIC_INFO: two time_value_t followed by six integers.
+    private enum int threadBasicInfo = 3;
+
+    private struct ThreadBasicInfo
+    {
+        int userSeconds;
+        int userMicros;
+        int systemSeconds;
+        int systemMicros;
+        int[6] rest;
+    }
+
+    private extern (C) @system nothrow @nogc
+    {
+        uint pthread_mach_thread_np(pthread_t thread);
+        int thread_info(uint thread, int flavor, ThreadBasicInfo* info, uint* count);
+    }
 }

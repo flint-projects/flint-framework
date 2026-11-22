@@ -1,5 +1,6 @@
 module flint.reactor.cooperative_wait_test;
 
+import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.lifetime : move;
 import flint.arena : Status;
@@ -28,7 +29,7 @@ private void ticker() nothrow @nogc
 unittest
 {
     ReactorOptions options;
-    options.backend = Backend.epoll;
+    options.backend = readinessBackend;
     options.cores = 1;
     options.fiberPoolSize = 2;
     auto owner = Reactor.create(options);
@@ -63,7 +64,7 @@ private void napper() nothrow @nogc
 @("an idle owner loop resumes a sleeping fiber at its deadline rather than after its polling budget")
 unittest
 {
-    foreach (backend; [Backend.automatic, Backend.epoll])
+    foreach (backend; [Backend.automatic, readinessBackend])
     {
         ReactorOptions options;
         options.backend = backend;
@@ -99,7 +100,7 @@ private void relayTimer() nothrow @nogc
 @("a task posted by a loop callback starts without waiting for unrelated I/O")
 unittest
 {
-    foreach (backend; [Backend.automatic, Backend.epoll])
+    foreach (backend; [Backend.automatic, readinessBackend])
     {
         ReactorOptions options;
         options.backend = backend;

@@ -131,10 +131,12 @@ version (linux)
 }
 else version (OSX)
 {
-    import core.sys.darwin.sys.event : EV_ADD, EV_DELETE, EV_ENABLE, EVFILT_READ, EVFILT_WRITE,
-        kevent64, kevent64_s, kqueue;
+    import core.stdc.errno : EBADF, ENOENT;
+    import core.sys.darwin.sys.event : EV_ADD, EV_DELETE, EV_ENABLE, EV_EOF, EV_ERROR, EVFILT_READ,
+        EVFILT_WRITE, NOTE_LOWAT, kevent64, kevent64_s, kqueue;
     import core.sys.posix.fcntl : FD_CLOEXEC, F_SETFD, fcntl;
     import core.sys.posix.time : timespec;
+    import flint.reactor.types : NativeInterest;
 
     // SAFETY: kqueue returns a newly owned descriptor, released on close-on-exec setup failure.
     package(flint.reactor) Result!Readiness openReadiness() @trusted nothrow @nogc
@@ -183,9 +185,64 @@ else version (OSX)
         foreach (i; 0 .. count)
         {
             const event = nativeEvents[i];
-            ready[i] = ReadyEvent(event.udata, directions(event.filter == EVFILT_READ, event.filter == EVFILT_WRITE));
+            // EOF (peer shutdown or a pending socket error) is readiness of its filter, as epoll's
+            // HUP/RDHUP/ERR are; the caller's next receive or send observes it.
+            const fault = (event.flags & (EV_EOF | EV_ERROR)) != 0;
+            ready[i] = ReadyEvent(event.udata, directions(event.filter == EVFILT_READ,
+                    event.filter == EVFILT_WRITE), fault);
         }
         return Result!size_t(cast(size_t) count);
+    }
+
+    // Error readiness is always delivered, as epoll's EPOLLRDHUP/ERR/HUP are. Without read interest
+    // the read filter stays registered with an unreachable low-water mark, so it fires only on EOF
+    // or a pending error, never for ordinary data.
+    private enum long eofOnly = int.max;
+
+    private kevent64_s readFilter(int fd, ulong token, NativeInterest desired) pure nothrow @nogc
+    {
+        const reading = (desired & NativeInterest.read) != 0;
+        return kevent64_s(cast(ulong) fd, EVFILT_READ, EV_ADD | EV_ENABLE, reading ? 0 : NOTE_LOWAT,
+                reading ? 0 : eofOnly, token);
+    }
+
+    // SAFETY: kevent64 synchronously copies the one local change and retains only its integer token.
+    private Status applyChange(Readiness poller, kevent64_s change) @trusted nothrow @nogc
+    {
+        if (kevent64(poller.descriptor, &change, 1, null, 0, 0, null) == 0)
+            return Status.ok;
+        const failure = errno;
+        // The kernel already dropped the filters of a closed descriptor.
+        if ((change.flags & EV_DELETE) && (failure == EBADF || failure == ENOENT))
+            return Status.ok;
+        return socketError(failure);
+    }
+
+    package(flint.reactor) Status setNativeInterest(Readiness poller, int fd, ulong token,
+            NativeInterest previous, NativeInterest desired) nothrow @nogc
+    {
+        if (previous == desired)
+            return Status.ok;
+        if (desired == NativeInterest.none)
+        {
+            const read = applyChange(poller, kevent64_s(cast(ulong) fd, EVFILT_READ, EV_DELETE));
+            if (!(previous & NativeInterest.write))
+                return read;
+            const write = applyChange(poller, kevent64_s(cast(ulong) fd, EVFILT_WRITE, EV_DELETE));
+            return read != Status.ok ? read : write;
+        }
+        // The read filter is always registered: for data with read interest, otherwise for EOF and errors.
+        if (previous == NativeInterest.none || ((previous ^ desired) & NativeInterest.read))
+        {
+            const read = applyChange(poller, readFilter(fd, token, desired));
+            if (read != Status.ok)
+                return read;
+        }
+        if (!((previous ^ desired) & NativeInterest.write))
+            return Status.ok;
+        const writing = (desired & NativeInterest.write) != 0;
+        return applyChange(poller, kevent64_s(cast(ulong) fd, EVFILT_WRITE, writing
+                ? EV_ADD | EV_ENABLE : EV_DELETE, 0, 0, token));
     }
 }
 

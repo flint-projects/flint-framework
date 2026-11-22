@@ -1,5 +1,6 @@
 module flint.reactor.wake_test;
 
+import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import flint.arena : Status;
 import flint.conc : Deadline;
@@ -51,7 +52,7 @@ private void timerWaited() nothrow @nogc
 @("a loop callback resumes a suspended fiber on the next pass instead of at its deadline")
 unittest
 {
-    foreach (backend; [Backend.automatic, Backend.epoll])
+    foreach (backend; [Backend.automatic, readinessBackend])
     {
         ReactorOptions options;
         options.backend = backend;

@@ -1,5 +1,6 @@
 module flint.reactor.owner_test;
 
+import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import core.thread : Thread;
 import core.time : msecs;
@@ -56,7 +57,8 @@ private void armWatchdog() @safe nothrow @nogc
     assert(reactor.schedule(Deadline.afterMillis(3000), &watchdog).ok);
 }
 
-version (linux)
+// Linux epoll and io_uring, and macOS kqueue (ADR-024).
+version (Posix)
 {
     @("foreign worker sends close through the owner mailbox and the owner retires the read")
     unittest
@@ -65,7 +67,7 @@ version (linux)
             return;
         atomicStore(retired, false);
         ReactorOptions options;
-        options.backend = Backend.epoll;
+        options.backend = readinessBackend;
         options.cores = 2;
         options.fiberPoolSize = 1;
         options.maxConnectionsPerCore = 2;

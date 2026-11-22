@@ -1,5 +1,6 @@
 module flint.reactor.cancel_race_test;
 
+import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import core.thread : Thread;
 import core.time : msecs;
@@ -133,12 +134,13 @@ private void race(Backend backend)
     assert(stats.ok && stats.value.outstandingOperations == 0);
 }
 
-version (linux)
+// Linux epoll and io_uring, and macOS kqueue (ADR-024).
+version (Posix)
 {
     @("epoll cancellation of a read with pending data keeps every byte")
     unittest
     {
-        race(Backend.epoll);
+        race(readinessBackend);
     }
 
     version (FlintNativeLiburing)
