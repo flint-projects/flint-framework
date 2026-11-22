@@ -7,7 +7,7 @@ import flint.arena : Error, Status;
 import flint.conc : Deadline;
 import flint.style : Color, Style;
 import flint.term : ColorProfile;
-import flint.tui : CommandId, Effects, Event, EventKind, Frame, Size;
+import flint.tui : CommandId, Effects, Event, EventKind, Frame, Size, run;
 import flint.tui.commands : Commands;
 import flint.tui.effects : Control, now;
 import flint.tui.grid : Grid;
@@ -321,3 +321,22 @@ unittest
             assert(frame.put(4, 0, "yz").code == Status.ok);
         }).length == 0);
 }
+
+private struct SpecCounter
+{
+    uint count;
+
+    void update(Event event, ref Effects effects) @safe
+    {
+        if (event.kind == EventKind.interrupt)
+            effects.quit();
+    }
+
+    void view(ref Frame frame) const @safe
+    {
+        frame.put(0, 0, "Counter");
+    }
+}
+
+// The specification's usage fixture must keep compiling against the public runtime entry.
+static assert(__traits(compiles, () @safe { SpecCounter model; return run!SpecCounter(model); }));

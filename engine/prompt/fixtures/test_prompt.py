@@ -2,6 +2,7 @@
 """Verify prompt ownership and secret redaction with a Linux terminal or pipe."""
 import argparse
 import contextlib
+import select
 import os
 import subprocess
 import sys
@@ -42,6 +43,24 @@ def password(binary):
     redirected = subprocess.run([binary, "password"], input=supplied, capture_output=True, timeout=4)
     assert redirected.returncode == 0 and redirected.stdout.strip() == b"RESULT=unsupported", redirected
     assert supplied not in redirected.stderr and b"\x1b" not in redirected.stdout
+    # PROMPT-03 with a terminal on stdout: piped stdin still refuses before any terminal control or mode change.
+    master, slave = os.openpty()
+    try:
+        original = termios.tcgetattr(slave)
+        piped = subprocess.run([binary, "password"], input=supplied, stdout=slave, stderr=subprocess.PIPE,
+                               timeout=4)
+        assert piped.returncode == 0 and supplied not in piped.stderr, piped
+        assert termios.tcgetattr(slave) == original
+        shown = bytearray()
+        while select.select([master], [], [], 0.2)[0]:
+            part = os.read(master, 4096)
+            if not part:
+                break
+            shown += part
+        assert shown.strip() == b"RESULT=unsupported" and b"\x1b" not in shown, bytes(shown)
+    finally:
+        os.close(master)
+        os.close(slave)
     readable = subprocess.run([binary, "stream"], input=b"stream\n", capture_output=True, timeout=4)
     assert readable.returncode == 0 and readable.stdout.strip() == b"RESULT=ok STREAM", readable
     print("password: edit and paste redacted, redirected secret refused, public stream explicitly enabled")
