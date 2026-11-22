@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Flint desktop self-test</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Flint desktop</h1>
+    <form id="greet">
+      <input id="name" placeholder="Your name" autocomplete="off" value="Ada">
+      <button>Greet</button>
+    </form>
+    <p id="greeting" aria-live="polite"></p>
+    <section class="counter">
+      <button id="decrement" aria-label="Decrement">−</button>
+      <output id="count">0</output>
+      <button id="increment" aria-label="Increment">+</button>
+      <button id="reset">Reset</button>
+    </section>
+    <ol id="log"></ol>
+  </main>
+  <script src="app.js"></script>
+  <script>selfTest();</script>
+</body>
+</html>
