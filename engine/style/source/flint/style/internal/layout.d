@@ -177,6 +177,19 @@ private void body(ref Canvas canvas, Axis axis, Glyphs border, string ansi, Row 
     output.spaces(axis.outerEnd);
 }
 
+// Resolve a zero height to the natural block height, rejecting heights above the cell limit.
+private bool fitHeight(Style style, size_t lines, bool framed, ref uint height) pure nothrow @nogc
+{
+    if (height != 0)
+        return true;
+    const natural = cast(ulong) style.margin.top + style.margin.bottom + style.padding.top
+        + style.padding.bottom + lines + (framed ? 2 : 0);
+    if (natural > maximumCells)
+        return false;
+    height = cast(uint) natural;
+    return true;
+}
+
 package(flint.style) string renderBlock(scope const(char)[] input, Style style, uint width, uint height)
 {
     if (width == 0 || width > maximumCells || height > maximumCells || input.length > maximumBytes)
@@ -185,15 +198,10 @@ package(flint.style) string renderBlock(scope const(char)[] input, Style style, 
     const framed = border.vertical.length != 0;
     const x = divide(width, style.margin.left, style.margin.right, style.padding.left, style.padding.right, framed);
     const lines = rows(input, x.content, false);
-    if (height == 0)
-    {
-        const natural = cast(ulong) style.margin.top + style.margin.bottom + style.padding.top
-            + style.padding.bottom + lines.length + (framed ? 2 : 0);
-        if (natural > maximumCells)
-            return null;
-        height = cast(uint) natural;
-    }
-    if (cast(ulong) width * height > maximumBytes)
+    // Over-tall or oversized text is rejected rather than drawn as an empty block.
+    if (lines is null && input.length != 0)
+        return null;
+    if (!fitHeight(style, lines.length, framed, height) || cast(ulong) width * height > maximumBytes)
         return null;
     const y = divide(height, style.margin.top, style.margin.bottom, style.padding.top, style.padding.bottom, framed);
     const visible = lines.length < y.content ? cast(uint) lines.length : y.content;

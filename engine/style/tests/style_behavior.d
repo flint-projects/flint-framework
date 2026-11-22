@@ -3,7 +3,7 @@ module flint.style.style_behavior_test;
 import flint.style : Alignment, Border, Color, Insets, Style, TextMetrics, joinHorizontal,
     joinVertical, measure, render, truncateCells;
 import flint.style.ffi.unicode : unicodeVersion;
-import std.algorithm.searching : canFind, endsWith;
+import std.algorithm.searching : canFind, endsWith, startsWith;
 import std.utf : validate;
 
 @safe:
@@ -104,4 +104,99 @@ unittest
     foreach (ref block; oversized)
         block = megabyte;
     assert(joinVertical(oversized[], 0) == "");
+}
+
+@("STYLE-02 plain blocks clip at width 1 and oversized padding leaves only blank cells")
+unittest
+{
+    assert(render("foo", Style.init, 1) == "f");
+    assert(render("界", Style.init, 1) == " ");
+    Style padded;
+    padded.padding = Insets(0, 20, 0, 20);
+    assert(render("foo", padded, 4) == "    ");
+    padded.padding = Insets(uint.max, uint.max, uint.max, uint.max);
+    assert(render("foo", padded, 2, 2) == "  \n  ");
+}
+
+@("STYLE-03 C1 controls, OSC and non-SGR escapes never reach output")
+unittest
+{
+    const hostile = "\u009b2J\x1b]0;title\x07\x1b[2J\x1b[38;2;1;2m";
+    const string[4] outputs = [
+        render(hostile, Style.init, 40), truncateCells(hostile, 40), joinHorizontal([hostile], 0),
+        joinVertical([hostile, hostile], 1)
+    ];
+    foreach (output; outputs)
+    {
+        assert(output.length != 0);
+        validate(output);
+        assert(!output.canFind('\x1b') && !output.canFind('\x07') && !output.canFind("\u009b"));
+        assert(output.canFind("[2J"));
+    }
+}
+
+@("STYLE-04 nested styled blocks reset SGR state before every row boundary")
+unittest
+{
+    import std.algorithm.iteration : splitter;
+    import std.string : lastIndexOf;
+
+    Style inner;
+    inner.underline = true;
+    inner.border = Border.plain;
+    Style outer;
+    outer.background = Color(1, 2, 3);
+    outer.italic = true;
+    const boxed = render("in\nner", inner, 5);
+    const filled = render("x", outer, 2, 3);
+    const nested = joinVertical([joinHorizontal([boxed, filled], 1), filled], 0);
+    assert(measure(nested) == TextMetrics(8, 7));
+    size_t styledRows;
+    foreach (row; nested.splitter('\n'))
+    {
+        const last = row.lastIndexOf("\x1b[");
+        if (last < 0)
+            continue;
+        ++styledRows;
+        assert(row[last .. $].canFind("\x1b[0m"), row);
+    }
+    // Frame rows are unpainted; every content row and each filled row carries and resets its style.
+    assert(styledRows == 6);
+    assert(nested.splitter('\n').front.startsWith("┌───┐ \x1b["));
+}
+
+@("STYLE-05 empty joins are empty and gaps never add trailing newlines")
+unittest
+{
+    assert(joinHorizontal(null, 4) == "");
+    assert(joinHorizontal(["", ""], 4) == "");
+    assert(joinHorizontal(["a", "", "b"], 0) == "ab");
+    assert(joinVertical(["", ""], 4) == "");
+    assert(!joinVertical(["a\n", "b\n"], 4).endsWith("\n"));
+}
+
+@("STYLE-06 oversized counts and widths fail before allocating output")
+unittest
+{
+    assert(truncateCells("abc", 16_385) == "");
+    assert(truncateCells("abc", uint.max) == "");
+    auto blocks = new string[16_385];
+    blocks[] = "a";
+    assert(joinHorizontal(blocks, 0) == "");
+    assert(joinVertical(blocks, 0) == "");
+    assert(joinHorizontal(blocks[0 .. 16_384], 0).length == 16_384);
+
+    auto tall = new char[2 * 16_385];
+    foreach (index; 0 .. 16_385)
+        tall[2 * index .. 2 * index + 2] = "a\n";
+    assert(render(tall, Style.init, 3) == "");
+    assert(render(tall, Style.init, 3, 2) == "");
+    assert(truncateCells(tall, 3) == "");
+    assert(measure(tall) == TextMetrics(1, 16_385));
+
+    auto huge = new char[16 * 1024 * 1024 + 1];
+    huge[] = 'a';
+    assert(measure(huge) == TextMetrics.init);
+    assert(render(huge, Style.init, 4) == "");
+    assert(truncateCells(huge, 4) == "");
 }
