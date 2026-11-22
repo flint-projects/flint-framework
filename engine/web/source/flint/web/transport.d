@@ -54,8 +54,12 @@ private struct SecureSocket
     }
 }
 
+// A template class is absent from ModuleInfo, so only a listener configured for TLS retains the transport
+// and OpenSSL; linking this module for the plaintext helpers does not.
+alias TlsTransport = TlsDriver!();
+
 /// TLS mode retains raw and application I/O through their final owner-loop callbacks.
-final class TlsTransport
+final class TlsDriver()
 {
     private ServerOptions limits;
     private Context root;

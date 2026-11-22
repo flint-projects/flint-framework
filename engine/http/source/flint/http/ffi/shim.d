@@ -103,8 +103,6 @@ else
     private enum provider = false;
 }
 
-private shared Status initialization = Status.unsupported;
-
 // SAFETY: Typed callers supply owned handles and valid buffer bounds. Owner-only native calls copy inputs,
 // retain no D pointers, invoke no D callbacks and cannot throw D exceptions.
 private Status invoke(alias fn, Args...)(scope Args args) @trusted nothrow @nogc
@@ -113,11 +111,6 @@ private Status invoke(alias fn, Args...)(scope Args args) @trusted nothrow @nogc
         return cast(Status) fn(args);
     else
         return Status.unsupported;
-}
-
-shared static this()
-{
-    initialization = invoke!flint_http_initialize();
 }
 
 private Error nativeError(Status code) pure nothrow @nogc
@@ -167,6 +160,9 @@ package(flint.http) struct Bridge
 
     package(flint.http) Error open(ClientOptions config) nothrow @nogc
     {
+        // Initialized on first open rather than in a module constructor, so a program that only names
+        // HTTP types does not link and start libcurl. The provider serializes this with pthread_once.
+        const initialization = invoke!flint_http_initialize();
         if (initialization != Status.ok)
             return nativeError(initialization);
         NativeOptions options;

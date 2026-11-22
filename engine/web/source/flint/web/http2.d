@@ -93,7 +93,11 @@ private struct Stream
     }
 }
 
-package(flint.web) final class H2Runtime : StreamEndpoint
+// A template class is absent from ModuleInfo, so only a listener that enables HTTP/2 retains the driver and
+// nghttp2; linking this module for its types does not.
+package(flint.web) alias H2Runtime = H2Driver!();
+
+package(flint.web) final class H2Driver() : StreamEndpoint
 {
     private ServerOptions options;
     private CompletionDelegate writeDone;

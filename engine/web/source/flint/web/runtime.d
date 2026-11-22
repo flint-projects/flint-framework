@@ -315,7 +315,12 @@ private Deadline following(long delta) nothrow @nogc
     return Deadline(delta >= long.max - timestamp ? long.max - 1 : timestamp + delta);
 }
 
-private final class Runtime : StreamEndpoint
+// A module's ModuleInfo lists every non-template class it declares, which keeps each class's vtables and
+// everything they call alive in any executable that links the module. The driver is a template so only
+// `Server.start` retains it; programs that use the parser or router alone link no transport, TLS or HTTP/2.
+private alias Runtime = RuntimeDriver!();
+
+private final class RuntimeDriver() : StreamEndpoint
 {
     private ServerOptions limits;
     private ReadDelegate readDone;
