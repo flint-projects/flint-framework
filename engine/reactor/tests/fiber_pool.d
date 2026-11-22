@@ -84,11 +84,18 @@ unittest
     assert(atomicLoad(finished) == tasks);
     const stats = server.value.workerStats(0);
     assert(stats.ok && stats.value.gcAllocated == 0);
-    version (Posix)
+    version (linux)
     {
         // Eagerly written initial frames made one page per pooled fiber resident.
         const inside = atomicLoad(residentInside);
         assert(inside > residentBefore);
         assert(inside - residentBefore < poolSize * pageSize / 2);
+    }
+    else version (OSX)
+    {
+        // Darwin's task resident size can also shrink between the samples, as the kernel compresses
+        // or reclaims pages, so only the growth bound is checked.
+        const inside = atomicLoad(residentInside);
+        assert(inside <= residentBefore || inside - residentBefore < poolSize * pageSize / 2);
     }
 }
