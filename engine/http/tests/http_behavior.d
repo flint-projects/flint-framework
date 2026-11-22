@@ -4,7 +4,8 @@ import flint.arena : Buffer, Error, RequestArena, Result, Status, Text;
 import flint.conc : CancelSource, Context, Deadline;
 import flint.http : ChunkConsumer, ClientOptions, GetExchange, Header, HeaderParam, HttpClient,
     HttpExchange, HttpMethod,
-    HttpRequest, HttpRequestView, HttpResponse, HttpStreamField, HttpVersion, PostExchange, bindHttpClient;
+    HttpRequest, HttpRequestView, HttpResponse, HttpStream, HttpStreamField, HttpStreamMode,
+    HttpStreamOptions, HttpVersion, PostExchange, bindHttpClient;
 
 @safe:
 
@@ -722,6 +723,185 @@ version (FlintNativeCurl)
         assert(fixture.completed == fixture.expected);
         const stats = loop.value.workerStats(0);
         assert(stats.ok && stats.value.gcAllocated == 0);
+    }
+
+    /// Open a duplex stream, send one message and leave the upload open.
+    private HttpStream openEarly(ref HttpClient client, string url, bool cleartext, ref scope const Context context)
+    {
+        const options = HttpStreamOptions(url, HttpStreamMode.duplex, cleartext);
+        auto opened = client.openStream(options, context);
+        assert(opened.ok, opened.error.message);
+        auto stream = move(opened.value);
+        // The peer may end the response before this first upload goes out; send then reports the
+        // completed transfer exactly as a later send does.
+        const sent = stream.send(cast(const(ubyte)[]) "ping", context);
+        assert(sent.code == Status.ok || sent.code == Status.conflict, sent.message);
+        return stream;
+    }
+
+    /// Read the early response to EOF, then check its trailers and the closed request side.
+    private void finishEarly(ref HttpStream stream, ref scope RequestArena arena, ref scope const Context context)
+    {
+        ubyte[64] sink;
+        size_t total;
+        for (;;)
+        {
+            const read = stream.receive(sink[total .. $], context);
+            assert(read.ok, read.error.message);
+            if (read.value == 0)
+                break;
+            total += read.value;
+        }
+        assert(sink[0 .. total] == cast(const(ubyte)[]) "early");
+        const trailers = stream.trailers(arena, context);
+        assert(trailers.ok, trailers.error.message);
+        assert(headerContains(arena, trailers.value, "x-outcome: done"));
+        // The completed transfer accepts no further upload and still closes exactly once.
+        assert(stream.send(cast(const(ubyte)[]) "late", context).code == Status.conflict);
+        assert(stream.finishSend(context).code == Status.conflict);
+        assert(stream.close().code == Status.ok);
+        assert(stream.close().code == Status.ok);
+    }
+
+    private void checkEarlyHead(ref HttpStream stream, ref scope RequestArena arena, ref scope const Context context)
+    {
+        const head = stream.head(arena, context);
+        assert(head.ok, head.error.message);
+        assert(head.value.status == 200 && head.value.protocol == HttpVersion.http2);
+        assert(headerContains(arena, head.value.headers, "x-early: yes"));
+    }
+
+    private HttpClient earlyClient()
+    {
+        ClientOptions options;
+        options.caBundle = setting("CA");
+        // Two transfer slots: the four rounds below would exhaust them if a transfer leaked.
+        options.maxConnections = options.maxConnectionsPerOrigin = 1;
+        HttpClient client;
+        assert(client.open(options).code == Status.ok);
+        return client;
+    }
+
+    /// The peer ends the response with END_STREAM and then RST_STREAM(NO_ERROR) while the request body is
+    /// open (RFC 9113 section 8.1). Receive reports EOF and the trailers long before the caller's deadline,
+    /// the upload is aborted and the transfer completes once.
+    private void exerciseEarlyReset(string url)
+    {
+        import core.time : MonoTime, msecs;
+
+        auto client = earlyClient();
+        scope (failure)
+            client.close();
+        ubyte[4096] storage;
+        auto arena = RequestArena(storage[]);
+        foreach (round; 0 .. 4)
+        {
+            const started = MonoTime.currTime;
+            const context = Context.init.withDeadline(Deadline.afterMillis(3_000));
+            auto stream = openEarly(client, url, false, context);
+            scope (failure)
+                stream.close();
+            checkEarlyHead(stream, arena, context);
+            finishEarly(stream, arena, context);
+            assert(MonoTime.currTime - started < 1_000.msecs, url);
+            assert(arena.reset() == Status.ok);
+        }
+
+        // Closing before reading releases a completed early response as well.
+        const context = Context.init.withDeadline(Deadline.afterMillis(3_000));
+        auto unread = openEarly(client, url, false, context);
+        scope (failure)
+            unread.close();
+        checkEarlyHead(unread, arena, context);
+        assert(unread.close().code == Status.ok);
+        assert(arena.reset() == Status.ok);
+        assert(client.close().code == Status.ok);
+    }
+
+    /// The peer ends the response with END_STREAM only, leaving the stream half-closed. The pinned libcurl
+    /// holds the end of the response and its trailers until the stream closes, so they become visible once
+    /// the caller ends its upload, and then without waiting for the caller's deadline.
+    private void exerciseEarlyHalfClosed(string url)
+    {
+        import core.time : MonoTime, msecs;
+
+        auto client = earlyClient();
+        scope (failure)
+            client.close();
+        ubyte[4096] storage;
+        auto arena = RequestArena(storage[]);
+        foreach (round; 0 .. 4)
+        {
+            const context = Context.init.withDeadline(Deadline.afterMillis(3_000));
+            auto stream = openEarly(client, url, true, context);
+            scope (failure)
+                stream.close();
+            checkEarlyHead(stream, arena, context);
+            if (round == 0)
+            {
+                ubyte[16] sink;
+                size_t total;
+                const brief = Context.init.withDeadline(Deadline.afterMillis(100));
+                Result!size_t read;
+                do
+                {
+                    read = stream.receive(sink[total .. $], brief);
+                    total += read.value;
+                }
+                while (read.ok && read.value != 0);
+                assert(read.error.code == Status.timedOut && sink[0 .. total] == cast(const(ubyte)[]) "early");
+                stream.close();
+                continue;
+            }
+            const started = MonoTime.currTime;
+            assert(stream.finishSend(context).code == Status.ok);
+            finishEarly(stream, arena, context);
+            assert(MonoTime.currTime - started < 1_000.msecs, url);
+            assert(arena.reset() == Status.ok);
+        }
+        assert(client.close().code == Status.ok);
+    }
+
+    /// Duplex streams are HTTP/2 only. A peer that offers only HTTP/1.1 fails at once instead of waiting.
+    private void exerciseEarlyHttp1(string url, bool cleartext, Status expected)
+    {
+        import core.time : MonoTime, msecs;
+
+        auto client = earlyClient();
+        scope (failure)
+            client.close();
+        ubyte[4096] storage;
+        auto arena = RequestArena(storage[]);
+        foreach (round; 0 .. 4)
+        {
+            const started = MonoTime.currTime;
+            const context = Context.init.withDeadline(Deadline.afterMillis(3_000));
+            const options = HttpStreamOptions(url, HttpStreamMode.duplex, cleartext);
+            auto opened = client.openStream(options, context);
+            assert(opened.ok, opened.error.message);
+            auto stream = move(opened.value);
+            scope (failure)
+                stream.close();
+            const head = stream.head(arena, context);
+            assert(head.error.code == expected, head.error.message);
+            ubyte[16] sink;
+            assert(stream.receive(sink[], context).error.code == expected);
+            assert(stream.close().code == Status.ok);
+            assert(MonoTime.currTime - started < 1_000.msecs, url);
+            assert(arena.stats().used == 0);
+        }
+        assert(client.close().code == Status.ok);
+    }
+
+    @("duplex_early_end: a response completed while the upload is open ends receive, trailers and the request side")
+    @system unittest
+    {
+        if (!setting("HTTP").length)
+            return;
+        exerciseEarlyReset(setting("HTTPS") ~ "/duplex-early");
+        exerciseEarlyHalfClosed(setting("H2OPEN") ~ "/early");
+        exerciseEarlyHttp1(setting("HTTPS1") ~ "/duplex-early", false, Status.ioError);
+        exerciseEarlyHttp1(setting("HTTP") ~ "/duplex-early", true, Status.ioError);
     }
 
     @("bounded queue, paused consumer backpressure and cancellation preserve owner progress")

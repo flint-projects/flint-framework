@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -116,9 +117,82 @@ func certificate(
 	return parsed, key, raw
 }
 
+// h2Frame writes one HTTP/2 frame header and payload.
+func h2Frame(conn net.Conn, kind, flags byte, stream uint32, payload []byte) error {
+	var header [9]byte
+	header[0], header[1], header[2] = byte(len(payload)>>16), byte(len(payload)>>8), byte(len(payload))
+	header[3], header[4] = kind, flags
+	binary.BigEndian.PutUint32(header[5:], stream&0x7fffffff)
+	_, err := conn.Write(append(header[:], payload...))
+	return err
+}
+
+// hpackLiteral encodes a short field as an HPACK literal without indexing and without Huffman coding.
+func hpackLiteral(block []byte, name, value string) []byte {
+	block = append(block, 0, byte(len(name)))
+	block = append(block, name...)
+	block = append(block, byte(len(value)))
+	return append(block, value...)
+}
+
+// serveOpenEnded answers each prior-knowledge HTTP/2 stream with a complete response (head, five body
+// bytes and trailers with END_STREAM) as soon as the request headers arrive. Unlike net/http it never
+// sends RST_STREAM, so the client's request side stays open: RFC 9113 section 8.1 lets the client keep
+// sending. Request DATA is discarded and its flow-control credit returned.
+func serveOpenEnded(conn net.Conn) {
+	defer conn.Close()
+	preface := make([]byte, 24)
+	if _, err := io.ReadFull(conn, preface); err != nil || string(preface) != "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n" {
+		return
+	}
+	head := hpackLiteral([]byte{0x88}, "x-early", "yes") // 0x88 is the static :status 200
+	trailers := hpackLiteral(nil, "x-outcome", "done")
+	if h2Frame(conn, 0x4, 0, 0, nil) != nil {
+		return
+	}
+	var header [9]byte
+	for {
+		if _, err := io.ReadFull(conn, header[:]); err != nil {
+			return
+		}
+		length := int(header[0])<<16 | int(header[1])<<8 | int(header[2])
+		kind, flags := header[3], header[4]
+		stream := binary.BigEndian.Uint32(header[5:]) & 0x7fffffff
+		frame := make([]byte, length)
+		if _, err := io.ReadFull(conn, frame); err != nil {
+			return
+		}
+		var err error
+		switch {
+		case kind == 0x4 && flags&0x1 == 0: // SETTINGS
+			err = h2Frame(conn, 0x4, 0x1, 0, nil)
+		case kind == 0x6 && flags&0x1 == 0: // PING
+			err = h2Frame(conn, 0x6, 0x1, 0, frame)
+		case kind == 0x1 && flags&0x4 != 0 && flags&0x1 == 0: // request HEADERS, upload still open
+			if err = h2Frame(conn, 0x1, 0x4, stream, head); err == nil {
+				if err = h2Frame(conn, 0x0, 0, stream, []byte("early")); err == nil {
+					err = h2Frame(conn, 0x1, 0x5, stream, trailers)
+				}
+			}
+		case kind == 0x0 && length > 0: // DATA
+			credit := binary.BigEndian.AppendUint32(nil, uint32(length))
+			if err = h2Frame(conn, 0x8, 0, 0, credit); err == nil {
+				err = h2Frame(conn, 0x8, 0, stream, credit)
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func tlsServer(handler http.Handler, cert []byte, key ed25519.PrivateKey) *httptest.Server {
+	return tlsProtocols(handler, cert, key, true)
+}
+
+func tlsProtocols(handler http.Handler, cert []byte, key ed25519.PrivateKey, h2 bool) *httptest.Server {
 	server := httptest.NewUnstartedServer(handler)
-	server.EnableHTTP2 = true
+	server.EnableHTTP2 = h2
 	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{cert}, PrivateKey: key}}}
 	var sequence atomic.Uint32
 	server.Config.ConnContext = func(ctx context.Context, _ net.Conn) context.Context {
@@ -328,6 +402,19 @@ func main() {
 		}
 		_, _ = io.Copy(w, r.Body)
 	})
+	// A complete response with trailers that never reads the request body. HTTP/2 ends the stream and
+	// then sends RST_STREAM(NO_ERROR); HTTP/1.1 sends the chunked response while the upload is open.
+	mux.HandleFunc("/duplex-early", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Trailer", "X-Outcome")
+		w.Header().Set("X-Early", "yes")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "early")
+		w.Header().Set("X-Outcome", "done")
+	})
 	mux.HandleFunc("/stream-rejected", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -352,6 +439,20 @@ func main() {
 	defer h2.Close()
 	expired := tlsServer(mux, oldRaw, oldKey)
 	defer expired.Close()
+	h1tls := tlsProtocols(handler, goodRaw, goodKey, false)
+	defer h1tls.Close()
+	openEnded, err := net.Listen("tcp", "127.0.0.1:0")
+	checked(err)
+	defer openEnded.Close()
+	go func() {
+		for {
+			conn, err := openEnded.Accept()
+			if err != nil {
+				return
+			}
+			go serveOpenEnded(conn)
+		}
+	}()
 
 	exchange, err := net.Listen("tcp", exchangeAddress)
 	checked(err)
@@ -364,6 +465,8 @@ func main() {
 		"EXPIRED":    strings.Replace(expired.URL, "127.0.0.1", "localhost", 1),
 		"CONNECTING": "https://" + stall.Addr().String(),
 		"OTHER":      other.URL,
+		"HTTPS1":     strings.Replace(h1tls.URL, "127.0.0.1", "localhost", 1),
+		"H2OPEN":     "http://" + openEnded.Addr().String(),
 		"CA":         bundle,
 	}
 	checked(json.NewEncoder(os.Stdout).Encode(output))
