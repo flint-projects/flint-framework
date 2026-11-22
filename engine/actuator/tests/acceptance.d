@@ -2,7 +2,7 @@ module flint.actuator.acceptance_test;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.sync.mutex : Mutex;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.actuator : ActuatorOptions, ExportStats, Health, HealthStatus, Registry, TraceContext;
 import flint.actuator.metrics : Metrics;

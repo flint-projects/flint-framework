@@ -10,7 +10,7 @@ import core.sys.posix.fcntl : O_CLOEXEC, O_NONBLOCK;
 import core.sys.posix.sys.resource : RUSAGE_THREAD, getrusage, rusage;
 import core.sys.posix.sys.socket : MSG_NOSIGNAL, recv, send, sockaddr, socklen_t;
 import core.sys.posix.unistd : close;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : MonoTime, msecs;
 import probe_workload : cancellationMarker, connectionLimit, maxPayload, runWorkloads, useUring;
 import std.exception : enforce;

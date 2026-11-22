@@ -2,7 +2,7 @@ module flint.reactor.accept_exhaustion_test;
 
 import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicOp, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : Deadline;

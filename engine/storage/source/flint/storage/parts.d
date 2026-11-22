@@ -3,7 +3,7 @@ module flint.storage.parts;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.lifetime : move;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : Background, CancelSource, Context, Deadline, startBackground;

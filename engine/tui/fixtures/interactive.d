@@ -2,7 +2,7 @@
 module tui_interactive;
 
 import core.atomic : atomicLoad, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Status;
 import flint.tui : Effects, Event, EventKind, Frame, KeyCode, TimerId, run;

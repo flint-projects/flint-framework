@@ -2,7 +2,7 @@ module flint.schedule.resilience;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.sync.mutex : Mutex;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : nsecs;
 import flint.arena : Error, Result, Status;
 import flint.conc : Context, Deadline;

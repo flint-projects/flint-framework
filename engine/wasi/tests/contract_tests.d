@@ -31,7 +31,7 @@ unittest
 }
 
 import core.atomic : atomicLoad, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : MonoTime, msecs;
 import flint.arena : RequestArena;
 import flint.wasi : CompiledPlugin, GuestEnvironment, Preopen;

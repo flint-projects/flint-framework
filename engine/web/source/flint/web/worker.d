@@ -3,7 +3,7 @@ module flint.web.worker;
 
 import core.atomic : atomicLoad, atomicStore, cas;
 import core.lifetime : move;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Channel, Context, Deadline, QueueKind;

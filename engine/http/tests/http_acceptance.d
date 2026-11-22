@@ -82,7 +82,7 @@ version (FlintNativeCurl)
     @("curl_thread_owner: a second thread cannot drive or close a client bound to its first caller")
     @system unittest
     {
-        import core.thread : Thread;
+        import core.thread.osthread : Thread;
 
         HttpClient client;
         assert(client.open(ClientOptions.init).code == Status.ok);

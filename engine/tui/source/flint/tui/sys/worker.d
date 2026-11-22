@@ -3,7 +3,7 @@ module flint.tui.sys.worker;
 
 import core.atomic : atomicLoad, atomicOp, casWeak;
 import core.sync.condition : Condition;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 
 @safe:
 

@@ -1,7 +1,7 @@
 /// Typed SQL with exclusive pooled connections and scoped row access.
 module flint.sql;
 
-import core.thread : Fiber;
+import core.thread.fiber : Fiber;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
 import flint.sql.ffi.shim : Cell, Identity, Interest, Operation, Progress, acquirePool,

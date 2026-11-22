@@ -3,7 +3,7 @@ module flint.web.sys.ownership;
 
 import core.memory : GC;
 import core.stdc.stdlib : free, malloc;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import flint.arena : Error, Status;
 import flint.web.types : HeaderRecord, maximumFields;
 

@@ -1,7 +1,7 @@
 /// View-thread effect admission, periodic ticks, and shutdown.
 module flint.tui.effects;
 
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Error, Result, Status;
 import flint.conc : Deadline;

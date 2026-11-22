@@ -2,7 +2,7 @@ module flint.actuator.exporter;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.lifetime : move;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.actuator.metrics : Metrics, saturated;
 import flint.actuator.otlp : acknowledged, measurements, traces;

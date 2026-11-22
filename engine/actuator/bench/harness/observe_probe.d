@@ -2,7 +2,7 @@ module observe_probe;
 
 import core.memory : GC;
 import core.stdc.stdio : printf;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : MonoTime;
 
 /// Record one counter and histogram observation for this worker.

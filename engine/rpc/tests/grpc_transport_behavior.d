@@ -387,7 +387,7 @@ private RawOutcome rawCall(ref Fixture fixture, string method, scope const(ubyte
 
 private void waitFor(scope bool delegate() @safe condition) @system
 {
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
     import core.time : msecs;
 
     foreach (_; 0 .. 400)

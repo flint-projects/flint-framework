@@ -2,7 +2,7 @@
 module flint.storage.credentials;
 
 import core.atomic : atomicLoad, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Error, Result, Status;
 import flint.conc : Background, CancelSource, Context, Deadline, startManagedBackground;

@@ -1,6 +1,6 @@
 module flint.reactor.sys.workers;
 
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 
 @safe:
 

@@ -269,7 +269,7 @@ version (FlintNativeSqlite)
     @("an exhausted pool hands a released lease to its queued waiter without a polling stall")
     @system unittest
     {
-        import core.thread : Thread;
+        import core.thread.osthread : Thread;
         import core.time : MonoTime;
         import std.conv : to;
 
@@ -524,7 +524,7 @@ version (FlintNativeSqlite)
         exerciseNullKinds(Driver.sqlite, ":memory:");
     }
 
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
 
     private struct Waiter
     {

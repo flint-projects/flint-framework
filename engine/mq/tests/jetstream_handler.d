@@ -5,7 +5,7 @@ version (linux) version (FlintNativeLibrdkafka) version = FlintMqJetStreamPeer;
 
 version (FlintMqJetStreamPeer)
 {
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
     import flint.arena : Error, RequestArena, Result, Status;
     import flint.conc : Context, Deadline;
     import flint.mq : AckAction, Broker, Message, PublishReceipt, QueueClient, QueueOptions;

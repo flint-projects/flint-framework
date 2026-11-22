@@ -1,7 +1,7 @@
 module app;
 
 import core.atomic : atomicLoad, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.actuator : ActuatorOptions, Health, HealthStatus, Registry, TraceContext;
 import flint.arena : Error, RequestArena, Status;

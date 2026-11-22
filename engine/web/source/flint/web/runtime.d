@@ -3,7 +3,7 @@ module flint.web.runtime;
 
 import core.atomic : atomicLoad, atomicStore, cas;
 import core.lifetime : emplace, move;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : MonoTime, dur, ticksToNSecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;

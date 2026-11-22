@@ -2,7 +2,8 @@ module flint.schedule;
 
 import core.atomic : atomicLoad, cas;
 import core.lifetime : move;
-import core.thread : Fiber, Thread;
+import core.thread.fiber : Fiber;
+import core.thread.osthread : Thread;
 import flint.arena : Error, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
 import flint.reactor : Reactor;

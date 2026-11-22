@@ -1,7 +1,7 @@
 module flint.desktop.webview_runtime_tests;
 
 import core.stdc.stdlib : getenv;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import flint.arena : Buffer, Error, RequestArena, Result, Status, Text;
 import flint.conc : Context, Deadline;
 import flint.desktop : Asset, Capability, Command, DesktopBackend, DesktopCommands, DesktopEvent,

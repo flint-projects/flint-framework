@@ -3,7 +3,7 @@ module flint.cache.redis_behavior_test;
 version (FlintNativeHiredis)
 {
     import core.memory : GC;
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
     import core.time : msecs;
     import flint.arena : Buffer, RequestArena, Result, Status;
     import flint.cache : Cache, CacheBackend, getOrLoad;

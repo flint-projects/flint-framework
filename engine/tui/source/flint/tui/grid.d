@@ -1,7 +1,7 @@
 /// Checked frame writes and differential terminal spans.
 module flint.tui.grid;
 
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import flint.arena : Error, Status;
 import flint.style : Color, Style, visitGraphemes;
 import flint.term : ColorProfile, Size;

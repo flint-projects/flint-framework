@@ -2,7 +2,7 @@ module flint.reactor.cancel_race_test;
 
 import flint.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : Context, Deadline;

@@ -1,7 +1,7 @@
 module flint.tui.contract_tests;
 
 import core.atomic : atomicLoad, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Error, Status;
 import flint.conc : Deadline;

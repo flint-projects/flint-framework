@@ -410,7 +410,7 @@ private Duration processCpu() @trusted
 @("HTTP/1 upgraded echoes from a peer slower than 200 µs are neither paced by a 1 ms poll nor spun for")
 unittest
 {
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
 
     Fixture fixture;
     fixture.open();

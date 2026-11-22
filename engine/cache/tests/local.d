@@ -2,7 +2,7 @@ module flint.cache.local_test;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.lifetime : move;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.cache : Cache, CacheLoader, CacheOptions, getOrLoad;

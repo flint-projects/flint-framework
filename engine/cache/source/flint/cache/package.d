@@ -1,7 +1,7 @@
 module flint.cache;
 
 import core.atomic : atomicLoad, cas;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.cache.flight : Admission, Flights;

@@ -3,7 +3,7 @@ module cache_probe;
 import core.bitop : bsr;
 import core.memory : GC;
 import core.stdc.stdio : printf;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : MonoTime;
 import flint.arena : Buffer, RequestArena, Result, Status;
 

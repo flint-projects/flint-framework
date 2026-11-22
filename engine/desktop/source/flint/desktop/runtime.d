@@ -2,7 +2,7 @@
 module flint.desktop.runtime;
 
 import core.lifetime : move;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline, WorkFn, WorkTicket, WorkerOptions, WorkerPool;

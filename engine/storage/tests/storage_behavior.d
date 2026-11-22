@@ -481,7 +481,7 @@ private string tagged(string prefix, uint generation) pure nothrow
 @("credential_rotation: concurrent signers observe whole snapshots and never an expired session")
 @system unittest
 {
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
 
     shared uint generation;
     auto credentials = new CredentialStore((ref Context) @safe nothrow{

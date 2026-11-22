@@ -1,7 +1,7 @@
 module app;
 
 import core.stdc.stdio : printf;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
 import flint.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;

@@ -64,7 +64,7 @@ version (FlintNativeOpenssl)
 {
     import core.atomic : atomicLoad, atomicOp, atomicStore;
     import core.memory : GC;
-    import core.thread : Thread;
+    import core.thread.osthread : Thread;
     import core.time : msecs;
     import flint.arena : Text;
     import flint.conc : CancelSource, Deadline;

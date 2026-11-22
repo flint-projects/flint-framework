@@ -1,6 +1,6 @@
 module flint.reactor.sys.fibers;
 
-import core.thread : Fiber;
+import core.thread.fiber : Fiber;
 import flint.reactor.types : TaskFn;
 
 @safe:

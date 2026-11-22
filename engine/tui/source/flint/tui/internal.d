@@ -1,7 +1,7 @@
 /// Monomorphic terminal scheduling and serialized application callbacks.
 module flint.tui.internal;
 
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Error, Status;
 import flint.term : Event, EventKind, Session, Size;

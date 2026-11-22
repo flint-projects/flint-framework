@@ -2,7 +2,7 @@
 module app;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Error, Result, Status, Text;
 import flint.conc : Context, Deadline;

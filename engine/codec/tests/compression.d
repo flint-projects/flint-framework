@@ -1,7 +1,7 @@
 module flint.codec.compression_tests;
 
 import core.memory : GC;
-import core.thread : Thread;
+import core.thread.osthread : Thread;
 import flint.arena : Result, Status;
 import flint.codec : Codec, CodecOptions, CodecStep, Decoder, Encoder, Finish;
 import std.stdio : writefln;
