@@ -587,6 +587,9 @@ version (FlintNativeSqlite)
 
         auto setup = options(Driver.sqlite, ":memory:", 16);
         assert(setup.maxWaiters == 256);
+        // The waiters must outlast the whole saturation phase, which on a slow or emulated host can
+        // approach the default 5 s acquire bound; the bound itself is not what this test checks.
+        setup.acquireTimeoutNanos = 120_000_000_000L;
         Pool pool;
         assert(pool.open(setup).code == Status.ok);
         Context context;
@@ -665,7 +668,8 @@ version (FlintNativeSqlite)
         {
             thread.join();
             if (index != victimA && index != victimB)
-                assert(waiters[index].outcome == Status.ok);
+                assert(waiters[index].outcome == Status.ok,
+                        "waiter " ~ index.to!string ~ " ended with " ~ waiters[index].outcome.to!string);
         }
         auto after = pool.acquire(context);
         assert(after.ok());
