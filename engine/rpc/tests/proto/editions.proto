@@ -1,0 +1,7 @@
+edition = "2023";
+
+package flint.rpc.rejected;
+
+message Edition {
+  string value = 1;
+}

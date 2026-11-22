@@ -194,7 +194,12 @@ version (FlintNativeOpenssl)
             "NONE", "HMAC", "CURVE", "CRIT", "DUP_ALG", "DUP_ISS", "DUP_AUD", "BAD_ISS", "BAD_AUD",
             "NO_EXP", "MISSING", "JKU", "X5U", "TAMPER"
         ])
-            assert(stage.verifier.verify(fixture(bad), 990, arena).error.code == Status.permissionDenied);
+        {
+            const rejected = stage.verifier.verify(fixture(bad), 990, arena);
+            assert(rejected.error.code == Status.permissionDenied);
+            // Failures disclose only the stable category, never token material.
+            assert(rejected.error.message == "JWT verification denied");
+        }
         assert(stage.verifier.verify(fixture("RSA") ~ "=", 990, arena).error.code == Status.permissionDenied);
         assert(arena.stats().used == prior);
         assert(stage.verifier.refresh(context).code == Status.unavailable);

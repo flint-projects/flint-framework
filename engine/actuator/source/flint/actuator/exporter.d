@@ -18,6 +18,8 @@ import std.datetime.timezone : UTC;
 @safe:
 
 private enum second = 1_000_000_000L;
+/// Series per OTLP metrics request; a round sends as many requests as the registry needs.
+private enum uint metricsPerRequest = 32;
 
 package(flint.actuator) Error pause(ref Context context) nothrow @nogc
 {
@@ -230,12 +232,27 @@ package(flint.actuator) final class Exporter
         }
         if (includeMetrics && metrics.count != 0 && now() >= metricRetry.due)
         {
-            auto context = shutdown.context().withDeadline(Deadline.afterMillis(5_000));
-            const measured = sendMetrics(context);
+            const measured = sendMetricRound();
             if (current == Status.ok)
                 current = measured;
         }
         return current;
+    }
+
+    /// Export every registered series in bounded requests, resuming a retained chunk first.
+    private Status sendMetricRound() nothrow @nogc
+    {
+        if (metricBytes == 0)
+            nextMetric = 1;
+        const requests = metrics.count / metricsPerRequest + 2;
+        foreach (_; 0 .. requests)
+        {
+            auto context = shutdown.context().withDeadline(Deadline.afterMillis(5_000));
+            const status = sendMetrics(context);
+            if (status != Status.ok || metricBytes != 0 || nextMetric > metrics.count)
+                return status;
+        }
+        return Status.ok;
     }
 
     private Status sendSpans(ref Context context) nothrow @nogc
@@ -289,7 +306,7 @@ package(flint.actuator) final class Exporter
         if (nextMetric > available)
             nextMetric = 1;
         const room = available - nextMetric + 1;
-        metricCount = room < 32 ? room : 32;
+        metricCount = room < metricsPerRequest ? room : metricsPerRequest;
         const end = saturated(wallOffset, cast(ulong) now());
         const payload = measurements(metrics, nextMetric, metricCount, service, started, end, arena);
         if (!payload.ok)

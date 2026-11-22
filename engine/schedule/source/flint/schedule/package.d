@@ -209,6 +209,63 @@ private struct Queue
     }
 }
 
+@("scheduler_bench: deadline heap stays ordered with depth <= ceil(log2(capacity)) through slot reuse")
+unittest
+{
+    enum uint capacity = 1_000;
+    enum uint maximumDepth = 10; // ceil(log2(1000)); depth counts edges from the root.
+    auto jobs = new Job[capacity];
+    Queue heap;
+    heap.indices = new uint[capacity];
+    uint random = 0x5eed;
+    uint next()
+    {
+        random = random * 1_664_525 + 1_013_904_223;
+        return random >> 8;
+    }
+
+    void verify()
+    {
+        assert(heap.count <= capacity);
+        foreach (position; 0 .. heap.count)
+        {
+            assert(jobs[heap.indices[position]].heapPosition == position + 1);
+            uint depth;
+            for (auto at = position; at != 0; at = (at - 1) / 2)
+                ++depth;
+            assert(depth <= maximumDepth);
+            if (position != 0)
+                assert(!Queue.earlier(jobs, heap.indices[position], heap.indices[(position - 1) / 2]));
+        }
+    }
+
+    ulong id;
+    foreach (round; 0 .. 200)
+    {
+        foreach (slot; 0 .. capacity)
+        {
+            if (jobs[slot].heapPosition == 0 && next() % 2 == 0)
+            {
+                jobs[slot].due = next() % 64;
+                jobs[slot].id = ++id;
+                heap.insert(jobs, slot);
+            }
+        }
+        verify();
+        foreach (_; 0 .. capacity / 3)
+            heap.remove(jobs, next() % capacity);
+        verify();
+        while (heap.count != 0 && next() % 4 != 0)
+        {
+            const head = heap.head();
+            heap.remove(jobs, head);
+            foreach (position; 0 .. heap.count)
+                assert(!Queue.earlier(jobs, heap.indices[position], head));
+        }
+        verify();
+    }
+}
+
 private long nextRate(long due, long now, long period) pure nothrow @nogc
 {
     return saturatingAdd(now, period - (now - due) % period);
@@ -501,8 +558,15 @@ Error registerScheduled(T)(ref Scheduler scheduler, ref T component)
             return Error(Status.invalidArgument, "null scheduled component");
         return registerMethods!(T, T)(scheduler, component);
     }
+    else static if (is(T == S*, S) && is(S == struct))
+        return registerScheduled!S(scheduler, component);
     else
-        return registerMethods!(T, T*)(scheduler, new T(component));
+    {
+        // An array literal copies through the struct's own copy semantics; `new T(component)` would
+        // be read as field-wise construction and fails for any struct whose first field is not a T.
+        T[] owned = [component];
+        return registerMethods!(T, T*)(scheduler, &owned[0]);
+    }
 }
 
 /// Register methods on a managed struct instance supplied by the caller.

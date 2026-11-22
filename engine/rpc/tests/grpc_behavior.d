@@ -110,3 +110,118 @@ unittest
     repeated.field("grpc-status", "0");
     assert(repeated.failed);
 }
+
+@("grpc_wire_errors: a configured limit is enforced from the prefix before any payload allocation")
+unittest
+{
+    ubyte[64] storage;
+    auto arena = RequestArena(storage[]);
+    immutable ubyte[9] exact = [0, 0, 0, 0, 4, 1, 2, 3, 4];
+    immutable ubyte[5] overLimit = [0, 0, 0, 0, 5];
+    immutable ubyte[5] maximum = [0, 0, 0x40, 0, 0];
+    immutable ubyte[5] largest = [0, 0xff, 0xff, 0xff, 0xff];
+    GrpcDecoder decoder;
+    const admitted = decoder.feed(exact[], arena, 4);
+    assert(admitted.complete && admitted.payload.length == 4 && admitted.consumed == exact.length);
+    const used = arena.stats().used;
+    decoder = GrpcDecoder.init;
+    const rejected = decoder.feed(overLimit[], arena, 4);
+    assert(rejected.error.code == Status.resourceExhausted && rejected.consumed == overLimit.length);
+    assert(arena.stats().used == used);
+    // Exactly 4 MiB passes the limit check and then fails only because this arena is small.
+    decoder = GrpcDecoder.init;
+    const tooBig = decoder.feed(maximum[], arena);
+    assert(tooBig.error.code != Status.ok && tooBig.error.code != Status.resourceExhausted);
+    assert(arena.stats().used == used);
+    decoder = GrpcDecoder.init;
+    assert(decoder.feed(largest[], arena, size_t.max).error.code == Status.resourceExhausted);
+    assert(arena.stats().used == used);
+    // A failed decoder stays failed and consumes nothing further.
+    const sticky = decoder.feed(exact[], arena);
+    assert(sticky.consumed == 0 && sticky.error.code == Status.resourceExhausted);
+    assert(decoder.end().code == Status.resourceExhausted);
+    assert(grpcPrefix(5, 4).error.code == Status.resourceExhausted);
+    assert(grpcPrefix(0).value == [0, 0, 0, 0, 0]);
+}
+
+@("stream_teardown: an arena reset in the middle of a message is detected instead of writing stale storage")
+unittest
+{
+    ubyte[32] storage;
+    auto arena = RequestArena(storage[]);
+    immutable ubyte[10] message = [0, 0, 0, 0, 5, 1, 2, 3, 4, 5];
+    GrpcDecoder decoder;
+    const first = decoder.feed(message[0 .. 7], arena);
+    assert(first.error.code == Status.ok && !first.complete && first.consumed == 7);
+    assert(arena.reset() == Status.ok);
+    const after = decoder.feed(message[7 .. $], arena);
+    assert(after.error.code != Status.ok && !after.complete && after.consumed == 0);
+    assert(decoder.end().code == after.error.code);
+    assert(decoder.feed(message[], arena).consumed == 0);
+}
+
+@("grpc deadlines take the earlier of grpc-timeout and the inherited context, saturating on overflow")
+unittest
+{
+    import flint.rpc.grpc_client : formatTimeout;
+
+    auto parent = Context.init.withDeadline(Deadline.afterMillis(60_000));
+    const shorter = grpcDeadline("100m", parent);
+    assert(shorter.ok() && shorter.value.deadline().monotonicNanoseconds < parent.deadline().monotonicNanoseconds);
+    assert(shorter.value.deadline().monotonicNanoseconds <= Deadline.afterMillis(100).monotonicNanoseconds);
+    const unbounded = Context.init;
+    const saturated = grpcDeadline("99999999H", unbounded);
+    assert(saturated.ok() && saturated.value.deadline().monotonicNanoseconds == long.max - 1);
+    foreach (unit; ["1H", "1M", "1S", "1m", "1u", "1n", "12345678S"])
+        assert(grpcDeadline(unit, parent).ok(), unit);
+    foreach (bad; ["", "S", "1", "-1S", "1s", "123456789S", "1.5S", "1\0S"])
+        assert(grpcDeadline(bad, parent).error.code == Status.invalidArgument, bad);
+
+    // Outbound grpc-timeout uses at most eight digits, rounds up and parses back to no earlier deadline.
+    char[9] wire;
+    assert(formatTimeout(Deadline.none(), wire[]) == 0);
+    foreach (millis; [0L, 1L, 250L, 120_000L, 86_400_000L * 365 * 100])
+    {
+        const deadline = Deadline.afterMillis(millis);
+        const length = formatTimeout(deadline, wire[]);
+        assert(length >= 2 && length <= 9);
+        const parsed = grpcDeadline(wire[0 .. length], unbounded);
+        assert(parsed.ok());
+        assert(parsed.value.deadline().monotonicNanoseconds >= deadline.monotonicNanoseconds);
+    }
+}
+
+@("grpc terminal status: every wire code maps, and a missing or malformed status is never success")
+unittest
+{
+    import flint.rpc.grpc_client : Terminal;
+
+    foreach (uint code; 0 .. 17)
+    {
+        char[2] text;
+        const digits = code < 10 ? 1 : 2;
+        if (code < 10)
+            text[0] = cast(char)('0' + code);
+        else
+        {
+            text[0] = '1';
+            text[1] = cast(char)('0' + code - 10);
+        }
+        const parsed = grpcStatus(text[0 .. digits]);
+        assert(parsed.ok() && parsed.value == cast(RpcCode) code);
+    }
+    assert(grpcStatus("17").value == RpcCode.unknown && grpcStatus("17").ok());
+    assert(grpcStatus("100").error.code == Status.invalidArgument);
+    assert(grpcStatus(" 0").error.code == Status.invalidArgument);
+    assert(grpcStatus("").error.code == Status.unavailable);
+
+    Terminal messageOnly;
+    messageOnly.field("grpc-message", "no status");
+    assert(!messageOnly.codeSeen && !messageOnly.failed);
+    Terminal malformed;
+    malformed.field("grpc-status", "ok");
+    assert(malformed.failed);
+    Terminal unrelated;
+    unrelated.field("x-trailer", "0");
+    assert(!unrelated.codeSeen && !unrelated.failed);
+}

@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package flint.rpc.rejected;
+
+message Optional {
+  optional uint32 value = 1;
+}

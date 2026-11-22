@@ -29,6 +29,24 @@ const exchangeAddress = "127.0.0.1:43719"
 
 type connectionKey struct{}
 
+// endlessTransfer records how much of an unbounded entity a handler wrote before the client stopped it.
+type endlessTransfer struct {
+	written atomic.Int64
+	aborted atomic.Bool
+	done    chan struct{}
+}
+
+// flushWriter sends every handler write as its own chunk instead of coalescing it in the server buffer.
+type flushWriter struct {
+	http.ResponseWriter
+}
+
+func (writer flushWriter) Write(data []byte) (int, error) {
+	n, err := writer.ResponseWriter.Write(data)
+	writer.ResponseWriter.(http.Flusher).Flush()
+	return n, err
+}
+
 type multiplexGroup struct {
 	arrived atomic.Int32
 	proceed chan struct{}
@@ -138,7 +156,8 @@ func main() {
 	}()
 
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" ||
+			r.Header.Get("Proxy-Authorization") != "" || r.Header.Get("Cookie2") != "" {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
@@ -185,7 +204,44 @@ func main() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if r.URL.Query().Get("flush") == "1" {
+			payload(flushWriter{w}, -1, minimum, maximum)
+			return
+		}
 		payload(w, -1, minimum, maximum)
+	})
+	var endless sync.Map
+	mux.HandleFunc("/endless", func(w http.ResponseWriter, r *http.Request) {
+		transfer := &endlessTransfer{done: make(chan struct{})}
+		defer close(transfer.done)
+		if _, loaded := endless.LoadOrStore(r.URL.Query().Get("id"), transfer); loaded {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		var data [4096]byte
+		for index := 0; index < 256<<20; index += len(data) {
+			for i := range data {
+				data[i] = payloadByte(index + i)
+			}
+			if _, err := w.Write(data[:]); err != nil {
+				transfer.aborted.Store(true)
+				return
+			}
+			transfer.written.Add(int64(len(data)))
+		}
+	})
+	mux.HandleFunc("/written", func(w http.ResponseWriter, r *http.Request) {
+		value, found := endless.Load(r.URL.Query().Get("id"))
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		transfer := value.(*endlessTransfer)
+		select {
+		case <-transfer.done:
+		case <-time.After(5 * time.Second):
+		}
+		_, _ = fmt.Fprintf(w, "%d %t", transfer.written.Load(), transfer.aborted.Load())
 	})
 	mux.HandleFunc("/utf", func(w http.ResponseWriter, r *http.Request) {
 		split, _ := strconv.Atoi(r.URL.Query().Get("split"))

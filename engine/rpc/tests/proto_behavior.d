@@ -75,3 +75,84 @@ private void verifyBytes(ref scope RequestArena arena, Buffer value, scope const
             assert(decoded == expected);
         }) == Status.ok);
 }
+
+@("protobuf_roundtrip: generated encoders emit pinned protobuf-c bytes")
+version (FlintNativeProtobufC) unittest
+{
+    ubyte[512] memory;
+    auto arena = RequestArena(memory[]);
+    Detail detail;
+    detail.id = 23;
+    detail.note = Text(arena.copyIn(cast(const(ubyte)[]) "hello").value);
+    const packed = encodeProto(detail, arena);
+    assert(packed.ok());
+    // The same bytes protobuf-c's generated flint__rpc__fixture__detail__pack produces (tests/c/provider.c).
+    verifyBytes(arena, packed.value, [0x08, 23, 0x12, 5, 'h', 'e', 'l', 'l', 'o']);
+
+    Envelope zigzag;
+    zigzag.floor = -1;
+    zigzag.samples.count = 2;
+    zigzag.samples.values[0 .. 2] = [-1, 1];
+    zigzag.choiceCase = Envelope.ChoiceCase.number;
+    zigzag.number = 0;
+    const wire = encodeProto(zigzag, arena);
+    assert(wire.ok());
+    // sint64 -1 is zigzag 1; packed sint32 [-1, 1] is [1, 2]; a set oneof member is written even when zero.
+    verifyBytes(arena, wire.value, [0x08, 0x01, 0x22, 0x02, 0x01, 0x02, 0x30, 0x00]);
+}
+
+@("protobuf_roundtrip: malformed input leaves the destination unchanged")
+version (FlintNativeProtobufC) unittest
+{
+    ubyte[256] memory;
+    auto arena = RequestArena(memory[]);
+    Envelope decoded;
+    decoded.ceiling = 7;
+    immutable ubyte[12] overlong = [
+        0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01
+    ];
+    immutable ubyte[3] wrongType = [0x12, 0x01, 0x00];
+    immutable ubyte[3] badText = [0x3a, 0x01, 0xff];
+    immutable ubyte[3] shortLength = [0x4a, 0x05, 0x00];
+    immutable ubyte[1] lonelyTag = [0x10];
+    immutable ubyte[2] fieldZero = [0x00, 0x00];
+    foreach (malformed; [
+            overlong[], wrongType[], badText[], shortLength[], lonelyTag[], fieldZero[]
+        ])
+    {
+        assert(decodeProto(malformed, decoded, arena).code == Status.invalidArgument);
+        assert(decoded.ceiling == 7 && decoded.label == Text.init);
+    }
+}
+
+@("protobuf_roundtrip: an over-capacity repeated field is rejected")
+version (FlintNativeProtobufC) unittest
+{
+    ubyte[256] memory;
+    auto arena = RequestArena(memory[]);
+    ubyte[19] wire;
+    wire[0] = 0x22;
+    wire[1] = 17;
+    Envelope decoded;
+    decoded.ceiling = 9;
+    assert(decodeProto(wire[], decoded, arena).code == Status.resourceExhausted);
+    assert(decoded.ceiling == 9 && decoded.samples.count == 0);
+    wire[1] = 16;
+    assert(decodeProto(wire[0 .. 18], decoded, arena).code == Status.ok);
+    assert(decoded.samples.count == 16 && decoded.ceiling == 0);
+}
+
+@("protobuf_roundtrip: the last oneof member on the wire wins")
+version (FlintNativeProtobufC) unittest
+{
+    ubyte[256] memory;
+    auto arena = RequestArena(memory[]);
+    immutable ubyte[5] labelLast = [0x30, 0x05, 0x3a, 0x01, 'x'];
+    immutable ubyte[5] numberLast = [0x3a, 0x01, 'x', 0x30, 0x05];
+    Envelope decoded;
+    assert(decodeProto(labelLast[], decoded, arena).code == Status.ok);
+    assert(decoded.choiceCase == Envelope.ChoiceCase.label);
+    verifyBytes(arena, decoded.label.bytes, cast(const(ubyte)[]) "x");
+    assert(decodeProto(numberLast[], decoded, arena).code == Status.ok);
+    assert(decoded.choiceCase == Envelope.ChoiceCase.number && decoded.number == 5);
+}
