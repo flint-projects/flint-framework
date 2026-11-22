@@ -1,8 +1,8 @@
 module prompt_replay;
 
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
 import flint.tui.widget_display_probe : Screen, require;
-import std.stdio : writeln;
 
 @safe:
 
@@ -28,6 +28,47 @@ alias PasswordWork = ulong function(Screen) @system;
 /// Exercise one 10,000-entry selector and write its fake terminal output.
 alias Pick = ulong function(Screen) @safe;
 
+/// Decimal text of a fixture ordinal, used for generated keys and choice values.
+string decimal(ulong value) pure nothrow
+{
+    char[20] digits;
+    size_t start = digits.length;
+    do
+    {
+        digits[--start] = cast(char)('0' + value % 10);
+        value /= 10;
+    }
+    while (value != 0);
+    return digits[start .. $].idup;
+}
+
+/// Parse a selected decimal choice value, rejecting empty, non-digit or overflowing text.
+ulong parseDecimal(scope const(char)[] text) pure
+{
+    if (text.length == 0)
+        throw new Exception("choice value is empty");
+    ulong value;
+    foreach (character; text)
+    {
+        if (character < '0' || character > '9')
+            throw new Exception("choice value is not a decimal number");
+        const digit = character - '0';
+        if (value > (ulong.max - digit) / 10)
+            throw new Exception("choice value overflows");
+        value = value * 10 + digit;
+    }
+    return value;
+}
+
+// SAFETY: Each C format string is a fixed NUL-terminated literal; the name is printed with its
+// explicit length and every scalar matches its conversion.
+private void printForm(string name, ulong total, bool repeat, long nanos, uint count) @trusted nothrow @nogc
+{
+    printf("prompt %.*s=%llu\n", cast(int) name.length, name.ptr, total);
+    if (repeat)
+        printf("prompt form_ns=%lld samples=%u\n", nanos, count);
+}
+
 private void measure(string name, Work work, bool repeat)
 {
     ulong total;
@@ -42,9 +83,7 @@ private void measure(string name, Work work, bool repeat)
     }
     while (repeat && nanos < 100_000_000);
     require(total == fields);
-    writeln("prompt ", name, "=", total);
-    if (repeat)
-        writeln("prompt form_ns=", nanos, " samples=", count);
+    printForm(name, total, repeat, nanos, count);
 }
 
 /// Replay the full form, selector, and mass secret lifecycle workload.
@@ -74,9 +113,9 @@ void replay(string[] args, Work form, Pick pick, PasswordWork password) @system
         }
         while (measureEnabled && nanos < 100_000_000);
         require(selected == 17);
-        writeln("prompt choice=", selected, " display_bytes=", bytes, " checksum=", checksum);
+        printf("prompt choice=%llu display_bytes=%llu checksum=%llu\n", selected, bytes, checksum);
         if (measureEnabled)
-            writeln("prompt selection_ns=", nanos, " samples=", count, " update_bytes=", keyBytes, " input_events=3");
+            printf("prompt selection_ns=%lld samples=%u update_bytes=%llu input_events=3\n", nanos, count, keyBytes);
     }
     ulong opened;
     ulong emitted;
@@ -95,7 +134,7 @@ void replay(string[] args, Work form, Pick pick, PasswordWork password) @system
         require(opened == secrets * sample.length);
     }
     while (measureEnabled && total < 100_000_000);
-    writeln("prompt secret=", opened, " display_bytes=", emitted, " checksum=", checksum);
+    printf("prompt secret=%llu display_bytes=%llu checksum=%llu\n", opened, emitted, checksum);
     if (measureEnabled)
-        writeln("prompt password_ns=", total, " samples=", passes);
+        printf("prompt password_ns=%lld samples=%u\n", total, passes);
 }

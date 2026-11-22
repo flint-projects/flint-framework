@@ -54,6 +54,29 @@ bool measure(uint cores, Update update, Verify verify)
     return true;
 }
 
+/// Decimal text of a scalar count, used to build the expected scrape lines.
+string decimal(ulong value) @safe pure nothrow
+{
+    char[20] digits;
+    size_t start = digits.length;
+    do
+    {
+        digits[--start] = cast(char)('0' + value % 10);
+        value /= 10;
+    }
+    while (value != 0);
+    return digits[start .. $].idup;
+}
+
+/// Whether `needle` occurs anywhere in `text`; an empty needle always matches.
+bool contains(scope const(char)[] text, scope const(char)[] needle) @safe pure nothrow @nogc
+{
+    for (size_t end = needle.length; end <= text.length; ++end)
+        if (text[end - needle.length .. end] == needle)
+            return true;
+    return false;
+}
+
 private Thread launch(Worker* worker, Update update, uint index)
 {
     return new Thread({ worker.run(update, index); }).start();

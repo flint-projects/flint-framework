@@ -1,9 +1,9 @@
 module template_replay;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
 import flint.arena : Buffer, RequestArena, Result, Status;
-import std.stdio : writeln;
 
 @safe:
 
@@ -48,8 +48,14 @@ void benchmark(Render render, bool measure)
         const elapsed = (MonoTime.currTime - start).total!"msecs";
         const allocated = GC.stats().allocatedInCurrentThread - before;
         require(allocated == 0);
-        writeln("template bytes=", length, " repetitions=", repetitions, " checksum=", consumed);
-        if (measure)
-            writeln("template elapsed_ms=", elapsed, " gc_bytes=", allocated);
+        report(length, repetitions, consumed, measure, elapsed, allocated);
     }
+}
+
+// SAFETY: Each C format string is a fixed NUL-terminated literal with matching scalar arguments.
+private void report(int length, int repetitions, ulong consumed, bool measure, long elapsed, ulong allocated) @trusted
+{
+    printf("template bytes=%d repetitions=%d checksum=%llu\n", length, repetitions, consumed);
+    if (measure)
+        printf("template elapsed_ms=%lld gc_bytes=%llu\n", elapsed, allocated);
 }

@@ -1,12 +1,12 @@
 module app;
 
+import core.stdc.stdio : printf;
 import core.thread : Thread;
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
 import flint.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
 import probe_workload : cancellationMarker, connectionLimit, maxPayload, runWorkloads, useUring;
 import std.exception : enforce;
-import std.stdio : writefln;
 
 private IoId[connectionLimit] cancellations;
 private bool cancellationScheduled;
@@ -83,6 +83,24 @@ private void begin(ConnectionId connection) @safe nothrow @nogc
         reactor.stop();
 }
 
+/// The declared member name, as the report has always spelled the selected backend.
+private string backendName(Backend backend) @safe pure nothrow @nogc
+{
+    final switch (backend)
+    {
+    case Backend.automatic:
+        return "automatic";
+    case Backend.ioUring:
+        return "ioUring";
+    case Backend.kqueue:
+        return "kqueue";
+    case Backend.iocp:
+        return "iocp";
+    case Backend.epoll:
+        return "epoll";
+    }
+}
+
 /// Run the capacity, echo, and cancellation workloads against the Flint native reactor.
 int main()
 {
@@ -112,8 +130,11 @@ int main()
     enforce(checksum != 0, "workload produced no checksum");
     const stats = server.value.workerStats(0).value;
     enforce(stats.outstandingOperations == 0, "shutdown retained operation buffers");
-    writefln("backend=%s pinned=%s worker_cpu_ns=%s voluntary_switches=%s involuntary_switches=%s outstanding=%s",
-            options.backend, stats.affinityPinned,
-            stats.cpuNanos, stats.voluntarySwitches, stats.involuntarySwitches, stats.outstandingOperations);
+    const backend = backendName(options.backend);
+    const pinned = stats.affinityPinned ? "true" : "false";
+    printf("backend=%.*s pinned=%.*s worker_cpu_ns=%llu voluntary_switches=%llu involuntary_switches=%llu "
+            ~ "outstanding=%u\n", cast(int) backend.length, backend.ptr, cast(int) pinned.length,
+            pinned.ptr, stats.cpuNanos, stats.voluntarySwitches, stats.involuntarySwitches,
+            stats.outstandingOperations);
     return 0;
 }

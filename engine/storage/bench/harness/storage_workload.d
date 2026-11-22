@@ -1,9 +1,10 @@
 module storage_workload;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
+import core.stdc.stdlib : getenv;
+import core.stdc.string : strlen;
 import core.time : MonoTime;
-import std.process : environment;
-import std.stdio : writeln;
 
 @safe:
 
@@ -42,13 +43,21 @@ void require(bool condition, string message) pure nothrow @nogc
 /// Get the fixture endpoint. The producer never accepts credentials from a caller.
 string address()
 {
-    const endpoint = environment.get("FLINT_STORAGE_BENCH_URL", "");
+    const endpoint = variable("FLINT_STORAGE_BENCH_URL");
     enum prefix = "http://127.0.0.1:";
     require(endpoint.length > prefix.length && endpoint[0 .. prefix.length] == prefix,
             "start the loopback Storage benchmark peer first");
     foreach (digit; endpoint[prefix.length .. $])
         require(digit >= '0' && digit <= '9', "invalid loopback benchmark port");
     return endpoint;
+}
+
+// SAFETY: getenv returns null or a NUL-terminated environment string, copied before returning;
+// the name is a NUL-terminated literal.
+private string variable(scope const(char)* name) @trusted
+{
+    const value = getenv(name);
+    return value is null ? "" : value[0 .. strlen(value)].idup;
 }
 
 /// Fill the canonical byte stripe for an ordered multipart part.
@@ -161,8 +170,14 @@ void report(ref Checksum body, MonoTime started, MonoTime uploaded, MonoTime dow
     require(body.bytes == objectBytes, "incorrect download size");
     require(digest[] == "a1ff2f9757141e98267eb65c3f85fb88974d7cf35ac444c10453dae607321d63",
             "download checksum differs from the fixture");
-    writeln("storage uploaded=", objectBytes, " downloaded=", body.bytes, " parts=", parts,
-            " part_bytes=", partBytes, " buffers=", parallelParts, " sha256=", digest[].idup);
-    writeln("storage upload_ms=", (uploaded - started).total!"msecs", " download_ms=",
-            (downloaded - uploaded).total!"msecs", " d_gc_bytes=", allocated);
+    print(body.bytes, digest[], (uploaded - started).total!"msecs", (downloaded - uploaded).total!"msecs", allocated);
+}
+
+// SAFETY: Fixed NUL-terminated literal formats; the digest is printed with its explicit length and
+// every scalar matches its conversion.
+private void print(ulong received, scope const(char)[] digest, long upload, long download, ulong allocated) @trusted
+{
+    printf("storage uploaded=%llu downloaded=%llu parts=%d part_bytes=%d buffers=%d sha256=%.*s\n",
+            objectBytes, received, parts, partBytes, parallelParts, cast(int) digest.length, digest.ptr);
+    printf("storage upload_ms=%lld download_ms=%lld d_gc_bytes=%llu\n", upload, download, allocated);
 }

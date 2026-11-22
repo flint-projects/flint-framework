@@ -4,8 +4,8 @@ module codec_probe;
 import ffi.alloc_counter : beginCount, endCount;
 
 import sys.allocation : gcBytes;
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
-import std.stdio : writefln;
 
 @safe:
 
@@ -48,10 +48,16 @@ int runProbe(Trial trial)
         while (elapsed < sampleNanos);
         const cCalls = endCount();
         const gc = gcBytes() - before;
-        writefln("bytes=%s count=%s checksum=%s success_checksum=%s elapsed_ns=%s d_gc_bytes=%s",
-                size, iterations, checksum, want, elapsed, gc);
-        if (cCalls != ulong.max)
-            writefln("native_allocation_calls=%s", cCalls);
+        report(size, iterations, checksum, want, elapsed, gc, cCalls);
     }
     return 0;
+}
+
+// SAFETY: Each C format string is a fixed NUL-terminated literal with matching scalar arguments.
+private void report(uint size, uint count, ulong checksum, ulong want, long elapsed, ulong gc, ulong calls) @trusted
+{
+    printf("bytes=%u count=%u checksum=%llu success_checksum=%llu elapsed_ns=%lld d_gc_bytes=%llu\n",
+            size, count, checksum, want, elapsed, gc);
+    if (calls != ulong.max)
+        printf("native_allocation_calls=%llu\n", calls);
 }

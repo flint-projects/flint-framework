@@ -3,9 +3,7 @@ module app;
 import flint.actuator : ActuatorOptions, Counter, Histogram, Registry;
 import flint.arena : RequestArena, Status;
 import flint.conc : Context;
-import observe_probe : measure;
-import std.algorithm.searching : canFind;
-import std.conv : to;
+import observe_probe : contains, decimal, measure;
 import transport_probe : checkManagementTransport;
 
 @safe:
@@ -39,8 +37,8 @@ private final class Observations
 
     bool verify(ulong expected)
     {
-        const count = expected.to!string;
-        const total = (2 * expected).to!string;
+        const count = decimal(expected);
+        const total = decimal(2 * expected);
         const bucket = "observations_bucket{le=\"2\"} " ~ count ~ "\n";
         const sum = "observations_sum " ~ total ~ "\n";
         const ticks = "updates_total " ~ count ~ "\n";
@@ -52,7 +50,7 @@ private final class Observations
         bool valid;
         const status = arena.read(report.value, (scope const(ubyte)[] data) @safe nothrow @nogc {
             const text = cast(const(char)[]) data;
-            valid = text.canFind(bucket) && text.canFind(sum) && text.canFind(ticks);
+            valid = text.contains(bucket) && text.contains(sum) && text.contains(ticks);
         });
         Context closing;
         return status == Status.ok && valid && registry.close(closing).code == Status.ok;

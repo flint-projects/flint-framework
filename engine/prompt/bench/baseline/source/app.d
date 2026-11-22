@@ -7,8 +7,7 @@ import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
 import flint.tui.widget_display_probe : Screen, require;
 import flint.validate : NotBlank, Violation, validate;
 import flint.widgets : List, ListItem, TextInput;
-import prompt_replay : capacity, choices, fields, filter, replay, sample, secrets, title;
-import std.conv : to;
+import prompt_replay : capacity, choices, decimal, fields, filter, parseDecimal, replay, sample, secrets, title;
 
 @safe:
 
@@ -23,7 +22,7 @@ private ulong form()
     size_t verified;
     foreach (index; 0 .. fields)
     {
-        const key = "field-" ~ index.to!string;
+        const key = "field-" ~ decimal(index);
         require(key !in present);
         present[key] = true;
         Violation[1] errors;
@@ -42,7 +41,7 @@ private ulong pick(Screen terminal)
     bool[string] known;
     foreach (index, ref item; list.items)
     {
-        values[index] = index.to!string;
+        values[index] = decimal(index);
         require(values[index]!in known);
         known[values[index]] = true;
         item = ListItem(index + 1, index % 10 == 7 ? "Straße" : "Catalog");
@@ -70,7 +69,7 @@ private ulong pick(Screen terminal)
     event.key.code = KeyCode.down;
     list.update(event, effects);
     terminal.draw(&draw);
-    return values[list.selected].to!ulong;
+    return parseDecimal(values[list.selected]);
 }
 
 private extern (C) void explicit_bzero(void*, size_t) @system nothrow @nogc;

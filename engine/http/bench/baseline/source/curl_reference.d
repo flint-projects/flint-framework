@@ -4,7 +4,6 @@ module curl_reference;
 import core.sys.posix.poll : POLLERR, POLLHUP, POLLIN, POLLOUT, poll, pollfd;
 import core.time : MonoTime;
 import http_workload : ObserveBytes;
-import std.string : toStringz;
 
 @system:
 
@@ -120,8 +119,8 @@ struct Provider
             return false;
         }
         foreach (index, address; addresses)
-            urls[index] = address.toStringz;
-        root = trust.toStringz;
+            urls[index] = (address ~ '\0').ptr;
+        root = (trust ~ '\0').ptr;
         if (setMulti())
             return true;
         close();

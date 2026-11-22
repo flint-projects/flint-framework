@@ -3,12 +3,12 @@ module security_workload;
 
 import core.atomic : atomicLoad, atomicOp;
 import core.memory : GC;
+import core.stdc.stdio : fprintf, printf, stderr;
+import core.stdc.stdlib : getenv, qsort;
+import core.stdc.string : strlen;
 import core.time : MonoTime;
 import flint.arena : RequestArena, Status, Text;
-import std.algorithm.sorting : sort;
 import std.exception : enforce;
-import std.process : environment;
-import std.stdio : stderr, writefln;
 
 @safe:
 
@@ -21,7 +21,15 @@ enum rounds = 10_000;
 /// Read an ephemeral loopback fixture setting without printing it.
 string fixture(string name)
 {
-    return enforce(environment.get("FLINT_SECURITY_" ~ name, ""), "local security fixture is required");
+    return enforce(variable("FLINT_SECURITY_" ~ name), "local security fixture is required");
+}
+
+// SAFETY: The name is copied with a terminating NUL; getenv returns null or a NUL-terminated
+// environment string that is copied before returning. An unset name yields the empty literal.
+private string variable(string name) @trusted
+{
+    const value = getenv((name ~ '\0').ptr);
+    return value is null ? "" : value[0 .. strlen(value)].idup;
 }
 
 /// Derive the observable checksum from the verified subject and expiry.
@@ -52,7 +60,7 @@ ulong measure(string algorithm, scope Check check)
     const native = atomicLoad(allocations) - nativeBefore;
     enforce(checksum && elapsed >= 100_000_000 && allocated == 0 && native > 0,
             "security benchmark sample, timed workload or allocation check failed");
-    sort(durations[]);
+    sortDurations(durations[]);
     report(algorithm, elapsed, durations[rounds / 2], durations[rounds * 99 / 100 - 1], allocated, native);
     return checksum;
 }
@@ -76,21 +84,36 @@ private ulong sample(scope Check check, scope long[] durations) nothrow @nogc
 void finish(ulong checksum)
 {
     enforce(checksum == 30_660_000, "security verification checksum mismatch");
-    writefln("cached-jws %s", checksum);
+    printChecksum(checksum);
 }
 
-// SAFETY: Output contains only static algorithm names and measured counts. No fixture data is printed.
-private void report(string name, long elapsed, long median, long p99, ulong gc, ulong native) @trusted nothrow
+// SAFETY: The C format string is a fixed NUL-terminated literal with a matching scalar argument.
+private void printChecksum(ulong checksum) @trusted nothrow @nogc
 {
-    try
-    {
-        stderr.writefln("%s count %s elapsed_ns %s median_ns %s p99_ns %s d_gc_bytes %s native_heap_allocations %s",
-                name, rounds, elapsed, median, p99, gc, native);
-    }
-    catch (Exception)
-    {
-        // Metrics are observational and cannot affect verification results.
-    }
+    printf("cached-jws %llu\n", checksum);
+}
+
+// SAFETY: qsort passes this comparator two element addresses inside the slice given to sortDurations.
+private extern (C) int compareDurations(const void* left, const void* right) @trusted nothrow @nogc
+{
+    const first = *cast(const(long)*) left;
+    const second = *cast(const(long)*) right;
+    return (first > second) - (first < second);
+}
+
+// SAFETY: The base pointer, element count and element size describe exactly the live slice.
+private void sortDurations(scope long[] durations) @trusted nothrow @nogc
+{
+    qsort(durations.ptr, durations.length, long.sizeof, &compareDurations);
+}
+
+// SAFETY: Output contains only static algorithm names, printed with their explicit length, and
+// measured counts matching a fixed NUL-terminated literal format. No fixture data is printed.
+private void report(string name, long elapsed, long median, long p99, ulong gc, ulong native) @trusted nothrow @nogc
+{
+    fprintf(stderr,
+            "%.*s count %d elapsed_ns %lld median_ns %lld p99_ns %lld d_gc_bytes %llu native_heap_allocations %llu\n",
+            cast(int) name.length, name.ptr, rounds, elapsed, median, p99, gc, native);
 }
 
 private shared ulong allocations;

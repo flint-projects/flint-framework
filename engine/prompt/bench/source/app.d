@@ -6,8 +6,7 @@ import flint.prompt.group : Group, requiredValue, validateFields;
 import flint.prompt.picker : Picker, validateChoices;
 import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
 import flint.tui.widget_display_probe : Screen, require;
-import prompt_replay : capacity, choices, fields, filter, replay, sample, secrets, title;
-import std.conv : to;
+import prompt_replay : capacity, choices, decimal, fields, filter, parseDecimal, replay, sample, secrets, title;
 
 @safe:
 
@@ -17,7 +16,7 @@ private ulong form()
     auto answers = new Answer[fields];
     foreach (index; 0 .. fields)
     {
-        inputs[index] = Field("field-" ~ index.to!string, "Field", true);
+        inputs[index] = Field("field-" ~ decimal(index), "Field", true);
         answers[index].key = inputs[index].key;
         answers[index].value = "supplied";
     }
@@ -37,7 +36,7 @@ private ulong pick(Screen terminal)
     model.title = title;
     model.choices = new Choice[choices];
     foreach (index, ref item; model.choices)
-        item = Choice(index.to!string, index % 10 == 7 ? "Straße" : "Catalog");
+        item = Choice(decimal(index), index % 10 == 7 ? "Straße" : "Catalog");
     require(validateChoices(model.choices, 0, false).code == Status.ok);
     model.initialize();
     Effects effects;
@@ -55,7 +54,7 @@ private ulong pick(Screen terminal)
     event.key.code = KeyCode.enter;
     model.update(event, effects);
     require(model.done && model.result.length == 1);
-    return model.result[0].to!ulong;
+    return parseDecimal(model.result[0]);
 }
 
 private ulong password(Screen terminal)

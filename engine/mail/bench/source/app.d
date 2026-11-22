@@ -1,10 +1,10 @@
 module app;
 
+import core.time : MonoTime;
 import flint.arena : Buffer, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
 import flint.mail : Attachment, MailAddress, MailMessage, MailOptions, MailSender;
 import probe_workload : exercise;
-import std.datetime.stopwatch : StopWatch, AutoStart;
 
 @safe:
 
@@ -33,9 +33,9 @@ private long deliver(scope string endpoint, scope string ca, ref scope RequestAr
     mail.attachments = [Attachment("attachment.bin", "application/octet-stream", attachment)];
     auto source = CancelSource.create(Context.init, Deadline.afterMillis(10_000));
     auto context = source.value.context();
-    const watch = StopWatch(AutoStart.yes);
+    const started = MonoTime.currTime;
     const sent = sender.send(mail, arena, context);
-    const elapsed = watch.peek.total!"msecs";
+    const elapsed = (MonoTime.currTime - started).total!"msecs";
     const closed = sender.close();
     return sent.ok() && sent.value.accepted && sent.value.providerId.length != 0
         && closed.code == Status.ok ? elapsed : -1;

@@ -2,11 +2,11 @@
 module tui_probe;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
+import core.stdc.stdlib : qsort;
 import core.time : MonoTime;
 import flint.arena : Error;
 import flint.term : Event, EventKind, KeyCode, Size;
-import std.algorithm.sorting : sort;
-import std.stdio : writeln;
 
 @safe:
 
@@ -76,6 +76,30 @@ private struct Statistics
     ulong allocated;
 }
 
+// SAFETY: qsort passes this comparator two element addresses inside the slice given to sortSamples.
+private extern (C) int compareSamples(const void* left, const void* right) @trusted nothrow @nogc
+{
+    const first = *cast(const(long)*) left;
+    const second = *cast(const(long)*) right;
+    return (first > second) - (first < second);
+}
+
+// SAFETY: The base pointer, element count and element size describe exactly the live slice.
+private void sortSamples(scope long[] samples) @trusted nothrow @nogc
+{
+    qsort(samples.ptr, samples.length, long.sizeof, &compareSamples);
+}
+
+// SAFETY: Each C format string is a fixed NUL-terminated literal with matching scalar arguments.
+private void report(Size size, ref const Statistics result, bool measure, uint repeats, long duration) @trusted
+{
+    printf("tui %ux%u transitions=%d bytes=%llu checksum=%llu\n", size.columns, size.rows,
+            transitions, result.output.emitted, result.output.hash);
+    if (measure)
+        printf("tui p50_ns=%lld p99_ns=%lld samples=%u elapsed_ns=%lld gc_bytes_per_10000_frames=%llu\n",
+                result.median, result.p99, repeats, duration, result.allocated);
+}
+
 private Statistics run(Size size, Setup setup)
 {
     Statistics result;
@@ -98,7 +122,7 @@ private Statistics run(Size size, Setup setup)
         require(result.output.updateBytes > 0 && result.output.updateBytes < 64);
     }
     result.allocated = GC.stats().allocatedInCurrentThread - before;
-    samples[].sort();
+    sortSamples(samples[]);
     result.median = samples[transitions / 2];
     result.p99 = samples[transitions * 99 / 100];
     return result;
@@ -119,10 +143,6 @@ void benchmark(bool measure, Setup setup)
             ++repeats;
         }
         while (measure && duration < 100_000_000);
-        writeln("tui ", size.columns, "x", size.rows, " transitions=", transitions, " bytes=",
-                result.output.emitted, " checksum=", result.output.hash);
-        if (measure)
-            writeln("tui p50_ns=", result.median, " p99_ns=", result.p99, " samples=", repeats,
-                    " elapsed_ns=", duration, " gc_bytes_per_10000_frames=", result.allocated);
+        report(size, result, measure, repeats, duration);
     }
 }

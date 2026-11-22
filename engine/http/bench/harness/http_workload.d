@@ -2,10 +2,11 @@
 module http_workload;
 
 import core.memory : GC;
+import core.stdc.stdio : fprintf, printf, stderr;
+import core.stdc.stdlib : getenv;
+import core.stdc.string : strlen;
 import core.time : MonoTime;
 import std.exception : enforce;
-import std.process : environment;
-import std.stdio : stderr, writefln;
 
 @safe:
 
@@ -22,8 +23,8 @@ alias Fetch = bool delegate(size_t index, scope ObserveBytes observe) @safe noth
 /// Read the external test peer and create fixed resource URLs before measuring.
 void configure(out string[2] urls, out string ca)
 {
-    const origin = environment.get("FLINT_HTTP_HTTPS", "");
-    ca = environment.get("FLINT_HTTP_CA", "");
+    const origin = variable("FLINT_HTTP_HTTPS");
+    ca = variable("FLINT_HTTP_CA");
     enforce(origin.length != 0 && ca.length != 0, "HTTPS workload requires the local protocol fixture");
     urls = [origin ~ "/bench?n=1024", origin ~ "/bench?n=65536"];
 }
@@ -46,7 +47,7 @@ int run(scope Fetch fetch)
         checksum ^= observed.checksum << index;
         report(expected, elapsed, allocated);
     }
-    writefln("http-stream %s", checksum);
+    printChecksum(checksum);
     return 0;
 }
 
@@ -78,9 +79,23 @@ private Sample sample(scope Fetch fetch, size_t index, size_t expected, size_t c
     return Sample(true, checksum);
 }
 
-// SAFETY: Phobos exposes the process standard error as a synchronized file. This call
-// formats only scalar observations after measurement and retains no caller ranges.
-private void report(size_t bytes, long elapsed, ulong allocated) @trusted
+// SAFETY: getenv returns null or a NUL-terminated environment string, copied before returning;
+// the name is a NUL-terminated literal.
+private string variable(scope const(char)* name) @trusted
 {
-    stderr.writefln("bytes %s transfers %s elapsed_ns %s d_gc_bytes %s", bytes, transfers, elapsed, allocated);
+    const value = getenv(name);
+    return value is null ? "" : value[0 .. strlen(value)].idup;
+}
+
+// SAFETY: The C format string is a fixed NUL-terminated literal with matching scalar arguments;
+// only scalar observations are written to the process standard error stream.
+private void report(size_t bytes, long elapsed, ulong allocated) @trusted nothrow @nogc
+{
+    fprintf(stderr, "bytes %zu transfers %d elapsed_ns %lld d_gc_bytes %llu\n", bytes, transfers, elapsed, allocated);
+}
+
+// SAFETY: The C format string is a fixed NUL-terminated literal with a matching scalar argument.
+private void printChecksum(ulong checksum) @trusted nothrow @nogc
+{
+    printf("http-stream %llu\n", checksum);
 }

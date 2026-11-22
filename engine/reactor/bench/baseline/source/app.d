@@ -1,6 +1,7 @@
 module app;
 
 import core.atomic : atomicLoad, atomicStore;
+import core.stdc.stdio : printf;
 import core.stdc.errno : EAGAIN, ECANCELED, EINTR, errno;
 import core.sys.linux.sched : CPU_ISSET, CPU_SET, cpu_set_t, sched_getaffinity, sched_setaffinity;
 import core.sys.linux.epoll : EPOLLIN, EPOLLOUT, EPOLLRDHUP, EPOLL_CLOEXEC, EPOLL_CTL_ADD,
@@ -14,7 +15,6 @@ import core.time : MonoTime, msecs;
 import probe_workload : cancellationMarker, connectionLimit, maxPayload, runWorkloads, useUring;
 import std.exception : enforce;
 import std.socket : InternetAddress, TcpSocket;
-import std.stdio : writefln;
 
 private extern (C) int accept4(int descriptor, sockaddr* addr, socklen_t* len, int flags) nothrow @nogc;
 version (FlintNativeLiburing)
@@ -110,9 +110,12 @@ private struct DirectServer
         const cpuMicros = (after.ru_utime.tv_sec - before.ru_utime.tv_sec + after.ru_stime.tv_sec
                 - before.ru_stime.tv_sec) * 1_000_000 + after.ru_utime.tv_usec
             - before.ru_utime.tv_usec + after.ru_stime.tv_usec - before.ru_stime.tv_usec;
-        writefln("backend=%s pinned=%s worker_cpu_ns=%s voluntary_switches=%s involuntary_switches=%s outstanding=%s",
-                useUring() ? "ioUring" : "epoll",
-                pinned, cpuMicros * 1_000, after.ru_nvcsw - before.ru_nvcsw,
+        const backend = useUring() ? "ioUring" : "epoll";
+        const pinnedText = pinned ? "true" : "false";
+        printf("backend=%.*s pinned=%.*s worker_cpu_ns=%lld voluntary_switches=%ld involuntary_switches=%ld "
+                ~ "outstanding=%u\n", cast(int) backend.length,
+                backend.ptr, cast(int) pinnedText.length, pinnedText.ptr,
+                cast(long)(cpuMicros * 1_000), after.ru_nvcsw - before.ru_nvcsw,
                 after.ru_nivcsw - before.ru_nivcsw, outstanding);
     }
 

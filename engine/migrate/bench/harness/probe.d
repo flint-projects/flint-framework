@@ -1,15 +1,12 @@
 /// Equivalent immutable migration bytes and seeded history for the two probes.
 module probe;
 
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
 import flint.arena : Status;
 import flint.conc : Context;
 import flint.sql : Driver, Pool, PoolOptions;
-import std.conv : to;
-import std.digest : LetterCase, toHexString;
 import std.digest.sha : sha256Of;
-import std.stdio : writeln;
-import std.string : indexOf;
 
 @safe:
 
@@ -39,6 +36,47 @@ void require(bool valid) nothrow @nogc
         assert(0, "migration probe invariant failed");
 }
 
+private ptrdiff_t lineEnd(scope const(char)[] text) pure nothrow @nogc
+{
+    foreach (index, character; text)
+        if (character == '\n')
+            return index;
+    return -1;
+}
+
+private char[64] lowerHex(scope const ref ubyte[32] digest) pure nothrow @nogc
+{
+    enum digits = "0123456789abcdef";
+    char[64] text;
+    foreach (index, value; digest)
+    {
+        text[2 * index] = digits[value >> 4];
+        text[2 * index + 1] = digits[value & 0xf];
+    }
+    return text;
+}
+
+private string decimal(ulong value) pure nothrow
+{
+    char[20] digits;
+    size_t start = digits.length;
+    do
+    {
+        digits[--start] = cast(char)('0' + value % 10);
+        value /= 10;
+    }
+    while (value != 0);
+    return digits[start .. $].idup;
+}
+
+// SAFETY: Fixed NUL-terminated literal formats with matching scalar arguments.
+private void report(ulong observed, bool measure, uint trials, long elapsed) @trusted nothrow @nogc
+{
+    printf("migration checksum %llu\n", observed);
+    if (measure)
+        printf("migration rows_per_trial=%d trials=%u elapsed_ns=%lld\n", rows, trials, elapsed);
+}
+
 private Entry[] load()
 {
     enum programs = import("programs.sql");
@@ -46,12 +84,12 @@ private Entry[] load()
     size_t start;
     foreach (index, ref entry; entries)
     {
-        const end = programs[start .. $].indexOf('\n');
+        const end = lineEnd(programs[start .. $]);
         require(end > 0);
         entry.number = index + 1;
         entry.sql = programs[start .. start + end + 1];
         entry.digest = sha256Of(cast(const(ubyte)[]) entry.sql);
-        entry.hex = toHexString!(LetterCase.lower)(entry.digest);
+        entry.hex = lowerHex(entry.digest);
         start += end + 1;
     }
     require(start == programs.length);
@@ -77,7 +115,7 @@ private void seed(ref Pool pool, ref Context context, scope const(Entry)[] entri
         ~ "INSERT INTO flint_schema_history(version,description,sha256,execution_ms,success) VALUES";
     foreach (ref const entry; entries)
     {
-        setup ~= "(" ~ entry.number.to!string ~ ",'probe','" ~ entry.hex[] ~ "',1,TRUE)";
+        setup ~= "(" ~ decimal(entry.number) ~ ",'probe','" ~ entry.hex[] ~ "',1,TRUE)";
         setup ~= entry.number == rows ? ";" : ",";
     }
     const seeded = lease.value.executeScript(setup, context);
@@ -126,7 +164,5 @@ void benchmark(string[] args, Replay replay)
         ++trials;
     }
     while (measure && elapsed < 100_000_000);
-    writeln("migration checksum ", observed);
-    if (measure)
-        writeln("migration rows_per_trial=", rows, " trials=", trials, " elapsed_ns=", elapsed);
+    report(observed, measure, trials, elapsed);
 }

@@ -1,8 +1,8 @@
 module bridge_probe;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
-import std.stdio : writeln;
 
 @safe:
 
@@ -39,7 +39,13 @@ bool measure(scope EncodeBatch encode)
         const elapsed = (MonoTime.currTime - began).total!"nsecs";
         if (GC.stats.allocatedInCurrentThread != before)
             return false;
-        writeln("commands=", count, " rounds=", rounds, " elapsed_ns=", elapsed, " gc_bytes=0 checksum=", checksum);
+        report(count, rounds, elapsed, checksum);
     }
     return true;
+}
+
+// SAFETY: The C format string is a fixed NUL-terminated literal with matching scalar arguments.
+private void report(uint count, uint rounds, long elapsed, ulong checksum) @trusted nothrow @nogc
+{
+    printf("commands=%u rounds=%u elapsed_ns=%lld gc_bytes=0 checksum=%llu\n", count, rounds, elapsed, checksum);
 }

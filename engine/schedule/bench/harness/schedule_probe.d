@@ -1,7 +1,7 @@
 module schedule_probe;
 
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
-import std.stdio : writeln;
 
 @safe:
 
@@ -58,6 +58,12 @@ int show(Outcome delegate() @safe load)
     }
     while ((MonoTime.currTime - begin).total!"msecs" < 150);
     const elapsed = (MonoTime.currTime - begin).total!"nsecs";
-    writeln("jobs=", jobsPerTrial * trials, " elapsed_ns=", elapsed, " checksum=", checksum);
+    report(jobsPerTrial * trials, elapsed, checksum);
     return 0;
+}
+
+// SAFETY: The C format string is a fixed NUL-terminated literal with matching scalar arguments.
+private void report(ulong jobs, long elapsed, ulong checksum) @trusted nothrow @nogc
+{
+    printf("jobs=%llu elapsed_ns=%lld checksum=%llu\n", jobs, elapsed, checksum);
 }

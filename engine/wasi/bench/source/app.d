@@ -1,8 +1,8 @@
 /// Exercise compiled Wasmtime guests through the public Flint API.
 module app;
 
+import core.lifetime : move;
 import flint.wasi : CompiledPlugin, GuestAbi, Plugin, PluginOptions;
-import std.algorithm.mutation : move;
 import wasi_workload : run;
 
 @safe:

@@ -2,7 +2,6 @@
 module app;
 
 import flint.conc : Deadline;
-import std.string : toStringz;
 import workload : measure;
 
 private struct Broker;
@@ -83,7 +82,7 @@ int main(string[] arguments) @system
 
 private bool options(Configuration* config, string origin) @system
 {
-    return rd_kafka_conf_set(config, "bootstrap.servers", origin.toStringz(), null, 0) == 0
+    return rd_kafka_conf_set(config, "bootstrap.servers", (origin ~ '\0').ptr, null, 0) == 0
         && rd_kafka_conf_set(config, "client.id",
                 "flint-mq-bench", null, 0) == 0 && rd_kafka_conf_set(config, "log_level", "0", null, 0) == 0
         && rd_kafka_conf_set(config, "enable.idempotence", "true", null, 0) == 0

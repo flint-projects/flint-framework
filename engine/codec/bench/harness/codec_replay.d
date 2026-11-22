@@ -3,7 +3,7 @@ module codec_replay;
 import core.memory : GC;
 import core.time : MonoTime;
 import flint.arena : Error, Result, Status;
-import std.stdio : writeln;
+import core.stdc.stdio : printf;
 
 @safe:
 
@@ -122,9 +122,9 @@ void benchmark(string name, CodecRun execute, bool measure)
         }
         const elapsed = (MonoTime.currTime - start).total!"msecs";
         const bytes = GC.stats().allocatedInCurrentThread - allocated;
-        writeln(name, " level=3 input=", size, " encoded=", length, " checksum=", checksum(wire[0 .. length], input));
+        printCodec(name, size, length, checksum(wire[0 .. length], input));
         if (measure)
-            writeln(name, " repetitions=", rounds, " elapsed_ms=", elapsed, " gc_bytes=", bytes);
+            printRepetitions(name, rounds, elapsed, bytes);
     }
 }
 
@@ -144,8 +144,33 @@ void archiveReplay(string name, ArchiveRun execute, bool measure)
         require(count == memory.encoded && memory.decoded == input.length && memory.body[0 .. memory.decoded] == input);
     }
     const elapsed = (MonoTime.currTime - start).total!"msecs";
-    writeln(name, " input=", size, " encoded=", memory.encoded, " checksum=",
-            checksum(memory.wire[0 .. memory.encoded], input));
+    printArchive(name, size, memory.encoded, checksum(memory.wire[0 .. memory.encoded], input));
     if (measure)
-        writeln(name, " repetitions=", rounds, " elapsed_ms=", elapsed);
+        printArchiveRepetitions(name, rounds, elapsed);
+}
+
+// SAFETY: Each C format string below is a fixed NUL-terminated literal; names are printed with
+// their explicit length and every scalar matches its conversion.
+private void printCodec(string name, int size, size_t length, ulong sum) @trusted nothrow @nogc
+{
+    printf("%.*s level=3 input=%d encoded=%zu checksum=%llu\n", cast(int) name.length, name.ptr, size, length, sum);
+}
+
+// SAFETY: As above: fixed literal format, explicit name length, matching scalar arguments.
+private void printRepetitions(string name, int rounds, long elapsed, ulong bytes) @trusted nothrow @nogc
+{
+    printf("%.*s repetitions=%d elapsed_ms=%lld gc_bytes=%llu\n", cast(int) name.length, name.ptr,
+            rounds, elapsed, bytes);
+}
+
+// SAFETY: As above: fixed literal format, explicit name length, matching scalar arguments.
+private void printArchive(string name, int size, size_t encoded, ulong sum) @trusted nothrow @nogc
+{
+    printf("%.*s input=%d encoded=%zu checksum=%llu\n", cast(int) name.length, name.ptr, size, encoded, sum);
+}
+
+// SAFETY: As above: fixed literal format, explicit name length, matching scalar arguments.
+private void printArchiveRepetitions(string name, int rounds, long elapsed) @trusted nothrow @nogc
+{
+    printf("%.*s repetitions=%d elapsed_ms=%lld\n", cast(int) name.length, name.ptr, rounds, elapsed);
 }

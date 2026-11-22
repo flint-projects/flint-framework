@@ -1,10 +1,10 @@
 module signals_probe;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
 import flint.arena : Error, Status;
 import flint.wasm_bridge : CommandBuffer;
-import std.stdio : writeln;
 
 @safe:
 
@@ -90,8 +90,14 @@ bool measure(uint signals, scope SetRange setRange, scope Render render)
     const equalNanos = (MonoTime.currTime - equalStart).total!"nsecs";
     if (GC.stats.allocatedInCurrentThread != allocated || frame.value.usedBytes != 32)
         return false;
-    writeln("signals=", signals, " rounds=", rounds, " sets=", budget, " patches=", budget,
-            " ns_per_set=", cast(double) setTime / budget, " ns_per_observer=", cast(double) flushTime / budget,
-            " equal_frame_ns=", equalNanos, " gc_bytes=0 checksum=", total);
+    report(signals, rounds, budget, cast(double) setTime / budget, cast(double) flushTime / budget, equalNanos, total);
     return true;
+}
+
+// SAFETY: The C format string is a fixed NUL-terminated literal with matching scalar arguments.
+private void report(uint signals, uint rounds, ulong budget, double perSet, double perObserver,
+        long equalNanos, ulong total) @trusted nothrow @nogc
+{
+    printf("signals=%u rounds=%u sets=%llu patches=%llu ns_per_set=%g ns_per_observer=%g equal_frame_ns=%lld "
+            ~ "gc_bytes=0 checksum=%llu\n", signals, rounds, budget, budget, perSet, perObserver, equalNanos, total);
 }

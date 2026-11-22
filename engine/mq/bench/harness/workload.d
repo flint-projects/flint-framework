@@ -2,9 +2,9 @@
 module workload;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
+import core.stdc.stdlib : qsort;
 import flint.conc : Deadline;
-import std.algorithm.sorting : sort;
-import std.stdio : writeln;
 
 @safe:
 
@@ -46,14 +46,35 @@ private bool sample(scope Operation deliver, string topic, uint partitions, size
     }
     const duration = now() - before;
     const allocated = GC.stats().allocatedInCurrentThread - gcBytes;
-    auto ordered = sort(timings[]);
-    const p99 = ordered[$ - (iterations / 100) - 1];
+    sortTimings(timings[]);
+    const p99 = timings[$ - (iterations / 100) - 1];
     if (duration < 100_000_000)
         return false;
-    writeln("partitions=", partitions, " payload_bytes=", bytes, " records=", iterations, " p99_ns=", p99,
-            " elapsed_ns=", duration, " records_per_second=", (iterations * 1_000_000_000UL) / duration,
-            " checksum=", checksum, " owner_gc_bytes=", allocated);
+    report(partitions, bytes, p99, duration, checksum, allocated);
     return true;
+}
+
+// SAFETY: qsort passes this comparator two element addresses inside the slice given to sortTimings.
+private extern (C) int compareTimings(const void* left, const void* right) @trusted nothrow @nogc
+{
+    const first = *cast(const(long)*) left;
+    const second = *cast(const(long)*) right;
+    return (first > second) - (first < second);
+}
+
+// SAFETY: The base pointer, element count and element size describe exactly the live slice.
+private void sortTimings(scope long[] timings) @trusted nothrow @nogc
+{
+    qsort(timings.ptr, timings.length, long.sizeof, &compareTimings);
+}
+
+// SAFETY: The C format string is a fixed NUL-terminated literal with matching scalar arguments.
+// The rate is the same integer records-per-second quotient as before formatting.
+private void report(uint partitions, size_t bytes, long p99, long duration, ulong checksum, ulong allocated) @trusted
+{
+    printf("partitions=%u payload_bytes=%zu records=%d p99_ns=%lld elapsed_ns=%lld records_per_second=%llu "
+            ~ "checksum=%llu owner_gc_bytes=%llu\n", partitions,
+            bytes, iterations, p99, duration, (iterations * 1_000_000_000UL) / duration, checksum, allocated);
 }
 
 private long now() nothrow @nogc

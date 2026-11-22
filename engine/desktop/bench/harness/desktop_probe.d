@@ -1,8 +1,8 @@
 module desktop_probe;
 
 import core.memory : GC;
+import core.stdc.stdio : printf;
 import core.time : MonoTime;
-import std.stdio : writeln;
 
 @safe:
 
@@ -32,10 +32,21 @@ void report(size_t frames, MonoTime start, MonoTime ready, MonoTime rendered, ul
 {
     const measured = GC.stats().allocatedInCurrentThread - prior;
     require(measured == 0 && checksum != 0);
-    writeln("desktop frames=", frames, " width=", width, " height=", height, " checksum=", checksum);
+    printFrames(frames, checksum);
     if (frames > 1)
-        writeln("desktop startup_us=", (ready - start).total!"usecs", " render_us=",
-                (rendered - ready).total!"usecs", " gc_bytes=", measured);
+        printTiming((ready - start).total!"usecs", (rendered - ready).total!"usecs", measured);
+}
+
+// SAFETY: Fixed NUL-terminated literal format with matching scalar arguments.
+private void printFrames(size_t frames, ulong checksum) @trusted nothrow @nogc
+{
+    printf("desktop frames=%zu width=%d height=%d checksum=%llu\n", frames, width, height, checksum);
+}
+
+// SAFETY: Fixed NUL-terminated literal format with matching scalar arguments.
+private void printTiming(long startup, long render, ulong measured) @trusted nothrow @nogc
+{
+    printf("desktop startup_us=%lld render_us=%lld gc_bytes=%llu\n", startup, render, measured);
 }
 
 private struct Surface;

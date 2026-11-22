@@ -1,9 +1,8 @@
 module app;
 
+import core.time : MonoTime;
 import flint.arena : Buffer, RequestArena, Status;
 import probe_workload : exercise;
-import std.datetime.stopwatch : StopWatch, AutoStart;
-import std.string : toStringz;
 
 extern (C) private int flint_mail_probe_control(scope const(char)* endpoint, scope const(char)* ca,
         scope const(ubyte)* data, size_t length) nothrow @nogc;
@@ -17,18 +16,25 @@ private alias NativeString = const(char)*;
     return flint_mail_probe_control(url, ca, data.ptr, data.length) == 0;
 }
 
+// SAFETY: The pointer addresses a fresh NUL-terminated GC copy that the collector keeps alive while
+// referenced; no caller memory is retained.
+@trusted pure nothrow private NativeString nativeString(scope const(char)[] text)
+{
+    return (text ~ '\0').ptr;
+}
+
 @safe:
 
 private long deliver(scope string endpoint, scope string ca, ref scope RequestArena arena, Buffer attachment)
 {
-    const safeEndpoint = endpoint.idup.toStringz;
-    const safeCA = ca.idup.toStringz;
+    const safeEndpoint = nativeString(endpoint);
+    const safeCA = nativeString(ca);
     bool accepted;
-    const watch = StopWatch(AutoStart.yes);
+    const started = MonoTime.currTime;
     const status = arena.read(attachment, (scope const(ubyte)[] bytes) {
         accepted = submit(safeEndpoint, safeCA, bytes);
     });
-    const elapsed = watch.peek.total!"msecs";
+    const elapsed = (MonoTime.currTime - started).total!"msecs";
     return status == Status.ok && accepted ? elapsed : -1;
 }
 
