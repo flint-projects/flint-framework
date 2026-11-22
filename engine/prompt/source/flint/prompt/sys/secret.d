@@ -6,15 +6,21 @@ import flint.arena : Error, Status;
 @safe:
 package(flint.prompt):
 
-// The native secret store (native/secret.c) is built for Linux and macOS.
+// The native secret store is native/secret.c on Linux and macOS, and the D definitions of the same functions
+// at the end of this module on Windows, which has no C step in the package build.
 version (linux)
-    version = FlintPromptNative;
+    version = FlintPromptC;
 else version (OSX)
+    version = FlintPromptC;
+
+version (FlintPromptC)
+    version = FlintPromptNative;
+else version (Windows)
     version = FlintPromptNative;
 
 struct NativeSecret;
 
-private extern (C) @system nothrow @nogc
+version (FlintPromptC) private extern (C) @system nothrow @nogc
 {
     NativeSecret* flint_prompt_secret_new(size_t capacity);
     size_t flint_prompt_secret_count(const NativeSecret* storage);
@@ -94,4 +100,108 @@ private extern (C) @system nothrow @nogc
 {
     version (FlintPromptNative)
         flint_prompt_wipe(bytes.ptr, bytes.length);
+}
+
+version (Windows)
+{
+    import core.stdc.stdlib : calloc, free;
+    import core.stdc.string : memcpy;
+    import core.volatile : volatileStore;
+
+    // native/secret.c's layout: the header, then `capacity` payload bytes.
+    private struct Secret
+    {
+        size_t capacity;
+        size_t length;
+        size_t readers;
+        int closed;
+    }
+
+    private Secret* header(const NativeSecret* storage) @system nothrow @nogc
+    {
+        return cast(Secret*) storage;
+    }
+
+    private ubyte* payload(Secret* secret) @system nothrow @nogc
+    {
+        return cast(ubyte*)(secret + 1);
+    }
+
+    // The counterpart of explicit_bzero: volatile stores the compiler cannot remove.
+    private void flint_prompt_wipe(void* data, size_t size) @system nothrow @nogc
+    {
+        auto bytes = cast(ubyte*) data;
+        foreach (index; 0 .. size)
+            volatileStore(bytes + index, cast(ubyte) 0);
+    }
+
+    private void erase(Secret* secret) @system nothrow @nogc
+    {
+        flint_prompt_wipe(secret, Secret.sizeof + secret.capacity);
+        free(secret);
+    }
+
+    private NativeSecret* flint_prompt_secret_new(size_t capacity) @system nothrow @nogc
+    {
+        if (capacity > size_t.max - Secret.sizeof)
+            return null;
+        auto secret = cast(Secret*) calloc(1, Secret.sizeof + capacity);
+        if (secret !is null)
+            secret.capacity = capacity;
+        return cast(NativeSecret*) secret;
+    }
+
+    private size_t flint_prompt_secret_count(const NativeSecret* storage) @system nothrow @nogc
+    {
+        auto secret = header(storage);
+        return secret !is null && !secret.closed ? secret.length : 0;
+    }
+
+    private int flint_prompt_secret_append(NativeSecret* storage, const(void)* data, size_t bytes) @system nothrow @nogc
+    {
+        auto secret = header(storage);
+        if (secret is null || secret.closed || secret.readers || bytes > secret.capacity - secret.length)
+            return 0;
+        if (bytes)
+            memcpy(payload(secret) + secret.length, data, bytes);
+        secret.length += bytes;
+        return 1;
+    }
+
+    private void flint_prompt_secret_trim(NativeSecret* storage, size_t length) @system nothrow @nogc
+    {
+        auto secret = header(storage);
+        if (secret is null || secret.closed || secret.readers || length >= secret.length)
+            return;
+        flint_prompt_wipe(payload(secret) + length, secret.length - length);
+        secret.length = length;
+    }
+
+    // A const handle borrows mutable allocation bookkeeping without changing its payload.
+    private const(ubyte)* flint_prompt_secret_borrow(const NativeSecret* storage, size_t* length) @system nothrow @nogc
+    {
+        auto secret = header(storage);
+        if (secret is null || secret.closed || secret.readers == size_t.max)
+            return null;
+        ++secret.readers;
+        *length = secret.length;
+        return payload(secret);
+    }
+
+    private void flint_prompt_secret_release(const NativeSecret* storage) @system nothrow @nogc
+    {
+        auto secret = header(storage);
+        if (!--secret.readers && secret.closed)
+            erase(secret);
+    }
+
+    private void flint_prompt_secret_close(NativeSecret* storage) @system nothrow @nogc
+    {
+        auto secret = header(storage);
+        if (secret is null)
+            return;
+        secret.closed = 1;
+        if (!secret.readers)
+            erase(secret);
+    }
 }

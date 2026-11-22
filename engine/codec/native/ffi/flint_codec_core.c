@@ -1,6 +1,17 @@
 #include "flint_codec_private.h"
 
+#include <stddef.h>
 #include <stdlib.h>
+
+#if defined(_MSC_VER) && !defined(__clang__)
+/* MSVC's C mode has no max_align_t; double and long double are its most strictly aligned scalar types. */
+typedef union {
+    double floating;
+    long double extended;
+    void *pointer;
+    long long integer;
+} max_align_t;
+#endif
 
 typedef union allocation_header {
     max_align_t align;
