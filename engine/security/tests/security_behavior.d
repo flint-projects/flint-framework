@@ -261,6 +261,52 @@ version (FlintNativeOpenssl)
         const accepted = verifier.verify(fixture("OPTIONAL"), 990, arena);
         assert(accepted.ok && accepted.value.expiresAtUnixSeconds == long.max);
     }
+
+    @("a verified snapshot renews in the background before its lifetime ends")
+    @system unittest
+    {
+        import flint.security.jwt : completedJwksRefreshes;
+
+        const origin = fixture("ORIGIN");
+        if (!origin.length)
+            return;
+        auto options = policy("fixture-optional");
+        options.requireExpiry = false;
+        JwtVerifier verifier;
+        // Start past the earlier refresh of this issuer so the per-issuer interval admits a fetch.
+        enum second = 1_000_000_000L;
+        setJwksTestClockShift(60 * second);
+        assert(verifier.open(options, origin ~ "/stable").code == Status.ok);
+        scope (exit)
+        {
+            assert(verifier.close().code == Status.ok);
+            setJwksTestClockShift(0);
+        }
+        Context context;
+        assert(verifier.refresh(context).code == Status.ok);
+        assert(completedJwksRefreshes(verifier) == 1);
+        ubyte[128] storage;
+        auto arena = RequestArena(storage[]);
+        assert(verifier.verify(fixture("OPTIONAL"), 990, arena).ok);
+        assert(completedJwksRefreshes(verifier) == 1);
+
+        // Five seconds of the 45-second lifetime remain. Verification still succeeds and renews.
+        setJwksTestClockShift(100 * second);
+        assert(arena.reset() == Status.ok);
+        assert(verifier.verify(fixture("OPTIONAL"), 990, arena).ok);
+        foreach (_; 0 .. 5000)
+        {
+            if (completedJwksRefreshes(verifier) == 2)
+                break;
+            Thread.sleep(1.msecs);
+        }
+        assert(completedJwksRefreshes(verifier) == 2);
+
+        // The original snapshot would have expired; the renewed one remains valid without a gap.
+        setJwksTestClockShift(110 * second);
+        assert(arena.reset() == Status.ok);
+        assert(verifier.verify(fixture("OPTIONAL"), 990, arena).ok);
+    }
 }
 
 version (FlintNativeLibsodium)

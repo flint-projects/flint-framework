@@ -73,3 +73,40 @@ unittest
     assert(grpcStatus("99").value == RpcCode.unknown);
     assert(grpcStatus("1x").error.code == Status.invalidArgument);
 }
+
+@("client terminal status keeps the code when grpc-message is not valid percent-encoded UTF-8")
+unittest
+{
+    import flint.rpc.grpc_client : Terminal;
+
+    // PROTOCOL-HTTP2: an invalid grpc-message must not discard the status. At worst it stays raw.
+    Terminal percent;
+    percent.field("grpc-status", "5");
+    percent.field("grpc-message", "100% done");
+    assert(!percent.failed && percent.codeSeen && percent.code == RpcCode.notFound);
+    assert(percent.message[0 .. percent.length] == "100% done");
+
+    Terminal binary;
+    binary.field("grpc-message", "bad %FF byte");
+    binary.field("grpc-status", "13");
+    assert(!binary.failed && binary.code == RpcCode.internal);
+    assert(binary.message[0 .. binary.length] == "bad %FF byte");
+
+    char[5000] wide;
+    wide[] = 'x';
+    Terminal oversized;
+    oversized.field("grpc-status", "9");
+    oversized.field("grpc-message", wide[]);
+    assert(!oversized.failed && oversized.code == RpcCode.failedPrecondition);
+    assert(oversized.length == oversized.message.length && oversized.message[0] == 'x');
+
+    Terminal encoded;
+    encoded.field("grpc-status", "10");
+    encoded.field("grpc-message", "10%25 %F0%9F%9A%80");
+    assert(!encoded.failed && encoded.message[0 .. encoded.length] == "10% 🚀");
+
+    Terminal repeated;
+    repeated.field("grpc-status", "0");
+    repeated.field("grpc-status", "0");
+    assert(repeated.failed);
+}

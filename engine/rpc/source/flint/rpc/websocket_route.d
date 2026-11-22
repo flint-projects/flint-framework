@@ -235,9 +235,16 @@ package(flint.rpc) struct PeerState
         const header = outbound ? clientHeader(opcode, payload.length, mask) : serverHeader(opcode, payload.length);
         if (!header.ok())
             return header.error;
-        auto sent = writeWire(header.value.bytes[0 .. header.value.length], context);
-        if (sent.code == Status.ok && payload.length != 0)
-            sent = outbound ? writeMasked(payload, mask, context) : writeWire(payload, context);
+        // Write the header with the leading payload bytes, so a small frame is one transport write.
+        ubyte[4096] first;
+        const prefix = header.value.bytes[0 .. header.value.length];
+        const head = payload.length < first.length - prefix.length ? payload.length : first.length - prefix.length;
+        first[0 .. prefix.length] = prefix[];
+        foreach (index; 0 .. head)
+            first[prefix.length + index] = outbound ? payload[index] ^ mask[index & 3] : payload[index];
+        auto sent = writeWire(first[0 .. prefix.length + head], context);
+        if (sent.code == Status.ok && head != payload.length)
+            sent = outbound ? writeMasked(payload, head, mask, context) : writeWire(payload[head .. $], context);
         if (sent.code != Status.ok)
         {
             failed = true;
@@ -257,11 +264,10 @@ package(flint.rpc) struct PeerState
     }
 
     // dfmt off
-    private Error writeMasked(scope const(ubyte)[] payload, ubyte[4] mask,
+    private Error writeMasked(scope const(ubyte)[] payload, size_t offset, ubyte[4] mask,
             ref scope const Context context) scope nothrow @nogc
     {
         ubyte[4096] chunk;
-        size_t offset;
         while (offset < payload.length)
         {
             const remaining = payload.length - offset;

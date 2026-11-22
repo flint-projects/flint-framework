@@ -382,7 +382,7 @@ private Result!Buffer unavailableResult() pure nothrow @nogc
     return Result!Buffer(Buffer.init, Error(Status.unavailable, "gRPC call is no longer live"));
 }
 
-private struct Terminal
+package(flint.rpc) struct Terminal
 {
     RpcCode code;
     bool codeSeen;
@@ -402,10 +402,27 @@ private struct Terminal
         }
         else if (asciiEqual(name, "grpc-message"))
         {
-            failed |= messageSeen || !decodeStatusText(value, message[], length);
+            // gRPC over HTTP/2: an invalid message must not discard the status; keep the raw form.
+            failed |= messageSeen;
             messageSeen = true;
+            if (!decodeStatusText(value, message[], length))
+                length = rawStatusText(value, message[]);
         }
     }
+}
+
+private size_t rawStatusText(scope const(char)[] wire, scope char[] result) pure nothrow @nogc
+{
+    if (!utf8Valid(cast(const(ubyte)[]) wire))
+        return 0;
+    size_t count = wire.length < result.length ? wire.length : result.length;
+    if (count < wire.length)
+    {
+        while (count != 0 && (wire[count] & 0xc0) == 0x80)
+            --count;
+    }
+    result[0 .. count] = wire[0 .. count];
+    return count;
 }
 
 private bool decodeStatusText(scope const(char)[] wire, scope char[] result, out size_t written) pure nothrow @nogc

@@ -138,6 +138,9 @@ private final class SseRoute
     }
 }
 
+/// One HTTP/2 stream output chunk, the largest frame submitted as a single transport write.
+private enum coalescedFrameBytes = 4096;
+
 package(flint.rpc) struct CallState
 {
     StreamToken token;
@@ -170,9 +173,17 @@ package(flint.rpc) struct CallState
             const prefix = grpcPrefix(wire.length, limits.maxMessageBytes);
             if (!prefix.ok())
                 return prefix.error;
-            const sent = token.send(prefix.value[], context);
+            // Submit the prefix with the leading payload bytes. A transport chunk then carries a
+            // whole small message, and the send does not wait for the prefix alone to drain.
+            ubyte[coalescedFrameBytes] frame;
+            const head = wire.length < frame.length - prefix.value.length ? wire.length
+                : frame.length - prefix.value.length;
+            frame[0 .. prefix.value.length] = prefix.value[];
+            frame[prefix.value.length .. prefix.value.length + head] = wire[0 .. head];
+            const sent = token.send(frame[0 .. prefix.value.length + head], context);
             if (sent.code != Status.ok)
                 return sent;
+            wire = wire[head .. $];
         }
         if (wire.length == 0)
             return Error.init;

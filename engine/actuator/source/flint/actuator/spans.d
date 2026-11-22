@@ -79,6 +79,9 @@ package(flint.actuator) final class Spans
     {
         if (name.length == 0 || name.length > 128 || monotonicNanos < 0)
             return Result!Span(Span.init, Error(Status.invalidArgument, "invalid span name or clock"));
+        // Draw identifiers before taking the shared registry lock; the system call needs no shared state.
+        TraceContext trace;
+        const outcome = makeContext(parent, trace);
         gate.lock_nothrow();
         scope (exit)
             gate.unlock_nothrow();
@@ -89,8 +92,6 @@ package(flint.actuator) final class Spans
             atomicOp!"+="(drops, 1UL);
             return Result!Span(Span(null, 0, 0, parent));
         }
-        TraceContext trace;
-        auto outcome = makeContext(parent, trace);
         if (outcome.code != Status.ok)
             return Result!Span(Span.init, outcome);
         const id = available;
@@ -208,17 +209,23 @@ private Error makeContext(TraceContext parent, out TraceContext output) nothrow 
     output.traceId = parent.traceId;
     if (!hasBytes(output.traceId[]))
     {
-        auto result = fillSecureRandom(output.traceId[]);
+        // A root span draws both identifiers with one request to the operating system.
+        ubyte[24] identities;
+        auto result = fillSecureRandom(identities[]);
         if (result.code != Status.ok)
             return result;
+        output.traceId = identities[0 .. 16];
+        output.spanId = identities[16 .. 24];
         if (!hasBytes(output.traceId[]))
             return Error(Status.unavailable, "trace entropy unavailable");
         output.flags = 1;
     }
     else
+    {
         output.flags = parent.flags;
-    auto result = fillSecureRandom(output.spanId[]);
-    if (result.code != Status.ok)
-        return result;
+        auto result = fillSecureRandom(output.spanId[]);
+        if (result.code != Status.ok)
+            return result;
+    }
     return hasBytes(output.spanId[]) ? Error.init : Error(Status.unavailable, "span entropy unavailable");
 }

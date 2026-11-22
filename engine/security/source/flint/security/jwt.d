@@ -18,6 +18,7 @@ import flint.security.types : JwtAlgorithm, JwtPolicy, Principal;
 
 private enum maxJwks = 1_048_576;
 private enum maxIssuer = 1024;
+private enum second = 1_000_000_000L;
 
 version (unittest)
 {
@@ -26,6 +27,16 @@ version (unittest)
     package(flint.security) void setJwksTestClockShift(long nanoseconds) nothrow @nogc
     {
         atomicStore(clockShift, nanoseconds);
+    }
+
+    package(flint.security) ulong completedJwksRefreshes(ref JwtVerifier verifier) nothrow @nogc
+    {
+        if (verifier.state is null)
+            return 0;
+        verifier.state.gate.lock();
+        scope (exit)
+            verifier.state.gate.unlock();
+        return verifier.state.completed;
     }
 }
 
@@ -177,6 +188,12 @@ private Result!Principal failure() pure nothrow @nogc
     return Result!Principal(Principal.init, denied());
 }
 
+private struct Lookup
+{
+    Result!Key key;
+    bool renew;
+}
+
 private struct Receipt
 {
     ulong ticket;
@@ -197,6 +214,8 @@ private final class Verifier
     private ulong completed;
     private Receipt[4] receipts;
     private uint limiter;
+    private long renewal;
+    private long renewAt;
     private bool closing;
     shared bool stopped;
 
@@ -215,6 +234,8 @@ private final class Verifier
         this.algorithms = algorithms;
         skew = cast(ulong) policy.clockSkewSeconds;
         ttl = policy.jwksTtlSeconds;
+        // Renew a still-valid snapshot during its final half lifetime, at most one minute early.
+        renewal = ttl * (second / 2) < 60 * second ? ttl * (second / 2) : 60 * second;
         requireExpiry = policy.requireExpiry;
         tokenBytes = policy.maxTokenBytes;
         request.url = url;
@@ -358,7 +379,7 @@ private final class Verifier
         if (accepted)
         {
             const refresh = monotonic();
-            const duration = ttl * 1_000_000_000L;
+            const duration = ttl * second;
             snapshots[next].expiry = refresh > long.max - duration ? long.max : refresh + duration;
             current = next;
         }
@@ -387,14 +408,23 @@ private final class Verifier
         gate.unlock();
     }
 
-    private Result!Key findKey(scope const(ubyte)[] kid, JwtAlgorithm algorithm) nothrow @nogc
+    private Lookup findKey(scope const(ubyte)[] kid, JwtAlgorithm algorithm) nothrow @nogc
     {
         gate.lock();
         scope (exit)
             gate.unlock();
-        if (closing || snapshots[current].expiry <= monotonic())
-            return Result!Key(Key.init, denied());
-        return snapshots[current].retain(kid, algorithm);
+        const now = monotonic();
+        const expiry = snapshots[current].expiry;
+        if (closing || expiry <= now)
+            return Lookup(Result!Key(Key.init, denied()));
+        bool renew;
+        if (requested == completed && now >= renewAt && expiry - now <= renewal)
+        {
+            // Attempt at most once per second; the native issuer limiter still bounds fetches.
+            renewAt = now > long.max - second ? long.max : now + second;
+            renew = true;
+        }
+        return Lookup(snapshots[current].retain(kid, algorithm), renew);
     }
 
     Result!Principal verify(scope const(ubyte)[] token, long now, ref scope RequestArena output) nothrow @nogc
@@ -422,15 +452,14 @@ private final class Verifier
         if (!claim.ok() || !(algorithms & (1U << cast(uint) claim.value.algorithm)))
             return failure();
         auto selected = findKey(claim.value.kid[0 .. claim.value.kidLength], claim.value.algorithm);
-        if (!selected.ok())
-        {
+        if (!selected.key.ok() || selected.renew)
             requestRefresh();
+        if (!selected.key.ok())
             return failure();
-        }
         scope (exit)
-            selected.value.release();
-        const verified = selected.value.verify(claim.value.algorithm, token[0 .. spans.signedEnd],
-                decoded[signedBytes .. signedBytes + signature]);
+            selected.key.value.release();
+        const verified = selected.key.value.verify(claim.value.algorithm,
+                token[0 .. spans.signedEnd], decoded[signedBytes .. signedBytes + signature]);
         if (verified.code != Status.ok)
             return failure();
         return parseClaims(decoded[header .. signedBytes], issuer, audience, now, skew, requireExpiry, output);
