@@ -271,6 +271,7 @@ version (FlintNativeSqlite)
     {
         import core.thread : Thread;
         import core.time : MonoTime;
+        import std.conv : to;
 
         Pool pool;
         assert(pool.open(options(Driver.sqlite, ":memory:")).code == Status.ok);
@@ -287,7 +288,8 @@ version (FlintNativeSqlite)
         const elapsed = (MonoTime.currTime - started).total!"msecs";
         assert(!firstFailed && !secondFailed);
         // 400 one-connection handoffs take a few milliseconds; a 1–2 ms poll per handoff takes far longer.
-        assert(elapsed < 100, "queued SQL waiters stalled between lease handoffs");
+        assertWallClock(elapsed < 100, "400 lease handoffs took " ~ elapsed.to!string
+                ~ " ms (bound 100 ms; above it, queued waiters stall between handoffs)");
     }
 }
 
@@ -581,6 +583,7 @@ version (FlintNativeSqlite)
     @system unittest
     {
         import core.time : MonoTime, msecs;
+        import std.conv : to;
 
         auto setup = options(Driver.sqlite, ":memory:", 16);
         assert(setup.maxWaiters == 256);
@@ -590,11 +593,18 @@ version (FlintNativeSqlite)
         scope (exit)
             assert(pool.close(context).code == Status.ok);
         Connection[16] leases;
+        size_t held;
+        // If a check fails, return the leases still held so the queued waiters finish and close
+        // can complete; otherwise close would wait for them forever.
+        scope (exit)
+            foreach (ref lease; leases[0 .. held])
+                pool.release(lease);
         foreach (ref lease; leases)
         {
             auto acquired = pool.acquire(context);
             assert(acquired.ok());
             lease = acquired.value;
+            ++held;
         }
 
         auto first = CancelSource.create(Context.init, Deadline.none());
@@ -613,20 +623,27 @@ version (FlintNativeSqlite)
             threads[index] = startWaiter(&waiter);
         }
 
-        // Waiter 257 is the probe: once every worker is queued it is rejected immediately.
+        // Waiter 257 is the probe: once every worker is queued it is rejected immediately. A probe
+        // that times out held a queue position, and a waiter it turned away retries after a short
+        // sleep; pause after each such probe, longer each time, so slow schedulers let that waiter
+        // re-queue before the next probe takes the position again.
         long micros;
         const queued = MonoTime.currTime;
         Status status;
+        uint pause = 1;
         while ((status = probe(pool, micros)) != Status.resourceExhausted)
         {
             assert(status == Status.timedOut);
-            assert(MonoTime.currTime - queued < 4000.msecs, "256 waiters never filled the queue");
+            assert(MonoTime.currTime - queued < 30_000.msecs, "256 waiters never filled the queue");
+            Thread.sleep(pause.msecs);
+            if (pause < 64)
+                pause *= 2;
         }
-        assert(micros < 50_000, "a full lease queue did not reject promptly");
+        assertWallClock(micros < 50_000, "full-queue rejection took " ~ micros.to!string ~ " us against 50000 us");
         foreach (attempt; 0 .. 8)
         {
             assert(probe(pool, micros) == Status.resourceExhausted);
-            assert(micros < 50_000);
+            assertWallClock(micros < 50_000, "full-queue rejection took " ~ micros.to!string ~ " us against 50000 us");
         }
 
         // Cancelled waiters return and withdraw their queue positions.
@@ -640,6 +657,7 @@ version (FlintNativeSqlite)
 
         foreach (ref lease; leases)
             assert(pool.release(lease).code == Status.ok);
+        held = 0;
         foreach (index, thread; threads)
         {
             thread.join();
@@ -663,4 +681,23 @@ version (FlintNativeLibpq)
         exerciseBindInjection(Driver.postgres, address);
         exerciseNullKinds(Driver.postgres, address);
     }
+}
+
+/// Wall-clock bounds are enforced on native hardware. A lane that runs these tests under full-system
+/// emulation sets `FLINT_EMULATED=1`, and the bound is then reported with its measurement instead of
+/// asserted, because emulated syscalls and context switches cost milliseconds (ADR-017).
+private void assertWallClock(bool within, lazy string measurement) @trusted
+{
+    import core.stdc.stdio : fflush, printf, stdout;
+    import std.process : environment;
+
+    if (environment.get("FLINT_EMULATED") == "1")
+    {
+        const text = measurement;
+        printf("FLINT-EMULATED wall-clock bound %s: %.*s\n", within ? "met".ptr : "not met".ptr,
+                cast(int) text.length, text.ptr);
+        fflush(stdout);
+        return;
+    }
+    assert(within, measurement);
 }

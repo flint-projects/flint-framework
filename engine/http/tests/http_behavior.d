@@ -592,7 +592,7 @@ version (FlintNativeCurl)
         assert(fixture.completed == 101);
         // A loopback HTTP/1.1 exchange takes tens of microseconds; 1 ms polls cost several per exchange.
         const average = fixture.elapsedNanos / 100;
-        assert(average < 1_000_000, average.to!string ~ " ns per exchange");
+        assertWallClock(average < 1_000_000, average.to!string ~ " ns per exchange against 1000000 ns");
     }
 
     private final class Stages
@@ -913,4 +913,23 @@ version (FlintNativeCurl)
             exerciseStages(true);
         }
     }
+}
+
+/// Wall-clock bounds are enforced on native hardware. A lane that runs these tests under full-system
+/// emulation sets `FLINT_EMULATED=1`, and the bound is then reported with its measurement instead of
+/// asserted, because emulated syscalls and context switches cost milliseconds (ADR-017).
+private void assertWallClock(bool within, lazy string measurement) @trusted
+{
+    import core.stdc.stdio : fflush, printf, stdout;
+    import std.process : environment;
+
+    if (environment.get("FLINT_EMULATED") == "1")
+    {
+        const text = measurement;
+        printf("FLINT-EMULATED wall-clock bound %s: %.*s\n", within ? "met".ptr : "not met".ptr,
+                cast(int) text.length, text.ptr);
+        fflush(stdout);
+        return;
+    }
+    assert(within, measurement);
 }

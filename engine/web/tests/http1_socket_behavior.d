@@ -357,7 +357,7 @@ unittest
     assert(received.length > streamBytes && received[0 .. 15] == "HTTP/1.1 200 OK", elapsed.toString());
     assert(received[$ - 5 .. $] == "0\r\n\r\n");
     // About 1,000 transport writes: a 1 ms poll per write needs over a second.
-    assert(elapsed < dur!"msecs"(400), elapsed.toString());
+    assertWallClock(elapsed < dur!"msecs"(400), "streamed response took " ~ elapsed.toString() ~ " against 400 ms");
 }
 
 @("HTTP/1 upgraded streams echo without a millisecond receive poll")
@@ -392,7 +392,7 @@ unittest
     }
     const elapsed = MonoTime.currTime - started;
     // Each round trip waits for one receive and one send completion: 1 ms polls need over 200 ms.
-    assert(elapsed < dur!"msecs"(100), elapsed.toString());
+    assertWallClock(elapsed < dur!"msecs"(100), "200 echo round trips took " ~ elapsed.toString() ~ " against 100 ms");
 }
 
 /// Return a response field's value, matching the name case-insensitively.
@@ -488,4 +488,23 @@ unittest
     assert(readResponse(socket, pending, head) == "ok");
     assert(head[0 .. 15] == "HTTP/1.1 200 OK", head);
     assertCurrentDate(head);
+}
+
+/// Wall-clock bounds are enforced on native hardware. A lane that runs these tests under full-system
+/// emulation sets `FLINT_EMULATED=1`, and the bound is then reported with its measurement instead of
+/// asserted, because emulated syscalls and context switches cost milliseconds (ADR-017).
+private void assertWallClock(bool within, lazy string measurement) @trusted
+{
+    import core.stdc.stdio : fflush, printf, stdout;
+    import std.process : environment;
+
+    if (environment.get("FLINT_EMULATED") == "1")
+    {
+        const text = measurement;
+        printf("FLINT-EMULATED wall-clock bound %s: %.*s\n", within ? "met".ptr : "not met".ptr,
+                cast(int) text.length, text.ptr);
+        fflush(stdout);
+        return;
+    }
+    assert(within, measurement);
 }
