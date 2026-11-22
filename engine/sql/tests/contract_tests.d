@@ -356,4 +356,32 @@ version (FlintNativeLibpq)
         assert(killer.value.execute("SELECT 42", [], arena, context).ok());
     }
 
+    @("PostgreSQL reports a commit that the server turned into a rollback as a failure")
+    unittest
+    {
+        const address = environment.get("FLINT_SQL_PG_TEST_DSN");
+        if (address.length == 0)
+            return;
+        Pool pool;
+        assert(pool.open(options(Driver.postgres, address, 2)).code == Status.ok);
+        Context context;
+        scope (exit)
+            assert(pool.close(context).code == Status.ok);
+        auto setup = pool.acquire(context);
+        assert(setup.ok());
+        scope RequestArena arena;
+        assert(setup.value.execute("CREATE TEMP TABLE IF NOT EXISTS flint_aborted_commit (n int8)",
+                [], arena, context).ok());
+        assert(pool.release(setup.value).code == Status.ok);
+        const outcome = withTransaction(pool, Isolation.readCommitted, context,
+                (ref Connection lease) @safe nothrow @nogc {
+            scope RequestArena local;
+            assert(lease.execute("INSERT INTO flint_aborted_commit VALUES (1)", [], local, context).ok());
+            // The failed statement aborts the server transaction; the body still reports success.
+            assert(!lease.execute("SELECT 1 / 0", [], local, context).ok());
+            return Error.init;
+        });
+        assert(outcome.code == Status.conflict, "a commit answered with ROLLBACK was reported as success");
+    }
+
 }

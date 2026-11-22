@@ -500,6 +500,25 @@ static void command_tuples(flint_sql_operation *operation, PGresult *result)
     operation->affected = value;
 }
 
+/* True when the statement's first keyword is COMMIT or END (which commit the open transaction). */
+static int commits_transaction(const char *text)
+{
+    if (!text)
+        return 0;
+    while (*text == ' ' || *text == '\t' || *text == '\r' || *text == '\n')
+        ++text;
+    static const char *const words[] = {"COMMIT", "END"};
+    for (size_t w = 0; w < sizeof words / sizeof words[0]; ++w) {
+        size_t i = 0;
+        while (words[w][i] && (text[i] & ~0x20) == words[w][i])
+            ++i;
+        if (!words[w][i] && !((text[i] >= 'A' && text[i] <= 'Z') || (text[i] >= 'a' && text[i] <= 'z')
+                              || (text[i] >= '0' && text[i] <= '9') || text[i] == '_'))
+            return 1;
+    }
+    return 0;
+}
+
 static int handle_result(flint_sql_operation *operation, PGresult *result)
 {
     switch (PQresultStatus(result)) {
@@ -515,6 +534,12 @@ static int handle_result(flint_sql_operation *operation, PGresult *result)
         command_tuples(operation, result);
         break;
     case PGRES_COMMAND_OK:
+        /* PostgreSQL answers COMMIT in an aborted transaction with a successful ROLLBACK. */
+        if (commits_transaction(operation->text) && !strcmp(PQcmdStatus(result), "ROLLBACK")) {
+            if (operation->status == FLINT_SQL_OK)
+                operation->status = FLINT_SQL_CONFLICT;
+            break;
+        }
         if (operation->phase == PG_QUERY)
             command_tuples(operation, result);
         break;
