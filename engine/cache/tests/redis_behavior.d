@@ -350,4 +350,81 @@ version (FlintNativeHiredis)
         const observed = owner.value.workerStats(0);
         assert(observed.ok && observed.value.gcAllocated == 0);
     }
+
+    private final class PutFibers
+    {
+        Cache cache;
+        bool loading;
+        bool written;
+        bool fresh;
+        uint done;
+        static immutable ubyte[3] binary = ['p', 0, 'w'];
+
+        void load() nothrow @nogc
+        {
+            auto owner = Reactor.current();
+            Context context;
+            ubyte[256] storage;
+            auto arena = RequestArena(storage[]);
+            const loaded = getOrLoad(cache, binary, ttl, arena, context, (ref scope RequestArena scratch, ref Context) {
+                loading = true;
+                while (!written)
+                {
+                    const slept = owner.yieldUntil(Deadline.afterMillis(1));
+                    if (slept.code != Status.ok)
+                        return Result!Buffer(Buffer.init, slept);
+                }
+                return scratch.copyIn(cast(const(ubyte)[]) "stale value");
+            });
+            assert(loaded.ok);
+            const current = cache.get(binary, arena, context);
+            fresh = current.ok && matches(arena, current.value, cast(const(ubyte)[]) "fresh value");
+            finished();
+        }
+
+        void write() nothrow @nogc
+        {
+            auto owner = Reactor.current();
+            while (!loading)
+                assert(owner.yieldUntil(Deadline.afterMillis(1)).code == Status.ok);
+            Context context;
+            assert(cache.put(binary, cast(const(ubyte)[]) "fresh value", ttl, context).code == Status.ok);
+            written = true;
+            finished();
+        }
+
+        private void finished() nothrow @nogc
+        {
+            if (++done != 2)
+                return;
+            Context context;
+            assert(cache.evict(binary, context).code == Status.ok);
+            assert(cache.close().code == Status.ok);
+            auto owner = Reactor.current();
+            owner.stop();
+        }
+    }
+
+    @("a Redis put during a flight is not overwritten by the late loader result")
+    unittest
+    {
+        const address = peer("REAL");
+        if (!address.length)
+            return;
+        auto client = new PutFibers;
+        auto options = settings(address, "put-fibers");
+        options.backend = CacheBackend.redis;
+        assert(client.cache.open(options).code == Status.ok);
+        ReactorOptions reactors;
+        reactors.backend = Backend.epoll;
+        reactors.cores = 1;
+        reactors.fiberPoolSize = 2;
+        auto owner = Reactor.create(reactors);
+        assert(owner.ok);
+        assert(owner.value.postStartup(0, &client.load).code == Status.ok);
+        assert(owner.value.postStartup(0, &client.write).code == Status.ok);
+        assert(owner.value.run().code == Status.ok);
+        assert(client.done == 2);
+        assert(client.fresh, "a stale Redis loader result replaced a newer put");
+    }
 }

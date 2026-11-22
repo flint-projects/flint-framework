@@ -7,7 +7,8 @@ import flint.conc : CancelSource, Context, Deadline;
 import flint.sql.ffi.shim : Cell, Identity, Interest, Operation, Progress, acquirePool,
     claimTransaction, closePool, copyCell, dirtyLease, endTransaction, inspectCell, openPool,
     releasePool, retireLease, rowColumns, withdrawPool;
-import flint.sql.sys.wait : admit, admitStartup, pause, waitFor;
+import flint.sql.sys.wait : admit, admitStartup, joinLeaseQueue, leaseChanged, leaseMark,
+    leaveLeaseQueue, pause, pauseForLease, waitFor;
 
 @safe:
 
@@ -278,6 +279,56 @@ private Execution drain(ref scope Operation work, ulong slot, ref Context contex
     }
 }
 
+/// One caller's FIFO ticket and wake registration while it waits for a lease.
+private struct LeaseWait
+{
+    Identity pool;
+    ulong ticket;
+    bool registered;
+
+    Status attempt(out Identity lease) nothrow @nogc
+    {
+        const queued = ticket != 0;
+        const status = acquirePool(pool, ticket, lease);
+        if (status != Status.ok)
+            return status;
+        unregister();
+        // The next queued waiter is now the head and may find another idle lease.
+        if (queued)
+            leaseChanged(pool.slot);
+        return status;
+    }
+
+    /// Register for wakeups. Returns whether the caller was already registered.
+    bool register() nothrow @nogc
+    {
+        if (registered)
+            return true;
+        joinLeaseQueue(pool.slot);
+        registered = true;
+        return false;
+    }
+
+    void leave() nothrow @nogc
+    {
+        unregister();
+        if (ticket == 0)
+            return;
+        // A departing waiter may have been the queue head.
+        withdrawPool(pool, ticket);
+        ticket = 0;
+        leaseChanged(pool.slot);
+    }
+
+    private void unregister() nothrow @nogc
+    {
+        if (!registered)
+            return;
+        leaveLeaseQueue(pool.slot);
+        registered = false;
+    }
+}
+
 /// Thread-safe scalar handle to a bounded connection directory.
 struct Pool
 {
@@ -331,26 +382,29 @@ struct Pool
             return Result!Connection(Connection.init, ownership);
         const start = Deadline.afterMillis(0).monotonicNanoseconds;
         const local = start < long.max - waitNanos ? start + waitNanos : long.max - 1;
-        const handle = identity();
-        ulong ticket;
+        LeaseWait wait = LeaseWait(identity());
         scope (exit)
-            withdrawPool(handle, ticket);
+            wait.leave();
         for (;;)
         {
             const check = context.check();
             if (check.code != Status.ok)
                 return Result!Connection(Connection.init, check);
-            if (ticket != 0 && Deadline.afterMillis(0).monotonicNanoseconds >= local)
+            if (wait.ticket != 0 && Deadline.afterMillis(0).monotonicNanoseconds >= local)
                 return Result!Connection(Connection.init, Error(Status.timedOut, "SQL lease wait expired"));
+            const mark = leaseMark(slot);
             Identity lease;
-            const status = acquirePool(handle, ticket, lease);
+            const status = wait.attempt(lease);
             if (status == Status.ok)
                 return Result!Connection(Connection(lease));
             if (status != Status.conflict)
                 return Result!Connection(Connection.init, Error(status, "SQL pool rejected acquisition"));
             if (Deadline.afterMillis(0).monotonicNanoseconds >= local)
                 return Result!Connection(Connection.init, Error(Status.timedOut, "SQL lease wait expired"));
-            const paused = pause();
+            // Retry once registered so that a release after this point wakes the sleep below.
+            if (!wait.register())
+                continue;
+            const paused = pauseForLease(slot, mark);
             if (paused.code != Status.ok)
                 return Result!Connection(Connection.init, paused);
         }
@@ -370,6 +424,7 @@ struct Pool
         const status = releasePool(identity(), handle);
         if (status != Status.ok)
             return Error(status, "SQL lease could not be released");
+        leaseChanged(slot);
         connection = Connection.init;
         return cleanup;
     }

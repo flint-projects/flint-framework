@@ -187,9 +187,43 @@ private final class State
             const ready = remote.ready(ctx);
             if (ready.code != Status.ok)
                 return ready;
-            const ticket = remote.putCommand(key, value, ttl);
-            return ticket.ok ? remote.complete(ticket.value, ctx) : ticket.error;
         }
+        // An explicit write supersedes a load already running for the key, as eviction does.
+        if (local !is null)
+        {
+            const mark = flights.idleMark();
+            if (mark != 0)
+            {
+                const stored = store(hash, key, value, ttl, ctx);
+                if (stored.code != Status.ok || flights.stillIdle(mark))
+                    return stored;
+                // A load began meanwhile. Repeat the write in order with its publication.
+                Context independent;
+                return writeOrdered(hash, key, value, ttl, independent);
+            }
+        }
+        return writeOrdered(hash, key, value, ttl, ctx);
+    }
+
+    private Error writeOrdered(ulong hash, scope Bytes key, scope Bytes value, long ttl, ref Context ctx) nothrow @nogc
+    {
+        Result!ulong queued;
+        {
+            flights.lock();
+            scope (exit)
+                flights.unlock();
+            if (local is null)
+                queued = remote.putCommand(key, value, ttl);
+            else
+                queued.error = store(hash, key, value, ttl, ctx);
+            if (queued.ok)
+                flights.invalidate(hash, key);
+        }
+        return local is null && queued.ok ? remote.complete(queued.value, ctx) : queued.error;
+    }
+
+    private Error store(ulong hash, scope Bytes key, scope Bytes value, long ttl, ref Context ctx) nothrow @nogc
+    {
         const time = now();
         const expiry = ttl > long.max - time ? long.max : time + ttl;
         return local.put(hash, key, value, expiry, ctx);
@@ -205,6 +239,24 @@ private final class State
             if (ready.code != Status.ok)
                 return ready;
         }
+        else
+        {
+            const mark = flights.idleMark();
+            if (mark != 0)
+            {
+                const removed = local.evict(hash, key, context);
+                if (removed.code != Status.ok || flights.stillIdle(mark))
+                    return removed;
+                // A load began meanwhile. Repeat the removal in order with its publication.
+                Context independent;
+                return evictOrdered(hash, key, independent);
+            }
+        }
+        return evictOrdered(hash, key, context);
+    }
+
+    private Error evictOrdered(ulong hash, scope Bytes key, ref Context context) nothrow @nogc
+    {
         Result!ulong queued;
         {
             flights.lock();
@@ -280,7 +332,7 @@ private final class State
             else
             {
                 Context independent;
-                write(hash, key, value, ttl, independent);
+                store(hash, key, value, ttl, independent);
             }
         }
         flights.settle(ticket, key, value, status);

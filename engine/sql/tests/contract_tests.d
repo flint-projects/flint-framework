@@ -247,6 +247,48 @@ version (FlintNativeSqlite)
         assert(acquired.ok());
         assert(pool.release(acquired.value).code == Status.ok);
     }
+
+    private void contend(Pool* pool, uint rounds, bool* failed) nothrow
+    {
+        Context context;
+        scope RequestArena arena;
+        foreach (_; 0 .. rounds)
+        {
+            auto acquired = pool.acquire(context);
+            if (!acquired.ok())
+            {
+                *failed = true;
+                return;
+            }
+            auto lease = acquired.value;
+            *failed |= !lease.execute("SELECT 1", [], arena, context).ok();
+            *failed |= pool.release(lease).code != Status.ok;
+        }
+    }
+
+    @("an exhausted pool hands a released lease to its queued waiter without a polling stall")
+    @system unittest
+    {
+        import core.thread : Thread;
+        import core.time : MonoTime;
+
+        Pool pool;
+        assert(pool.open(options(Driver.sqlite, ":memory:")).code == Status.ok);
+        Context context;
+        scope (exit)
+            assert(pool.close(context).code == Status.ok);
+        enum rounds = 200;
+        bool firstFailed, secondFailed;
+        const started = MonoTime.currTime;
+        auto first = new Thread({ contend(&pool, rounds, &firstFailed); }).start();
+        auto second = new Thread({ contend(&pool, rounds, &secondFailed); }).start();
+        first.join();
+        second.join();
+        const elapsed = (MonoTime.currTime - started).total!"msecs";
+        assert(!firstFailed && !secondFailed);
+        // 400 one-connection handoffs take a few milliseconds; a 1–2 ms poll per handoff takes far longer.
+        assert(elapsed < 100, "queued SQL waiters stalled between lease handoffs");
+    }
 }
 
 version (FlintNativeLibpq)

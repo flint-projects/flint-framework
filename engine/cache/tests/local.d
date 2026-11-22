@@ -199,3 +199,32 @@ private void waitForParticipants(ref Cache cache, uint count)
     assert(status == Status.cancelled);
     assert(atomicLoad(load.calls) == 1 && !atomicLoad(load.finish));
 }
+
+@("an explicit put during a load is not overwritten by the late loader result")
+@system unittest
+{
+    Cache cache;
+    assert(cache.open(settings(256, 8)).code == Status.ok);
+    scope (exit)
+        cache.close();
+    auto load = new PausedLoad;
+    auto source = CancelSource.create(Context.init, Deadline.none());
+    Status status;
+    auto worker = spawn(cache, &source.value, load, &status);
+    waitForParticipants(cache, 1);
+    Context context;
+    ubyte[32] scratch;
+    scope RequestArena arena = RequestArena(scratch[]);
+    assert(cache.put(cast(const(ubyte)[]) "load", cast(const(ubyte)[]) "fresh", 10_000_000_000, context).code
+            == Status.ok);
+    atomicStore(load.finish, true);
+    worker.join();
+    assert(status == Status.ok);
+    const found = cache.get(cast(const(ubyte)[]) "load", arena, context);
+    assert(found.ok);
+    bool fresh;
+    assert(arena.read(found.value, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
+            fresh = bytes == cast(const(ubyte)[]) "fresh";
+        }) == Status.ok);
+    assert(fresh, "a stale loader result replaced a newer put");
+}

@@ -1,5 +1,6 @@
 module flint.cache.flight;
 
+import core.atomic : atomicLoad, atomicOp;
 import core.lifetime : move;
 import core.sync.mutex : Mutex;
 import core.thread : Fiber, Thread;
@@ -59,6 +60,10 @@ package(flint.cache) final class Flights
     private size_t bytes;
     private bool closing;
     private Wake wake;
+    // Flights from preparation until release. Written only under the gate.
+    private shared uint live;
+    // Flights ever prepared. Written only under the gate after live increases.
+    private shared ulong started;
 
     this(size_t limit)
     {
@@ -113,6 +118,7 @@ package(flint.cache) final class Flights
     private Lookup locate(ulong hash, scope const(ubyte)[] key) nothrow @nogc
     {
         Lookup result;
+        uint remaining = atomicLoad(live);
         foreach (index; 1 .. flights.length)
         {
             const flight = &flights[index];
@@ -120,14 +126,34 @@ package(flint.cache) final class Flights
             {
                 if (result.vacancy == 0)
                     result.vacancy = cast(uint) index;
+                if (remaining == 0)
+                    break;
             }
-            else if (!flight.invalidated && flight.hash == hash && flight.data.matches(key))
+            else
             {
-                result.match = cast(uint) index;
-                break;
+                --remaining;
+                if (!flight.invalidated && flight.hash == hash && flight.data.matches(key))
+                {
+                    result.match = cast(uint) index;
+                    break;
+                }
             }
         }
         return result;
+    }
+
+    /// Snapshot for an explicit mutation made without the gate. Zero means a flight may be running.
+    ulong idleMark() nothrow @nogc
+    {
+        const mark = atomicLoad(started);
+        return atomicLoad(live) == 0 ? mark + 1 : 0;
+    }
+
+    /// Whether no flight was prepared since idleMark. A mutation between the two observations
+    /// cannot then be overwritten by a load whose read preceded it.
+    bool stillIdle(ulong mark) nothrow @nogc
+    {
+        return mark != 0 && atomicLoad(started) + 1 == mark;
     }
 
     private Error prepare(uint index, ulong hash, scope const(ubyte)[] key) nothrow @nogc
@@ -144,6 +170,8 @@ package(flint.cache) final class Flights
         flight.ownerThread = Thread.getThis();
         flight.ownerFiber = Fiber.getThis();
         bytes += key.length;
+        atomicOp!"+="(live, 1U);
+        atomicOp!"+="(started, 1UL);
         wake.notify();
         return Error.init;
     }
@@ -249,6 +277,8 @@ package(flint.cache) final class Flights
 
     void invalidate(ulong hash, scope const(ubyte)[] key) nothrow @nogc
     {
+        if (atomicLoad(live) == 0)
+            return;
         const match = locate(hash, key).match;
         if (match != 0)
             flights[match].invalidated = true;
@@ -315,6 +345,7 @@ package(flint.cache) final class Flights
 
     private void release(ref Flight flight) nothrow @nogc
     {
+        atomicOp!"-="(live, 1U);
         bytes -= flight.data.bytes;
         flight.data.release();
         flight.cancellation.close();

@@ -64,10 +64,15 @@ final class JetStream
     private ubyte[] deliveryMemory;
     private ubyte[4096] input;
     private size_t inputPosition, inputUsed;
+    // One command is staged and sent with a single write. Split small writes of a request would
+    // otherwise wait for the peer's delayed acknowledgement before the server can reply.
+    private ubyte[16_384] output;
+    private size_t outputUsed;
     private char[32] nonce;
     private ulong serial, token;
     private size_t maximumPayload;
-    private bool live, busy;
+    // busy: a command owns the socket. delivering: a handler borrows the delivery workspace.
+    private bool live, busy, delivering;
 
     Error open(QueueOptions options)
     {
@@ -117,13 +122,14 @@ nothrow @nogc:
 
     bool idle() const
     {
-        return !busy;
+        return !busy && !delivering;
     }
 
     void close()
     {
         socket.close();
         live = false;
+        outputUsed = 0;
     }
 
     // dfmt off
@@ -141,19 +147,33 @@ nothrow @nogc:
     Error poll(string stream, string consumer, string deadLetter, bool confirmed,
             ref scope const Context context, scope NatsHandler handler)
     {
-        if (!live || busy)
+        if (!live || busy || delivering)
             return nativeError(Status.conflict);
-        busy = true;
+        delivering = true;
         scope (exit)
-            busy = false;
+            delivering = false;
+        busy = true;
         auto arena = RequestArena(deliveryMemory);
         auto record = pull(stream, consumer, context, arena);
+        busy = false;
         if (!record.ok())
             return record.error;
+        // The pulled frame is retired and copied, so the handler may publish on this client.
         auto message = record.value.message;
         const requested = handler(message, arena);
         if (!requested.ok())
             return requested.error;
+        while (busy && live)
+        {
+            const waited = waitTurn(context);
+            if (waited.code != Status.ok)
+                return waited;
+        }
+        if (!live)
+            return nativeError(Status.conflict);
+        busy = true;
+        scope (exit)
+            busy = false;
         if (requested.value == AckAction.reject)
         {
             const delivered = deadLetterRecord(deadLetter, message, arena, context);
@@ -323,7 +343,7 @@ nothrow @nogc:
         appendKnown(command[], used, "\r\nUNSUB ");
         appendKnown(command[], used, id.sid[0 .. id.sidLength]);
         appendKnown(command[], used, " 1\r\n");
-        return write(cast(const(ubyte)[]) command[0 .. used], context);
+        return stage(cast(const(ubyte)[]) command[0 .. used], context);
     }
 
     private Error transmit(scope const(char)[] subject, scope const(char)[] inbox, scope const(ubyte)[] headers,
@@ -349,12 +369,38 @@ nothrow @nogc:
         }
         putNumber(line[], used, headers.length + payload.length);
         appendKnown(line[], used, "\r\n");
-        auto sent = write(cast(const(ubyte)[]) line[0 .. used], context);
+        auto sent = stage(cast(const(ubyte)[]) line[0 .. used], context);
         if (sent.code == Status.ok)
-            sent = write(headers, context);
+            sent = stage(headers, context);
         if (sent.code == Status.ok)
-            sent = write(payload, context);
-        return sent.code == Status.ok ? write(cast(const(ubyte)[]) "\r\n", context) : sent;
+            sent = stage(payload, context);
+        if (sent.code == Status.ok)
+            sent = stage(cast(const(ubyte)[]) "\r\n", context);
+        return sent.code == Status.ok ? flush(context) : sent;
+    }
+
+    private Error stage(scope const(ubyte)[] bytes, ref scope const Context context)
+    {
+        if (bytes.length > output.length - outputUsed)
+        {
+            const flushed = flush(context);
+            if (flushed.code != Status.ok)
+                return flushed;
+            if (bytes.length > output.length)
+                return write(bytes, context);
+        }
+        output[outputUsed .. outputUsed + bytes.length] = bytes[];
+        outputUsed += bytes.length;
+        return Error.init;
+    }
+
+    private Error flush(ref scope const Context context)
+    {
+        if (outputUsed == 0)
+            return Error.init;
+        const pending = outputUsed;
+        outputUsed = 0;
+        return write(output[0 .. pending], context);
     }
 
     private Error request(scope const(char)[] subject, scope const(ubyte)[] headers,
