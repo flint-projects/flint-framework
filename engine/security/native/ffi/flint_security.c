@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_security.h"
 
-#if defined(__linux__) && (defined(FLINT_HAS_OPENSSL) || defined(FLINT_HAS_LIBSODIUM))
+#if (defined(__linux__) || defined(__APPLE__)) && (defined(FLINT_HAS_OPENSSL) || defined(FLINT_HAS_LIBSODIUM))
 #include <limits.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -11,7 +11,7 @@
 #include <unistd.h>
 #endif
 
-#if defined(__linux__) && defined(FLINT_HAS_OPENSSL)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_OPENSSL)
 
 #include <openssl/bn.h>
 #include <openssl/core_names.h>
@@ -392,7 +392,7 @@ void flint_jwks_rate_release(unsigned index)
 
 #endif
 
-#if defined(__linux__) && defined(FLINT_HAS_LIBSODIUM)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBSODIUM)
 
 #include <sodium.h>
 

@@ -36,6 +36,11 @@ version (linux)
     version (FlintNativeOpenssl) version = FlintSecurityOpenSSL;
     version (FlintNativeLibsodium) version = FlintSecuritySodium;
 }
+else version (OSX)
+{
+    version (FlintNativeOpenssl) version = FlintSecurityOpenSSL; // ADR-024
+    version (FlintNativeLibsodium) version = FlintSecuritySodium;
+}
 version (FlintSecurityOpenSSL)
     private enum hasCrypto = true;
 else

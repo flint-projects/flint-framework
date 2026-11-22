@@ -7,6 +7,9 @@
 #include <locale.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 enum {
     ZIP = 0, TAR = 1,
@@ -251,6 +254,23 @@ flint_archive *flint_archive_reader_new(int format, flint_archive_read_cb read,
     return NULL;
 }
 
+#if defined(__APPLE__)
+/* libarchive converts UTF-8 header names to NFC on Linux but to NFD on Darwin (archive_string.c).
+   Recompose here so a reader sees the same bytes on both (ADR-024). Returns 0 on success. */
+static int compose_path(const char *name, char *composed, size_t capacity)
+{
+    CFMutableStringRef text = CFStringCreateMutable(kCFAllocatorDefault, 0);
+    if (!text)
+        return -1;
+    CFStringAppendCString(text, name, kCFStringEncodingUTF8);
+    const int empty = name[0] != 0 && CFStringGetLength(text) == 0;
+    CFStringNormalize(text, kCFStringNormalizationFormC);
+    const Boolean converted = !empty && CFStringGetCString(text, composed, (CFIndex) capacity, kCFStringEncodingUTF8);
+    CFRelease(text);
+    return converted ? 0 : -1;
+}
+#endif
+
 int flint_archive_reader_limits(flint_archive *state, size_t max_path_bytes, uint32_t max_entries) {
     if (!state || !state->read || state->ready || !max_path_bytes || max_path_bytes > PATH_LIMIT ||
         !max_entries || max_entries > ENTRY_LIMIT) return FLINT_CODEC_INVALID;
@@ -302,6 +322,12 @@ static int next_entry(flint_archive *state, uint8_t *path, size_t capacity, size
     const char *name = archive_entry_pathname_utf8(entry);
     if (!name) name = archive_entry_pathname(entry);
     if (!name) return FLINT_CODEC_INVALID;
+#if defined(__APPLE__)
+    char composed[PATH_LIMIT + 2];
+    if (compose_path(name, composed, sizeof(composed)))
+        return strlen(name) > PATH_LIMIT ? FLINT_CODEC_LIMIT : FLINT_CODEC_INVALID;
+    name = composed;
+#endif
     size_t count = 0;
     while (count <= state->max_path && name[count]) ++count;
     if (count > state->max_path || count > capacity) return FLINT_CODEC_LIMIT;

@@ -62,6 +62,10 @@ version (linux)
     else version (FlintNativeWebkitgtk)
         version = FlintDesktopQueues;
 }
+else version (OSX)
+{
+    version (FlintNativeSdl3) version = FlintDesktopQueues; // the SDL canvas backend (ADR-024)
+}
 
 /// Stable native status mapping.
 package(flint.desktop) Error desktopError(int code)

@@ -184,7 +184,7 @@ unittest
 @("Preview1 preopens enforce directory handles, read-only rights and traversal restrictions")
 @system unittest
 {
-    const path = buildPath(tempDir(), "flint-wasi-" ~ MonoTime.currTime.ticks.to!string);
+    const path = buildPath(realTempDir(), "flint-wasi-" ~ MonoTime.currTime.ticks.to!string);
     mkdirRecurse(buildPath(path, "cap"));
     scope (exit)
         rmdirRecurse(path);
@@ -430,4 +430,20 @@ unittest
         valid.value.close();
     auto answer = valid.value.callI32("answer", null);
     assert(answer.ok() && answer.value == 42);
+}
+
+// The temporary directory with symbolic links resolved. A preopen path may contain none, and macOS
+// reaches its temporary directory through /var, a link to /private/var (ADR-024).
+private string realTempDir() @trusted
+{
+    import core.stdc.stdlib : free;
+    import core.sys.posix.stdlib : realpath;
+    import std.file : tempDir;
+    import std.string : fromStringz, toStringz;
+
+    auto resolved = realpath(tempDir().toStringz, null);
+    assert(resolved !is null);
+    scope (exit)
+        free(resolved);
+    return resolved.fromStringz.idup;
 }

@@ -1,11 +1,13 @@
 #define _GNU_SOURCE
 #include "flint_desktop.h"
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__linux__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 
 typedef struct packet {
@@ -26,7 +28,12 @@ static pthread_mutex_t registry_lock = PTHREAD_MUTEX_INITIALIZER;
 static desktop_queue *registry[FLINT_DESKTOP_WINDOWS];
 
 int flint_desktop_main_thread(void) {
+#if defined(__APPLE__)
+    /* AppKit, and so SDL's Cocoa driver, runs only on the process's first thread (ADR-024). */
+    return pthread_main_np() != 0;
+#else
     return syscall(SYS_gettid) == getpid();
+#endif
 }
 
 static desktop_queue *find(uint32_t slot, uint64_t generation) {

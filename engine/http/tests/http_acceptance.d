@@ -357,7 +357,10 @@ version (FlintNativeCurl)
         if (!origin.length)
             return;
         ReactorOptions reactors;
-        reactors.backend = Backend.epoll;
+        version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
+            reactors.backend = Backend.kqueue;
+        else
+            reactors.backend = Backend.epoll;
         reactors.cores = 1;
         reactors.fiberPoolSize = 3;
         auto loop = Reactor.create(reactors);

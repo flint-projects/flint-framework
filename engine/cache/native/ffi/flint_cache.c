@@ -1,7 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_cache.h"
+#include "flint_clock.h"
 
-#if defined(FLINT_HAS_HIREDIS) && defined(__linux__)
+#if defined(FLINT_HAS_HIREDIS) && (defined(__linux__) || defined(__APPLE__))
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -20,7 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#if defined(__APPLE__)
+#include "flint_wake.h"
+#else
 #include <sys/eventfd.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -70,6 +75,9 @@ struct flint_redis_connection {
     enum connection_state state;
     int failure;
     int wake_fd;
+#if defined(__APPLE__)
+    int wake_writer;
+#endif
     uint64_t generation;
     unsigned queue_head, queue_count, taken;
     uint16_t fifo[MAX_PENDING];
@@ -109,7 +117,7 @@ struct flint_redis_connection {
 static uint64_t time_ms(void)
 {
     struct timespec clock;
-    return clock_gettime(CLOCK_MONOTONIC, &clock) == 0
+    return clock_gettime(FLINT_DEADLINE_CLOCK, &clock) == 0
         ? (uint64_t)clock.tv_sec * 1000 + (uint64_t)clock.tv_nsec / 1000000 : 0;
 }
 
@@ -306,7 +314,12 @@ static int prepare_sync(flint_redis_connection *connection)
         pthread_mutex_destroy(&connection->lock);
         return FLINT_REDIS_IO;
     }
+#if defined(__APPLE__)
+    /* Darwin has no pthread_condattr_setclock; flint_redis_wait uses a relative wait instead. */
+    int status = 0;
+#else
     int status = pthread_condattr_setclock(&attrs, CLOCK_MONOTONIC);
+#endif
     if (!status)
         status = pthread_cond_init(&connection->changed, &attrs);
     pthread_condattr_destroy(&attrs);
@@ -329,6 +342,9 @@ int flint_redis_create(const flint_redis_options *options, flint_redis_connectio
     if (!connection)
         return FLINT_REDIS_MEMORY;
     connection->wake_fd = -1;
+#if defined(__APPLE__)
+    connection->wake_writer = -1;
+#endif
     int status = read_url(&connection->address, options->url, options->url_length);
     if (!status && !namespace_prefix(connection, options->namespace_name, options->namespace_length))
         status = FLINT_REDIS_ARGUMENT;
@@ -342,7 +358,12 @@ int flint_redis_create(const flint_redis_options *options, flint_redis_connectio
 
     connection->payload_limit = options->payload_limit;
     connection->slots = calloc(MAX_PENDING, sizeof(*connection->slots));
+#if defined(__APPLE__)
+    if (flint_wake_open(&connection->wake_fd, &connection->wake_writer))
+        connection->wake_fd = connection->wake_writer = -1;
+#else
     connection->wake_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+#endif
     if (connection->address.tls)
         connection->ca_file = trust_file(options);
     atomic_init(&connection->stop, false);
@@ -402,8 +423,12 @@ static void notify(flint_redis_connection *connection)
 static void signal_owner(const flint_redis_connection *connection)
 {
     if (connection->wake_fd >= 0) {
+#if defined(__APPLE__)
+        flint_wake_signal(connection->wake_writer);
+#else
         while (eventfd_write(connection->wake_fd, 1) < 0 && errno == EINTR) {
         }
+#endif
     }
 }
 
@@ -431,6 +456,12 @@ int flint_redis_wait(flint_redis_connection *connection, uint32_t max_wait_ms)
 {
     if (!connection || max_wait_ms > 1000)
         return FLINT_REDIS_ARGUMENT;
+#if defined(__APPLE__)
+    /* A relative wait is immune to wall-clock steps, as the monotonic condition clock is on Linux. */
+    const struct timespec limit = {max_wait_ms / 1000, (long)(max_wait_ms % 1000) * 1000000L};
+    pthread_mutex_lock(&connection->lock);
+    const int waited = pthread_cond_timedwait_relative_np(&connection->changed, &connection->lock, &limit);
+#else
     struct timespec until;
     if (clock_gettime(CLOCK_MONOTONIC, &until) != 0)
         return FLINT_REDIS_IO;
@@ -441,6 +472,7 @@ int flint_redis_wait(flint_redis_connection *connection, uint32_t max_wait_ms)
     }
     pthread_mutex_lock(&connection->lock);
     const int waited = pthread_cond_timedwait(&connection->changed, &connection->lock, &until);
+#endif
     pthread_mutex_unlock(&connection->lock);
     return (waited == 0 || waited == ETIMEDOUT) ? FLINT_REDIS_OK : FLINT_REDIS_IO;
 }
@@ -966,6 +998,13 @@ int flint_redis_attach(flint_redis_connection *connection)
         return FLINT_REDIS_MEMORY;
     if (connection->client->err)
         return connection_error(connection);
+#if defined(__APPLE__)
+    /* Darwin raises SIGPIPE at the process, so the thread mask above cannot contain it. The socket
+       reports EPIPE instead (ADR-024). */
+    const int no_sigpipe = 1;
+    if (setsockopt(connection->client->c.fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe)) != 0)
+        return FLINT_REDIS_IO;
+#endif
     if (connection->address.tls) {
         const int configured = configure_tls(connection);
         if (configured)
@@ -1243,9 +1282,13 @@ int flint_redis_pump(flint_redis_connection *connection)
     const int status = service_status(connection);
     if (status)
         return status;
+#if defined(__APPLE__)
+    flint_wake_drain(connection->wake_fd);
+#else
     eventfd_t signals;
     while (eventfd_read(connection->wake_fd, &signals) < 0 && errno == EINTR) {
     }
+#endif
     return advance(connection);
 }
 
@@ -1326,6 +1369,7 @@ static void restore_pipe_mask(flint_redis_connection *connection)
 {
     if (!connection->pipe_mask_saved || !on_owner(connection))
         return;
+#if !defined(__APPLE__)
     if (!sigismember(&connection->previous_mask, SIGPIPE)) {
         sigset_t generated;
         const struct timespec immediate = {0};
@@ -1334,6 +1378,7 @@ static void restore_pipe_mask(flint_redis_connection *connection)
         while (sigtimedwait(&generated, NULL, &immediate) < 0 && errno == EINTR) {
         }
     }
+#endif
     pthread_sigmask(SIG_SETMASK, &connection->previous_mask, NULL);
     connection->pipe_mask_saved = false;
 }
@@ -1360,7 +1405,12 @@ void flint_redis_finish(flint_redis_connection *connection, int reason)
 
     pthread_mutex_lock(&connection->lock);
     if (connection->wake_fd >= 0) {
+#if defined(__APPLE__)
+        flint_wake_close(connection->wake_fd, connection->wake_writer);
+        connection->wake_writer = -1;
+#else
         close(connection->wake_fd);
+#endif
         connection->wake_fd = -1;
     }
     if (atomic_load_explicit(&connection->stop, memory_order_relaxed)) {

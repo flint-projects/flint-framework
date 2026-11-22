@@ -1,7 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_mq.h"
+#include "flint_clock.h"
 
-#if defined(__linux__) && defined(FLINT_HAS_LIBRDKAFKA)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBRDKAFKA)
 #include <librdkafka/rdkafka.h>
 #include <pthread.h>
 #include <stdbool.h>

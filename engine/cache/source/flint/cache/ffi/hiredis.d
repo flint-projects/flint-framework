@@ -67,7 +67,13 @@ version (FlintCacheLocal)
 {
 }
 else version (linux)
+{
     version (FlintNativeHiredis) version = FlintRedisLinux;
+}
+else version (OSX)
+{
+    version (FlintNativeHiredis) version = FlintRedisLinux; // ADR-024
+}
 
 version (FlintRedisLinux)
     private enum linked = true;

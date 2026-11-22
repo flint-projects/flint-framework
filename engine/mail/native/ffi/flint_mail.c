@@ -1,7 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_mail.h"
+#include "flint_clock.h"
 
-#if defined(__linux__) && defined(FLINT_HAS_CURL)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_CURL)
 
 #include <curl/curl.h>
 #include <pthread.h>
@@ -63,7 +64,7 @@ int flint_mail_available(void)
 static uint64_t clock_ms(void)
 {
     struct timespec value;
-    if (clock_gettime(CLOCK_MONOTONIC, &value))
+    if (clock_gettime(FLINT_DEADLINE_CLOCK, &value))
         return 0;
     return (uint64_t)value.tv_sec * 1000 + (uint64_t)value.tv_nsec / 1000000;
 }

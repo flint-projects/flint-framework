@@ -11,6 +11,10 @@ version (linux)
 {
     version (FlintNativeCurl) version = FlintSmtpProvider;
 }
+else version (OSX)
+{
+    version (FlintNativeCurl) version = FlintSmtpProvider; // ADR-024
+}
 
 package(flint.mail) enum chunkBytes = 16_384;
 package(flint.mail) enum pending = 12;

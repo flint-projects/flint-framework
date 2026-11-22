@@ -94,6 +94,7 @@ extern (C) private @system nothrow @nogc
 }
 
 version (linux) version (FlintNativeCurl) version = FlintCurlOnLinux;
+version (OSX) version (FlintNativeCurl) version = FlintCurlOnLinux; // ADR-024
 
 version (FlintCurlOnLinux)
 {

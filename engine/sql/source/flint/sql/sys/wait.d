@@ -103,12 +103,30 @@ version (linux)
     else version (RISCV64)
         private enum futexCall = 98;
 }
+else version (OSX)
+{
+    // <os/os_sync_wait_on_address.h>, libSystem since macOS 14.4 (ADR-024). Flags 0 keeps the wait
+    // process private, as FUTEX_PRIVATE_FLAG does.
+    private enum osClockMachAbsoluteTime = 32; // OS_CLOCK_MACH_ABSOLUTE_TIME
+    private extern (C) @system nothrow @nogc
+    {
+        int os_sync_wait_on_address_with_timeout(void* address, ulong value, size_t size, uint flags,
+                uint clock, ulong timeoutNanos);
+        int os_sync_wake_by_address_all(void* address, size_t size, uint flags);
+    }
+}
 
 // SAFETY: The kernel compares the aligned 32-bit word with expected and sleeps at most nanos.
 // It reads the word only during the call and retains neither address. Without a futex this sleeps.
 private void park(ref shared uint word, uint expected, long nanos) @trusted nothrow @nogc
 {
-    static if (is(typeof(futexCall)))
+    version (OSX)
+    {
+        // EINTR, EFAULT and ETIMEDOUT all return to a caller that retries its acquisition.
+        cast(void) os_sync_wait_on_address_with_timeout(cast(void*)&word, expected, uint.sizeof,
+                0, osClockMachAbsoluteTime, nanos > 0 ? cast(ulong) nanos : 1);
+    }
+    else static if (is(typeof(futexCall)))
     {
         import core.sys.linux.unistd : syscall;
         import core.sys.posix.time : timespec;
@@ -127,7 +145,9 @@ private void park(ref shared uint word, uint expected, long nanos) @trusted noth
 // SAFETY: The kernel uses the word address only as a key for waking its current waiters.
 private void wakeAll(ref shared uint word) @trusted nothrow @nogc
 {
-    static if (is(typeof(futexCall)))
+    version (OSX)
+        cast(void) os_sync_wake_by_address_all(cast(void*)&word, uint.sizeof, 0);
+    else static if (is(typeof(futexCall)))
     {
         import core.sys.linux.unistd : syscall;
 

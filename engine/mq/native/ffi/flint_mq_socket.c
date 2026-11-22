@@ -1,8 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_mq_socket.h"
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include "flint_mq.h"
+#include "flint_socket.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
@@ -39,7 +40,11 @@ static int start_next(flint_mq_socket *transport)
     while (transport->remaining) {
         struct addrinfo *address = transport->remaining;
         transport->remaining = address->ai_next;
+#if defined(__APPLE__)
+        const int fd = flint_stream_socket(address->ai_family);
+#else
         const int fd = socket(address->ai_family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+#endif
         if (fd < 0)
             continue;
         /* Broker commands are small request/response frames; do not wait for delayed ACKs. */
@@ -117,7 +122,12 @@ static int read_network(flint_mq_socket *transport, uint8_t *data, size_t capaci
 
 static int write_network(flint_mq_socket *transport, const uint8_t *data, size_t length, size_t *written)
 {
+#if defined(__APPLE__)
+    /* The socket carries SO_NOSIGPIPE (flint_stream_socket); Darwin has no MSG_NOSIGNAL. */
+    const ssize_t result = send(transport->fd, data, length, MSG_DONTWAIT);
+#else
     const ssize_t result = send(transport->fd, data, length, MSG_DONTWAIT | MSG_NOSIGNAL);
+#endif
     if (result > 0) {
         *written = (size_t)result;
         return FLINT_MQ_OK;

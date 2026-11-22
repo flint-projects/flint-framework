@@ -1,7 +1,8 @@
 #define _GNU_SOURCE
 #include "flint_wasi.h"
+#include "flint_clock.h"
 
-#if defined(__linux__) && defined(FLINT_HAS_WASMTIME)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_WASMTIME)
 
 #include <errno.h>
 #include <fcntl.h>
@@ -89,7 +90,7 @@ static int64_t next_wake = INT64_MAX;
 static int64_t now_ns(void)
 {
     struct timespec time;
-    if (clock_gettime(CLOCK_MONOTONIC, &time))
+    if (clock_gettime(FLINT_DEADLINE_CLOCK, &time))
         return 0;
     return (int64_t)time.tv_sec * INT64_C(1000000000) + time.tv_nsec;
 }
@@ -121,10 +122,19 @@ static void *watch_deadlines(void *unused)
         if (next_wake == INT64_MAX) {
             pthread_cond_wait(&scheduler_wake, &scheduler_lock);
         } else {
+#if defined(__APPLE__)
+            /* Darwin has no pthread_condattr_setclock: wait for the remaining time instead (ADR-024). */
+            const int64_t remaining = next_wake > now ? next_wake - now : 0;
+            const struct timespec limit = {
+                .tv_sec = remaining / INT64_C(1000000000), .tv_nsec = remaining % INT64_C(1000000000)
+            };
+            pthread_cond_timedwait_relative_np(&scheduler_wake, &scheduler_lock, &limit);
+#else
             const struct timespec until = {
                 .tv_sec = next_wake / INT64_C(1000000000), .tv_nsec = next_wake % INT64_C(1000000000)
             };
             pthread_cond_timedwait(&scheduler_wake, &scheduler_lock, &until);
+#endif
         }
     }
     pthread_mutex_unlock(&scheduler_lock);
@@ -145,8 +155,12 @@ static void start_watchdog(void)
     pthread_condattr_t attributes;
     if (pthread_condattr_init(&attributes))
         return;
+#if defined(__APPLE__)
+    const int result = pthread_cond_init(&scheduler_wake, &attributes);
+#else
     const int result = pthread_condattr_setclock(&attributes, CLOCK_MONOTONIC)
         || pthread_cond_init(&scheduler_wake, &attributes);
+#endif
     pthread_condattr_destroy(&attributes);
     if (result)
         return;
@@ -263,11 +277,18 @@ static bool guest_path_valid(flint_wasi_span path)
     return true;
 }
 
+#if defined(__APPLE__)
+/* Darwin has no O_PATH: each component is opened for reading. */
+#define FLINT_DIRECTORY_ACCESS O_RDONLY
+#else
+#define FLINT_DIRECTORY_ACCESS O_PATH
+#endif
+
 static int open_host_directory(flint_wasi_span path)
 {
     if (!span_valid(path, MAX_PATH_BYTES, false))
         return -1;
-    int directory = open(path.data[0] == '/' ? "/" : ".", O_CLOEXEC | O_PATH | O_DIRECTORY);
+    int directory = open(path.data[0] == '/' ? "/" : ".", O_CLOEXEC | FLINT_DIRECTORY_ACCESS | O_DIRECTORY);
     if (directory < 0)
         return -1;
     size_t start = 0;
@@ -286,7 +307,7 @@ static int open_host_directory(flint_wasi_span path)
         char name[NAME_MAX + 1];
         memcpy(name, part, length);
         name[length] = 0;
-        const int next = openat(directory, name, O_CLOEXEC | O_NOFOLLOW | O_PATH | O_DIRECTORY);
+        const int next = openat(directory, name, O_CLOEXEC | O_NOFOLLOW | FLINT_DIRECTORY_ACCESS | O_DIRECTORY);
         close(directory);
         if (next < 0)
             return -1;
@@ -295,6 +316,44 @@ static int open_host_directory(flint_wasi_span path)
     return directory;
 }
 
+#if defined(__APPLE__)
+#include <sys/param.h>
+#include <sys/stat.h>
+
+static bool same_directory(int first, int second)
+{
+    struct stat one, two;
+    return fstat(first, &one) == 0 && fstat(second, &two) == 0 && one.st_dev == two.st_dev
+        && one.st_ino == two.st_ino;
+}
+
+/* Wasmtime opens a preopen by path. Linux hands it /proc/self/fd/N, which reopens the directory the
+   symlink-free walk verified. Darwin's /dev/fd/N cannot be opened as a directory, so the verified
+   directory's own path (F_GETPATH) goes to Wasmtime, and a second symlink-free walk afterwards must
+   reach the same directory. A rename racing between the two walks can still go unnoticed; a
+   descriptor-based preopen in the Wasmtime C API would close that window (ADR-024). */
+static bool apply_preopen(wasi_config_t *config, const flint_wasi_preopen *entry)
+{
+    const int directory = open_host_directory(entry->host);
+    if (directory < 0)
+        return false;
+    char host[MAXPATHLEN], guest[MAX_PATH_BYTES + 1];
+    bool applied = fcntl(directory, F_GETPATH, host) == 0 && strlen(host) <= MAX_PATH_BYTES;
+    memcpy(guest, entry->guest.data, entry->guest.length);
+    guest[entry->guest.length] = 0;
+    if (applied)
+        applied = wasi_config_preopen_dir(config, host, guest, entry->writable != 0);
+    if (applied) {
+        const flint_wasi_span canonical = { host, strlen(host) };
+        const int again = open_host_directory(canonical);
+        applied = again >= 0 && same_directory(directory, again);
+        if (again >= 0)
+            close(again);
+    }
+    close(directory);
+    return applied;
+}
+#else
 static bool apply_preopen(wasi_config_t *config, const flint_wasi_preopen *entry)
 {
     const int directory = open_host_directory(entry->host);
@@ -309,6 +368,7 @@ static bool apply_preopen(wasi_config_t *config, const flint_wasi_preopen *entry
     close(directory);
     return applied;
 }
+#endif
 
 static bool env_name_valid(flint_wasi_span name)
 {

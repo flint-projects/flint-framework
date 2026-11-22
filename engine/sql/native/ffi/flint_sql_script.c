@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_sql_private.h"
 
-#if defined(__linux__) && defined(FLINT_HAS_LIBPQ)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBPQ)
 
 #include <string.h>
 #include <strings.h>

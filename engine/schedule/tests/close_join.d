@@ -85,7 +85,10 @@ private void runOnReactor(bool ignoreCancellation) @system
     scope (exit)
         atomicStore(armed, false);
     ReactorOptions options;
-    options.backend = Backend.epoll;
+    version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
+        options.backend = Backend.kqueue;
+    else
+        options.backend = Backend.epoll;
     options.cores = 1;
     options.fiberPoolSize = 2;
     auto owner = Reactor.create(options);

@@ -9,7 +9,8 @@ import flint.web.types : HeaderRecord, maximumFields;
 
 @safe:
 
-version (linux)
+// Lazily zero-filled anonymous mappings on Linux and macOS (ADR-024).
+version (Posix)
 {
     import core.sys.posix.sys.mman : MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap, munmap;
 }
@@ -20,7 +21,7 @@ package(flint.web) T[] reserveConnectionSlots(T)(size_t count) @trusted nothrow
 {
     if (count == 0 || count > size_t.max / T.sizeof)
         return null;
-    version (linux)
+    version (Posix)
     {
         const bytes = count * T.sizeof;
         auto address = mmap(null, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -44,7 +45,7 @@ package(flint.web) void releaseConnectionSlots(T)(ref T[] slots) @trusted nothro
 {
     if (slots is null)
         return;
-    version (linux)
+    version (Posix)
     {
         GC.removeRange(slots.ptr);
         const released = munmap(slots.ptr, slots.length * T.sizeof);
@@ -105,7 +106,7 @@ package(flint.web) void releaseBytes(ref ubyte[] storage) @trusted nothrow @nogc
         return Error(Status.ioError, "unable to join owned HTTP worker");
 }
 
-version (linux)
+version (Posix)
 {
     @("unused slots stay zero and native range retains D objects across collection")
     unittest

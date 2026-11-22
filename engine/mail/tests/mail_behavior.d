@@ -181,7 +181,10 @@ version (FlintNativeCurl)
         auto mail = new FiberMail;
         assert(mail.sender.open(options("FIBER")).code == Status.ok);
         ReactorOptions config;
-        config.backend = Backend.epoll;
+        version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
+            config.backend = Backend.kqueue;
+        else
+            config.backend = Backend.epoll;
         config.cores = 1;
         config.fiberPoolSize = 2;
         auto reactor = Reactor.create(config);

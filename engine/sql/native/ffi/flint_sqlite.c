@@ -1,18 +1,26 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_sql_private.h"
+#include "flint_clock.h"
 
-#if defined(__linux__) && defined(FLINT_HAS_SQLITE)
+#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_SQLITE)
 
 #include <errno.h>
+#if defined(__linux__)
 #include <linux/magic.h>
+#endif
 #include <math.h>
 #include <pthread.h>
 #include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#if defined(__APPLE__)
+#include <sys/mount.h>
+#include "flint_wake.h"
+#else
 #include <sys/eventfd.h>
 #include <sys/vfs.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -37,6 +45,9 @@ struct flint_sqlite_connection {
     unsigned capacity;
     unsigned progress;
     int wake;
+#if defined(__APPLE__)
+    int wake_writer;
+#endif
     int flags;
     int closing;
     int startup;
@@ -69,7 +80,7 @@ static int interrupt_requested(void *input)
     if (atomic_load(&operation->cancelled))
         return 1;
     struct timespec now;
-    if (clock_gettime(CLOCK_MONOTONIC, &now))
+    if (clock_gettime(FLINT_DEADLINE_CLOCK, &now))
         return 1;
     return (int64_t)now.tv_sec * INT64_C(1000000000) + now.tv_nsec >= operation->deadline;
 }
@@ -204,8 +215,12 @@ static int bind_all(sqlite3_stmt *statement, const flint_sql_operation *operatio
 
 static void notify(flint_sqlite_connection *connection)
 {
+#if defined(__APPLE__)
+    flint_wake_signal(connection->wake_writer);
+#else
     uint64_t signal = 1;
     while (write(connection->wake, &signal, sizeof(signal)) < 0 && errno == EINTR) {}
+#endif
 }
 
 typedef struct {
@@ -372,7 +387,11 @@ static void destroy(flint_sqlite_connection *connection)
         evict(&connection->cache[index]);
     sqlite3_close(connection->database);
     flint_sql_operation_free(connection->orphan);
+#if defined(__APPLE__)
+    flint_wake_close(connection->wake, connection->wake_writer);
+#else
     close(connection->wake);
+#endif
     pthread_cond_destroy(&connection->changed);
     pthread_mutex_destroy(&connection->lock);
     free(connection->path);
@@ -388,6 +407,11 @@ static int local_database(sqlite3 *database, const char *schema)
     struct statfs info;
     if (!path || !path[0] || statfs(path, &info))
         return 0;
+#if defined(__APPLE__)
+    /* Darwin's local file systems; network and FUSE mounts report their own names. */
+    return strcmp(info.f_fstypename, "apfs") == 0 || strcmp(info.f_fstypename, "hfs") == 0
+        || strcmp(info.f_fstypename, "tmpfs") == 0;
+#else
     switch ((unsigned long)info.f_type) {
     case EXT4_SUPER_MAGIC: case XFS_SUPER_MAGIC: case BTRFS_SUPER_MAGIC:
     case TMPFS_MAGIC: case RAMFS_MAGIC: case F2FS_SUPER_MAGIC:
@@ -395,6 +419,7 @@ static int local_database(sqlite3 *database, const char *schema)
     default:
         return 0;
     }
+#endif
 }
 
 static int permit_sql(void *context, int action, const char *first, const char *second,
@@ -462,9 +487,14 @@ static flint_sqlite_connection *start_worker(const char *path, unsigned prepared
     connection->cache = prepared ? calloc(prepared, sizeof(connection->cache[0])) : NULL;
     if (!connection->path || (prepared && !connection->cache))
         goto fail_memory;
+#if defined(__APPLE__)
+    if (flint_wake_open(&connection->wake, &connection->wake_writer))
+        goto fail_memory;
+#else
     connection->wake = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (connection->wake < 0)
         goto fail_memory;
+#endif
     if (pthread_mutex_init(&connection->lock, NULL))
         goto fail_fd;
     if (pthread_cond_init(&connection->changed, NULL))
@@ -486,7 +516,11 @@ fail_cond:
 fail_mutex:
     pthread_mutex_destroy(&connection->lock);
 fail_fd:
+#if defined(__APPLE__)
+    flint_wake_close(connection->wake, connection->wake_writer);
+#else
     close(connection->wake);
+#endif
 fail_memory:
     free(connection->path);
     free(connection->cache);
@@ -521,8 +555,12 @@ int flint_sqlite_drive(flint_sqlite_connection *connection, flint_sql_operation 
 {
     (void)operation;
     pthread_mutex_lock(&connection->lock);
+#if defined(__APPLE__)
+    flint_wake_drain(connection->wake);
+#else
     uint64_t count;
     while (read(connection->wake, &count, sizeof(count)) < 0 && errno == EINTR) {}
+#endif
     int progress = connection->progress;
     pthread_mutex_unlock(&connection->lock);
     *fd = connection->wake;

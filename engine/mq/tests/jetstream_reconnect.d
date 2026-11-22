@@ -2,6 +2,7 @@
 module flint.mq.jetstream_reconnect;
 
 version (linux) version (FlintNativeLibrdkafka) version = FlintMqJetStreamPeer;
+version (OSX) version (FlintNativeLibrdkafka) version = FlintMqJetStreamPeer; // ADR-024
 
 version (FlintMqJetStreamPeer)
 {

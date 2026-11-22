@@ -5,7 +5,13 @@ import flint.arena : Error, Status;
 
 @safe:
 
+// Linux and macOS (ADR-024).
 version (linux)
+    version = FlintMqPosix;
+else version (OSX)
+    version = FlintMqPosix;
+
+version (FlintMqPosix)
 {
     private import core.sys.posix.time : nanosleep, timespec;
 }
@@ -13,7 +19,7 @@ version (linux)
 // SAFETY: The bounded POSIX wait uses a stack timespec with no callback or retained pointer.
 package(flint.mq) Error pauseSocket() @trusted nothrow @nogc
 {
-    version (linux)
+    version (FlintMqPosix)
     {
         const timespec next = timespec(0, 1_000_000);
         nanosleep(&next, null);
@@ -23,7 +29,7 @@ package(flint.mq) Error pauseSocket() @trusted nothrow @nogc
         return Error(Status.unsupported, "native broker polling unavailable");
 }
 
-version (linux) version (FlintNativeLibrdkafka) version = FlintMqOnLinux;
+version (FlintMqPosix) version (FlintNativeLibrdkafka) version = FlintMqOnLinux;
 
 private struct NativeSocket;
 

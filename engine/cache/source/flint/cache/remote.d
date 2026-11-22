@@ -26,7 +26,10 @@ package(flint.cache) struct RemoteStore
 
         ReactorOptions reactor;
         reactor.cores = 1;
-        reactor.backend = Backend.epoll;
+        version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
+            reactor.backend = Backend.kqueue;
+        else
+            reactor.backend = Backend.epoll;
         reactor.fiberPoolSize = 1;
         reactor.maxConnectionsPerCore = 2;
         reactor.maxPendingIoPerCore = 2;

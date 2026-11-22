@@ -12,6 +12,13 @@ version (linux)
     else version (FlintNativeLibpq)
         version = FlintSqlNative;
 }
+else version (OSX)
+{
+    version (FlintNativeSqlite)
+        version = FlintSqlNative;
+    else version (FlintNativeLibpq)
+        version = FlintSqlNative;
+}
 
 package(flint.sql) struct Identity
 {

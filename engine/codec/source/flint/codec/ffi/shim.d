@@ -53,6 +53,15 @@ version (linux)
     else version (FlintNativeBrotli)
         version = FlintCodecNative;
 }
+else version (OSX)
+{
+    version (FlintNativeZlib)
+        version = FlintCodecNative;
+    else version (FlintNativeZstd)
+        version = FlintCodecNative;
+    else version (FlintNativeBrotli)
+        version = FlintCodecNative;
+}
 
 package(flint.codec) Error nativeError(NativeStatus status)
 {

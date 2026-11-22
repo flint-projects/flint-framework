@@ -7,7 +7,11 @@
 
 int main(void)
 {
+#if defined(__APPLE__)
+    const int listener = socket(AF_INET, SOCK_STREAM, 0);
+#else
     const int listener = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#endif
     struct sockaddr_in address;
     memset(&address, 0, sizeof address);
     address.sin_family = AF_INET;

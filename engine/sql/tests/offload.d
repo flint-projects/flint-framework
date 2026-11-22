@@ -71,7 +71,10 @@ version (FlintSqlReactorTest)
     {
         atomicStore(beats, 0U);
         ReactorOptions options;
-        options.backend = Backend.epoll;
+        version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
+            options.backend = Backend.kqueue;
+        else
+            options.backend = Backend.epoll;
         options.cores = 1;
         auto owner = Reactor.create(options);
         assert(owner.ok(), owner.error.message);

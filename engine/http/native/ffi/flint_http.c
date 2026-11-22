@@ -1,7 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_http.h"
+#include "flint_clock.h"
 
-#if defined(FLINT_HAS_CURL) && defined(__linux__)
+#if defined(FLINT_HAS_CURL) && (defined(__linux__) || defined(__APPLE__))
 
 #include <curl/curl.h>
 #include <arpa/inet.h>
@@ -186,7 +187,7 @@ static int map_curl(CURLcode code)
 static uint64_t clock_ms(void)
 {
     struct timespec now;
-    return clock_gettime(CLOCK_MONOTONIC, &now) == 0
+    return clock_gettime(FLINT_DEADLINE_CLOCK, &now) == 0
         ? (uint64_t) now.tv_sec * 1000 + (uint64_t) now.tv_nsec / 1000000 : 0;
 }
 

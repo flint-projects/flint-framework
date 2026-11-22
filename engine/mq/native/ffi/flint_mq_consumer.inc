@@ -36,7 +36,7 @@ struct delivery {
 static uint64_t monotonic_ms(void)
 {
     struct timespec time;
-    clock_gettime(CLOCK_MONOTONIC, &time);
+    clock_gettime(FLINT_DEADLINE_CLOCK, &time);
     return (uint64_t)time.tv_sec * 1000 + (uint64_t)time.tv_nsec / 1000000;
 }
 

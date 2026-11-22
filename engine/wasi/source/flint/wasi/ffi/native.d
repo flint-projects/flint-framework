@@ -10,6 +10,10 @@ version (linux)
 {
     version (FlintNativeWasmtime) version = FlintWasiNative;
 }
+else version (OSX)
+{
+    version (FlintNativeWasmtime) version = FlintWasiNative; // ADR-024
+}
 
 private struct NativeModule;
 
