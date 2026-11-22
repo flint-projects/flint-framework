@@ -68,6 +68,30 @@ version (FlintNativeLibarchive)
                 .code == Status.unsupported);
     }
 
+    @("archive_paths_zip: ZIP entries with traversal and drive prefixes are rejected before exposure")
+    unittest
+    {
+        foreach (invalid; ["../yy", "xx/..", "C:/yy", "c:\\yy", "/x/yy"])
+        {
+            auto zip = namedZip("xx/yy");
+            renameZip(zip, "xx/yy", invalid);
+            assert(headerStatus(ArchiveFormat.zip, zip, ArchiveOptions.init) == Status.invalidArgument, invalid);
+        }
+        auto plain = namedZip("xx/yy");
+        assert(headerStatus(ArchiveFormat.zip, plain, ArchiveOptions.init) == Status.ok);
+    }
+
+    @("archive_limit_boundaries: 4096 path bytes and exactly 1 GiB declared bytes are accepted")
+    unittest
+    {
+        auto name = new ubyte[4096];
+        name[] = 'p';
+        assert(headerStatus(ArchiveFormat.tar, longTar(name), ArchiveOptions.init) == Status.ok);
+        const exact = tarFixture("large", '0', 1024UL * 1024 * 1024);
+        assert(headerStatus(ArchiveFormat.tar, exact, ArchiveOptions.init) == Status.ok);
+        assert(headerStatus(ArchiveFormat.tar, tarFixture("ab"), ArchiveOptions(10, 10, 2)) == Status.ok);
+    }
+
     @("Archive source and sink errors, reentry, stale aliases, and partial writes")
     unittest
     {
@@ -182,6 +206,32 @@ private ubyte[] normalZip()
     assert(writer.entry("plain", 0, false).code == Status.ok);
     assert(writer.close().code == Status.ok);
     return destination.bytes();
+}
+
+private ubyte[] namedZip(scope const(char)[] path)
+{
+    auto destination = new Destination;
+    ArchiveWriter writer;
+    assert(writer.open(ArchiveFormat.zip, &destination.append).code == Status.ok);
+    assert(writer.entry(path, 0, false).code == Status.ok);
+    assert(writer.close().code == Status.ok);
+    return destination.bytes();
+}
+
+/// Rewrite every same-length copy of an entry name (local header and central directory).
+private void renameZip(scope ubyte[] zip, scope const(char)[] from, scope const(char)[] to) pure nothrow @nogc
+{
+    assert(from.length == to.length);
+    size_t copies;
+    foreach (index; 0 .. zip.length - from.length + 1)
+    {
+        if (zip[index .. index + from.length] == cast(const(ubyte)[]) from)
+        {
+            zip[index .. index + to.length] = cast(const(ubyte)[]) to;
+            ++copies;
+        }
+    }
+    assert(copies >= 2);
 }
 
 private size_t centralOffset(scope const(ubyte)[] zip) pure nothrow @nogc

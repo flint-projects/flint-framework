@@ -390,3 +390,98 @@ private void replayMutation(Codec codec, scope const(ubyte)[] bytes, uint trial)
     }
     assert(0, "decode fixture failed to terminate");
 }
+
+@("corruption_release: a fatal decode error frees the provider state before close")
+unittest
+{
+    ubyte[4096] repetitive;
+    ubyte[1024] wire;
+    ubyte[8192] output;
+    foreach (codec; codecs)
+    {
+        if (!selected(codec))
+            continue;
+        const bytes = encode(codec, repetitive[], wire[]);
+        foreach (length; [1, bytes / 2, bytes - 1])
+        {
+            Token token;
+            assert(openStream(token, CodecOptions(codec), false).code == Status.ok);
+            assert(streamAllocations(token).liveBytes > 0);
+            const failed = processStream(token, wire[0 .. length], output[], Finish.end);
+            assert(failed.error.code == Status.invalidArgument);
+            const released = streamAllocations(token);
+            assert(released.calls == 0 && released.liveBytes == 0);
+            assert(processStream(token, wire[0 .. bytes], output[], Finish.end).error.code == Status.invalidArgument);
+            assert(closeStream(token).code == Status.ok);
+            assert(closeStream(token).code == Status.ok);
+        }
+    }
+}
+
+@("decoder_state_calls: decoders refuse work after finish, failure, close and generation reuse")
+unittest
+{
+    ubyte[64] payload;
+    random(0x5a17c3e1, payload[]);
+    ubyte[512] wire;
+    ubyte[128] output;
+    foreach (codec; codecs)
+    {
+        if (!selected(codec))
+            continue;
+        const bytes = encode(codec, payload[], wire[]);
+        Decoder decoder;
+        assert(decoder.open(CodecOptions(codec)).code == Status.ok);
+        assert(decoder.open(CodecOptions(codec)).code == Status.conflict);
+        const done = decoder.process(wire[0 .. bytes], output[], Finish.end);
+        assert(done.ok() && done.value.finished && done.value.produced == payload.length);
+        assert(output[0 .. payload.length] == payload[]);
+        assert(decoder.process(null, output[], Finish.end).error.code == Status.invalidArgument);
+        assert(decoder.process(wire[0 .. bytes], output[], Finish.more).error.code == Status.invalidArgument);
+        auto stale = decoder;
+        assert(decoder.close().code == Status.ok);
+        assert(decoder.close().code == Status.ok);
+        assert(decoder.process(wire[0 .. bytes], output[], Finish.end).error.code == Status.invalidArgument);
+        assert(decoder.open(CodecOptions(codec)).code == Status.ok);
+        assert(stale.process(wire[0 .. bytes], output[], Finish.end).error.code == Status.invalidArgument);
+        assert(stale.close().code == Status.ok);
+        const again = decoder.process(wire[0 .. bytes], output[], Finish.end);
+        assert(again.ok() && again.value.finished, "a stale close must not release the reopened stream");
+        assert(decoder.close().code == Status.ok);
+    }
+}
+
+@("zero_input_chunk: empty input steps terminate and leave the stream usable")
+unittest
+{
+    ubyte[300] payload;
+    random(0x0badf00d, payload[]);
+    ubyte[1024] wire;
+    ubyte[512] decoded;
+    foreach (codec; codecs)
+    {
+        if (!selected(codec))
+            continue;
+        Encoder encoder;
+        assert(encoder.open(CodecOptions(codec)).code == Status.ok);
+        foreach (_; 0 .. 1000)
+        {
+            const idle = encoder.process(null, wire[], Finish.more);
+            assert(idle.ok() && !idle.value.finished && idle.value.consumed == 0);
+            assert(idle.value.produced <= wire.length);
+        }
+        encoder.close();
+        const bytes = encode(codec, payload[], wire[]);
+        Decoder decoder;
+        assert(decoder.open(CodecOptions(codec)).code == Status.ok);
+        scope (exit)
+            decoder.close();
+        foreach (_; 0 .. 1000)
+        {
+            const idle = decoder.process(null, decoded[], Finish.more);
+            assert(idle.ok() && idle.value == CodecStep.init);
+        }
+        assert(transform(decoder, wire[0 .. bytes], decoded[], 0 + 31, 17) == payload.length);
+        assert(decoded[0 .. payload.length] == payload[]);
+    }
+}

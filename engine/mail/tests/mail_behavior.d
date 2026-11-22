@@ -337,3 +337,204 @@ unittest
         assert(document[backend == MailBackend.resend ? "subject" : "Subject"].str == "lines");
     }
 }
+
+@("header_injection: CR, LF and controls in every address, label and MIME field are rejected")
+unittest
+{
+    ubyte[1024] memory;
+    auto arena = RequestArena(memory[]);
+    foreach (field; 0 .. 12)
+    {
+        foreach (bad; ["\r", "\n", "\r\n", "\t", "\x7f"])
+        {
+            auto message = testMessage(arena);
+            message.to = [MailAddress("to@example.test", "To")];
+            message.cc = [MailAddress("cc@example.test", "Cc")];
+            message.bcc = [MailAddress("bcc@example.test", "Bcc")];
+            message.attachments = [Attachment("file.txt", "text/plain")];
+            message.idempotencyKey = "key";
+            assert(validate(message).code == Status.ok);
+            final switch (field)
+            {
+            case 0:
+                message.from.address = "from" ~ bad ~ "@example.test";
+                break;
+            case 1:
+                message.from.displayName = "From" ~ bad ~ "Bcc: x@example.test";
+                break;
+            case 2:
+                message.to[0].address = "to@example.test" ~ bad;
+                break;
+            case 3:
+                message.to[0].displayName = "To" ~ bad;
+                break;
+            case 4:
+                message.cc[0].address = bad ~ "cc@example.test";
+                break;
+            case 5:
+                message.cc[0].displayName = bad ~ "Cc";
+                break;
+            case 6:
+                message.bcc[0].address = "bcc@exa" ~ bad ~ "mple.test";
+                break;
+            case 7:
+                message.bcc[0].displayName = "B" ~ bad ~ "cc";
+                break;
+            case 8:
+                message.subject = "Subject" ~ bad ~ "X-Injected: 1";
+                break;
+            case 9:
+                message.attachments[0].fileName = "file" ~ bad ~ ".txt";
+                break;
+            case 10:
+                message.attachments[0].contentType = "text/plain" ~ bad;
+                break;
+            case 11:
+                message.idempotencyKey = "key" ~ bad;
+                break;
+            }
+            assert(validate(message).code == Status.invalidArgument);
+        }
+    }
+}
+
+@("recipient_limits: 100 recipients across groups and 32 attachments are the inclusive caps")
+unittest
+{
+    ubyte[1024] memory;
+    auto arena = RequestArena(memory[]);
+    auto message = testMessage(arena);
+    assert(validate(message).code == Status.invalidArgument, "a message needs a recipient");
+    auto group = new MailAddress[101];
+    foreach (ref recipient; group)
+        recipient = MailAddress("r@example.test");
+    message.to = group[0 .. 40];
+    message.cc = group[0 .. 40];
+    message.bcc = group[0 .. 20];
+    assert(validate(message).code == Status.ok);
+    message.bcc = group[0 .. 21];
+    assert(validate(message).code == Status.invalidArgument);
+    message.to = group[0 .. 100];
+    message.cc = message.bcc = null;
+    assert(validate(message).code == Status.ok);
+    message.to = group[];
+    assert(validate(message).code == Status.invalidArgument);
+    message.to = null;
+    message.bcc = group[0 .. 1];
+    assert(validate(message).code == Status.ok, "BCC alone is a valid envelope");
+    auto files = new Attachment[33];
+    foreach (ref file; files)
+        file = Attachment("f.bin");
+    message.attachments = files[0 .. 32];
+    assert(validate(message).code == Status.ok);
+    message.attachments = files[];
+    assert(validate(message).code == Status.invalidArgument);
+}
+
+@("mime_vectors: canonical multipart output with UTF-8 fields, empty and binary parts and boundary-shaped payload")
+unittest
+{
+    enum mixed = "flint-mx-00112233445566778899aabbccddeeff";
+    enum alternative = "flint-al-00112233445566778899aabbccddeeff";
+    ubyte[2048] memory;
+    auto arena = RequestArena(memory[]);
+    MailMessage message;
+    message.from = MailAddress("sender@example.test", "Zoë");
+    message.to = [MailAddress("a@example.test"), MailAddress("b@example.test", "B")];
+    message.cc = [MailAddress("c@example.test")];
+    message.bcc = [MailAddress("hidden@example.test", "Hidden")];
+    message.subject = "Résumé";
+    // The text part carries both delimiter lines verbatim; base64 transfer encoding keeps them inert.
+    message.text = arena.copyIn(cast(const(ubyte)[])("--" ~ mixed ~ "\r\n--" ~ alternative ~ "--\r\n")).value;
+    message.html = arena.copyIn(cast(const(ubyte)[]) "<p>é</p>").value;
+    immutable ubyte[] binary = [0, 0xff, '-', '-', '\r', '\n'];
+    message.attachments = [
+        Attachment("dir\\..\\r/ep ort.bin", "application/x-test", arena.copyIn(binary).value),
+        Attachment("//", "")
+    ];
+    assert(validate(message).code == Status.ok);
+    Boundaries parts;
+    parts.mixed[] = mixed;
+    parts.alternative[] = alternative;
+    char[2048] data;
+    size_t used;
+    size_t encoded;
+    const outcome = emitMime(message, parts, arena, data.length, (scope const(ubyte)[] bytes) {
+        data[used .. used + bytes.length] = cast(const(char)[]) bytes[];
+        used += bytes.length;
+        return Error.init;
+    }, encoded);
+    assert(outcome.code == Status.ok && encoded == used);
+    enum expected = "From: =?UTF-8?B?Wm/Dqw==?=\r\n <sender@example.test>\r\n"
+        ~ "To: <a@example.test>,\r\n =?UTF-8?B?Qg==?=\r\n <b@example.test>\r\n"
+        ~ "Cc: <c@example.test>\r\n" ~ "Subject: =?UTF-8?B?UsOpc3Vtw6k=?=\r\n" ~ "MIME-Version: 1.0\r\n"
+        ~ "Content-Type: multipart/mixed; boundary=\""
+        ~ mixed ~ "\"\r\n\r\n" ~ "--" ~ mixed ~ "\r\n" ~ "Content-Type: multipart/alternative; boundary=\""
+        ~ alternative ~ "\"\r\n\r\n" ~ "--" ~ alternative ~ "\r\n"
+        ~ "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+        ~ "LS1mbGludC1teC0wMDExMjIzMzQ0NTU2Njc3ODg5OWFhYmJjY2RkZWVmZg0KLS1mbGludC1hbC0w\r\n"
+        ~ "MDExMjIzMzQ0NTU2Njc3ODg5OWFhYmJjY2RkZWVmZi0tDQo=\r\n"
+        ~ "--" ~ alternative ~ "\r\n"
+        ~ "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+        ~ "PHA+w6k8L3A+\r\n" ~ "--" ~ alternative ~ "--\r\n" ~ "--" ~ mixed ~ "\r\n"
+        ~ "Content-Type: application/x-test\r\nContent-Disposition: attachment;\r\n"
+        ~ " filename*=UTF-8''dir..rep%20ort.bin\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+        ~ "AP8tLQ0K\r\n" ~ "--" ~ mixed
+        ~ "\r\n"
+        ~ "Content-Type: application/octet-stream\r\nContent-Disposition: attachment;\r\n"
+        ~ " filename*=UTF-8''attachment\r\nContent-Transfer-Encoding: base64\r\n\r\n" ~ "--" ~ mixed ~ "--\r\n";
+    assert(data[0 .. used] == expected, "canonical MIME vector changed");
+}
+
+version (FlintNativeCurl)
+{
+    @("sender_state: closed and stale senders refuse work and cancellation stops before connecting")
+    unittest
+    {
+        MailOptions config;
+        // Port 9 on loopback has no listener here; any connection attempt would report ioError.
+        config.endpoint = "smtp://127.0.0.1:9";
+        config.username = "user";
+        config.password = "secret";
+        MailSender sender;
+        assert(sender.open(config).code == Status.ok);
+        assert(sender.open(config).code == Status.conflict);
+        ubyte[1024] memory;
+        auto arena = RequestArena(memory[]);
+        auto message = testMessage(arena);
+        message.to = [MailAddress("visible@example.test")];
+
+        auto source = CancelSource.create(Context.init, Deadline.afterMillis(60_000));
+        assert(source.ok());
+        auto context = source.value.context();
+        source.value.cancel();
+        assert(sender.send(message, arena, context).error.code == Status.cancelled);
+        auto expired = CancelSource.create(Context.init, Deadline.afterMillis(0));
+        auto late = expired.value.context();
+        const timed = sender.send(message, arena, late).error.code;
+        assert(timed == Status.timedOut || timed == Status.cancelled);
+
+        // SMTP has no idempotency mechanism: a key must be refused, never silently dropped.
+        message.idempotencyKey = "retry-1";
+        Context direct;
+        assert(sender.send(message, arena, direct).error.code == Status.unsupported);
+        message.idempotencyKey = null;
+
+        auto copy = sender;
+        assert(sender.close().code == Status.ok);
+        assert(sender.close().code == Status.ok);
+        Context plain;
+        assert(sender.send(message, arena, plain).error.code == Status.conflict);
+        assert(copy.send(message, arena, plain).error.code == Status.conflict);
+        assert(sender.open(config).code == Status.ok);
+        assert(copy.send(message, arena, plain).error.code == Status.conflict);
+        assert(copy.close().code == Status.ok);
+        assert(sender.close().code == Status.ok);
+
+        config.endpoint = "http://127.0.0.1:9";
+        assert(sender.open(config).code == Status.invalidArgument);
+        config.endpoint = "smtp://127.0.0.1:9";
+        config.requireTls = false;
+        assert(sender.open(config).code == Status.invalidArgument, "cleartext needs the loopback opt-in");
+    }
+}

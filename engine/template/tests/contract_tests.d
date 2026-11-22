@@ -140,3 +140,69 @@ unittest
     const nul = escapeHtml(cast(const(ubyte)[]) "a\0b", arena);
     assert(nul.ok() && equals(arena, nul.value, "a&#xfffd;b"));
 }
+
+@("loop_limit_boundary: exactly 100000 iterations render and one more is refused")
+unittest
+{
+    struct Many
+    {
+        string[] values;
+    }
+
+    ubyte[16] storage;
+    scope arena = RequestArena(storage[]);
+    auto exact = Many(new string[100_000]);
+    const accepted = render!"loop-limit.html"(exact, arena);
+    assert(accepted.ok(), accepted.error.message);
+    assert(equals(arena, accepted.value, "\n"));
+    assert(arena.reset() == Status.ok);
+    auto over = Many(new string[100_001]);
+    const refused = render!"loop-limit.html"(over, arena);
+    assert(refused.error.code == Status.resourceExhausted && refused.value.length() == 0);
+    assert(arena.stats().used == 0);
+}
+
+@("output_limit_boundary: a 16 MiB render succeeds and one more byte is refused before allocation")
+unittest
+{
+    enum limit = 16_777_216;
+    auto value = new char[limit - 1];
+    value[] = 'a';
+    auto backing = new ubyte[limit + 1];
+    scope arena = RequestArena(backing);
+    const fitting = Text(value.idup);
+    const fit = render!"dynamic-text.html"(fitting, arena);
+    assert(fit.ok(), fit.error.message);
+    assert(fit.value.length() == limit);
+    assert(arena.reset() == Status.ok);
+    auto larger = new char[limit];
+    larger[] = 'a';
+    const over = Text(larger.idup);
+    const refused = render!"dynamic-text.html"(over, arena);
+    assert(refused.error.code == Status.resourceExhausted && refused.value.length() == 0);
+    assert(arena.stats().used == 0);
+    // Escaping expansion counts toward the cap: 4 MiB of '<' is 16 MiB of "&lt;" plus the newline.
+    auto expanding = new char[limit / 4];
+    expanding[] = '<';
+    const escapedOver = Text(expanding.idup);
+    const expanded = render!"dynamic-text.html"(escapedOver, arena);
+    assert(expanded.error.code == Status.resourceExhausted && arena.stats().used == 0);
+}
+
+@("generation_reuse: one arena renders repeatedly across resets with identical bytes")
+unittest
+{
+    ubyte[64] storage;
+    scope arena = RequestArena(storage[]);
+    const text = Text("<&>");
+    Buffer previous;
+    foreach (round; 0 .. 1_000)
+    {
+        assert(arena.reset() == Status.ok);
+        const output = render!"dynamic-text.html"(text, arena);
+        assert(output.ok() && equals(arena, output.value, "&lt;&amp;&gt;\n"));
+        if (round)
+            assert(!equals(arena, previous, "&lt;&amp;&gt;\n"));
+        previous = output.value;
+    }
+}

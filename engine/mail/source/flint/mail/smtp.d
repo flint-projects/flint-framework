@@ -114,6 +114,10 @@ private alias Receipt = Result!DeliveryReceipt;
 package(flint.mail) Receipt submitSmtp(scope const ref MailOptions options, scope const ref MailMessage message,
         scope const ref Boundaries parts, ref scope RequestArena arena, ref Context context, size_t length)
 {
+    // SMTP has no idempotency mechanism; refuse the key instead of silently dropping it.
+    if (message.idempotencyKey.length)
+        return Result!DeliveryReceipt(DeliveryReceipt.init, Error(Status.unsupported,
+                "SMTP does not accept an idempotency key"));
     Completion completed;
     auto result = attempt(options, message, parts, arena, context, length, completed);
     const retry = completed.retryable && !completed.ambiguous;
