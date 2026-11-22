@@ -5,6 +5,7 @@ import flint.arena : RequestArena, Result, Status;
 import flint.web : Handler, Method, Request, RequestContext, Response;
 import flint.web.dispatch : executeRoute;
 import flint.web.http1 : Http1Reader, ReadOutcome;
+import flint.web.types : HeaderRecord, maximumFields;
 import flint.web.router : RouteTable;
 import web_probe : Example, measure, observe;
 
@@ -29,6 +30,8 @@ int main()
     ubyte[4096] storage;
     scope context = RequestContext(RequestArena(storage[]));
     Http1Reader parser;
+    // The reader parses into header storage owned by its connection, as the server provides.
+    parser.metadata.headers = new HeaderRecord[maximumFields];
     if (parser.open(1, new ubyte[1024], 1024, 32).code != Status.ok)
         return 1;
     scope (exit)
