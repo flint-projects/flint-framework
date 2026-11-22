@@ -1,0 +1,11 @@
+module copy_graph;
+
+import flint.ui_signals : SignalGraph;
+
+@safe:
+
+/// A graph owns its slab cursors; a second owner would corrupt the free lists.
+void duplicate(ref SignalGraph source) nothrow @nogc
+{
+    SignalGraph destination = source;
+}

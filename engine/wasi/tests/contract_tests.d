@@ -264,3 +264,170 @@ unittest
     assert(Plugin.load(component02, options).error.code == Status.invalidArgument);
     assert(Plugin.load(component03).error.code == Status.invalidArgument);
 }
+
+private immutable ubyte[] oversizedMemory = [0, 97, 115, 109, 1, 0, 0, 0, 5, 3, 1, 0, 3];
+private immutable ubyte[] trappingStart = [
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 0x60, 0, 0, 3, 2, 1, 0, 8, 1, 0, 10, 5, 1, 3, 0, 0x00, 0x0b
+];
+
+@("WASI-01 truncated, mutated and oversized modules fail deterministically and failed stores are reclaimed")
+unittest
+{
+    size_t emptyPrefixes;
+    foreach (length; 0 .. answerModule.length)
+    {
+        // A prefix ending on a section boundary before the function sections is a valid module
+        // with no exports; every other prefix is malformed.
+        auto prefix = Plugin.load(answerModule[0 .. length]);
+        if (length == 8 || length == 15)
+        {
+            assert(prefix.ok(), prefix.error.message);
+            assert(prefix.value.callI32("answer", null).error.code == Status.notFound);
+            ++emptyPrefixes;
+        }
+        else
+            assert(prefix.error.code == Status.invalidArgument, prefix.error.message);
+    }
+    assert(emptyPrefixes == 2);
+    uint state = 0x0057_a5e1;
+    auto mutated = answerModule.dup;
+    foreach (_; 0 .. 2000)
+    {
+        mutated[] = answerModule[];
+        state = state * 1_664_525 + 1_013_904_223;
+        mutated[state % mutated.length] = cast(ubyte)(state >> 24);
+        auto attempt = Plugin.load(mutated);
+        if (attempt.ok())
+        {
+            const result = attempt.value.callI32("answer", null);
+            assert(result.ok() || result.error.code == Status.notFound || result.error.code == Status.invalidArgument);
+            assert(attempt.value.close().code == Status.ok);
+        }
+        else
+            assert(attempt.error.code == Status.invalidArgument, attempt.error.message);
+    }
+    auto huge = new ubyte[16 * 1024 * 1024 + 1];
+    huge[0 .. answerModule.length] = answerModule[];
+    assert(Plugin.load(huge).error.code == Status.invalidArgument);
+
+    // More failures and successful tenants than the 128 native store slots: every one is retired.
+    PluginOptions small;
+    small.limits.maxMemoryBytes = 2 * 65_536;
+    auto withinDefault = Plugin.load(oversizedMemory);
+    assert(withinDefault.ok(), withinDefault.error.message);
+    assert(withinDefault.value.close().code == Status.ok);
+    foreach (_; 0 .. 200)
+    {
+        // The store limiter refuses the initial memory, which the shim reports as an invalid guest.
+        const denied = Plugin.load(oversizedMemory, small).error;
+        assert(denied.code == Status.invalidArgument, denied.message);
+        const trapped = Plugin.load(trappingStart).error;
+        assert(trapped.code == Status.ioError, trapped.message);
+    }
+    auto prepared = CompiledPlugin.compile(answerModule);
+    assert(prepared.ok());
+    foreach (_; 0 .. 300)
+    {
+        auto tenant = prepared.value.instantiate();
+        assert(tenant.ok(), tenant.error.message);
+        assert(tenant.value.callI32("answer", null).value == 42);
+        assert(tenant.value.close().code == Status.ok);
+        assert(tenant.value.close().code == Status.ok);
+        assert(tenant.value.callI32("answer", null).error.code == Status.notFound);
+    }
+    assert(prepared.value.close().code == Status.ok);
+    assert(prepared.value.instantiate().error.code == Status.notFound);
+}
+
+@("WASI-04 no ambient environment or network: core rejects capabilities and Preview1 ignores process env")
+@system unittest
+{
+    import core.sys.posix.stdlib : setenv, unsetenv;
+
+    PluginOptions core;
+    core.allowNetwork = true;
+    assert(Plugin.load(coreGuest, core).error.code == Status.invalidArgument);
+    core.allowNetwork = false;
+    core.environment = [GuestEnvironment("NOTE", "red")];
+    assert(Plugin.load(coreGuest, core).error.code == Status.invalidArgument);
+    core.environment = null;
+    core.preopens = [Preopen(tempDir(), "/tmp")];
+    assert(Plugin.load(coreGuest, core).error.code == Status.invalidArgument);
+
+    assert(setenv("FLINT_WASI_AMBIENT_SECRET", "hunter2", 1) == 0);
+    scope (exit)
+        unsetenv("FLINT_WASI_AMBIENT_SECRET");
+    auto isolated = Plugin.load(preview1Guest, previewOptions());
+    assert(isolated.ok(), isolated.error.message);
+    assert(isolated.value.callI32("environment-count", null).value == 0);
+    assert(isolated.value.callI32("environment-value", null).value == 0);
+    assert(isolated.value.callI32("read-allowed", null).value != 'Q');
+}
+
+@("WASI-05 version-specific accepted and rejected guest matrix with real calls")
+unittest
+{
+    static immutable ubyte[][5] guests = [
+        coreGuest, preview1Guest, unexpectedGuest, component02, component03
+    ];
+    // Rows are guests, columns are core, Preview1, WASI 0.2 and WASI 0.3.
+    static immutable bool[4][5] accepted = [
+        [true, true, false, false], [false, true, false, false], [false, false, false, false],
+        [false, false, true, false], [false, false, false, true]
+    ];
+    foreach (row, guest; guests)
+        foreach (column; 0 .. 4)
+        {
+            PluginOptions options;
+            options.abi = cast(GuestAbi) column;
+            options.limits.maxInstances = 4;
+            auto loaded = Plugin.load(guest, options);
+            if (accepted[row][column])
+            {
+                assert(loaded.ok(), loaded.error.message);
+                const answer = loaded.value.callI32("answer", null);
+                assert(answer.ok() && answer.value == 42, answer.error.message);
+            }
+            else
+                assert(loaded.error.code == Status.invalidArgument, loaded.error.message);
+        }
+}
+
+@("WASI-06 WAMR selection is unsupported for every ABI before any parsing or execution")
+unittest
+{
+    static immutable ubyte[][3] guests = [answerModule, component03, [1, 2, 3]];
+    static immutable GuestAbi[4] abis = [
+        GuestAbi.core, GuestAbi.wasiPreview1, GuestAbi.wasi02Component, GuestAbi.wasi03Component
+    ];
+    foreach (guest; guests)
+        foreach (abi; abis)
+        {
+            PluginOptions options;
+            options.engine = Engine.wamr;
+            options.abi = abi;
+            assert(Plugin.load(guest, options).error.code == Status.unsupported);
+            assert(CompiledPlugin.compile(guest, Engine.wamr, abi).error.code == Status.unsupported);
+        }
+    assert(CompiledPlugin.compile(answerModule, cast(Engine) 2).error.code == Status.invalidArgument);
+    const badAbi = CompiledPlugin.compile(answerModule, Engine.wasmtime, cast(GuestAbi) 4);
+    assert(badAbi.error.code == Status.invalidArgument);
+}
+
+@("WASI-08 specification fixture: default options load answer() and return 42")
+unittest
+{
+    immutable ubyte[] invalid = [1, 2, 3, 4];
+    const rejected = Plugin.load(invalid);
+    assert(rejected.error.code == Status.invalidArgument);
+    immutable ubyte[] scalar = [
+        0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 127, 3, 2, 1, 0, 7, 10, 1, 6, 97, 110,
+        115, 119, 101, 114, 0, 0, 10, 6, 1, 4, 0, 65, 42, 11
+    ];
+    auto valid = Plugin.load(scalar);
+    assert(valid.ok(), "Default Wasmtime provider is required");
+    scope (exit)
+        valid.value.close();
+    auto answer = valid.value.callI32("answer", null);
+    assert(answer.ok() && answer.value == 42);
+}

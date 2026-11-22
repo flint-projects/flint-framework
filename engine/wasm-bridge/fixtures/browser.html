@@ -26,12 +26,28 @@ try {
     const driver = createDriver(mount, {epoch:19});
     const observer = new MutationObserver(() => {});
     observer.observe(mount, {subtree:true, childList:true, attributes:true});
+    const frame = new DataView(guest.memory.buffer, pointer, length);
+    let last = 32;
+    while (last + frame.getUint32(last + 4, true) < length) last += frame.getUint32(last + 4, true);
+    const opcode = frame.getUint16(last, true);
+    frame.setUint16(last, 0xffff, true);
+    let refused = false;
+    try {
+        driver.apply(guest.memory, pointer, length);
+    } catch (error) {
+        refused = error.status === Status.invalidArgument;
+    }
+    check(refused && observer.takeRecords().length === 0 && mount.childNodes.length === 0,
+        "a bad final record mutated the host before validation finished");
+    frame.setUint16(last, opcode, true);
     check(driver.apply(guest.memory, pointer, length) === 7, "frame command count differs");
     check(observer.takeRecords().length === 2, "expected exactly two mounted nodes");
     const [label, canvas] = mount.children;
     check(label.getAttribute("data-fixture") === "1", "attribute absent");
-    check(label.textContent === "<script id='fixture'>ignored<\/script> 🦊", "text was altered");
-    check(!mount.querySelector("script"), "text was interpreted as markup");
+    check(label.textContent === `<script id='fixture'>ignored<\/script><img src=x onerror="alert(1)"> 🦊`,
+        "text was altered");
+    check(!mount.querySelector("script, img, [onerror]") && label.childNodes.length === 1
+        && label.firstChild.nodeType === Node.TEXT_NODE, "text was interpreted as markup");
     check(canvas.width === 300 && canvas.height === 150, "surface dimensions differ");
     const pixel = canvas.getContext("2d").getImageData(299, 149, 1, 1).data;
     check(pixel.join(",") === "255,0,0,255", "canvas boundary pixel differs");

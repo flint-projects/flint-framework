@@ -63,15 +63,36 @@ package(flint.wasm_bridge) bool validUtf8(scope const(ubyte)[] input)
     return true;
 }
 
+// Pack a fixed-width prefix into a little-endian word. Array equality would lower to memcmp,
+// which a freestanding wasm32 module does not have, and this form is also faster.
+private ulong word(size_t count)(scope const(ubyte)[] input)
+{
+    const bytes = input[0 .. count];
+    ulong value;
+    static foreach (index; 0 .. count)
+        value |= cast(ulong) bytes[index] << (8 * index);
+    return value;
+}
+
 package(flint.wasm_bridge) bool permittedAttribute(scope const(ubyte)[] input)
 {
-    const name = cast(const(char)[]) input;
-    if (name == "title" || name == "aria-label" || name == "class" || name == "value")
+    enum title = word!5(cast(const(ubyte)[]) "title");
+    enum klass = word!5(cast(const(ubyte)[]) "class");
+    enum value = word!5(cast(const(ubyte)[]) "value");
+    enum data = word!5(cast(const(ubyte)[]) "data-");
+    enum aria = word!8(cast(const(ubyte)[]) "aria-lab");
+    enum label = word!2(cast(const(ubyte)[]) "el");
+    if (input.length == 5)
+    {
+        const name = word!5(input);
+        return name == title || name == klass || name == value;
+    }
+    if (input.length == 10 && word!8(input) == aria && word!2(input[8 .. $]) == label)
         return true;
-    if (name.length <= 5 || name[0 .. 5] != "data-")
+    if (input.length < 6 || word!5(input) != data)
         return false;
-    foreach (char value; name[5 .. $])
-        if ((value < 'a' || value > 'z') && (value < '0' || value > '9') && value != '-')
+    foreach (character; input[5 .. $])
+        if ((character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-')
             return false;
     return true;
 }

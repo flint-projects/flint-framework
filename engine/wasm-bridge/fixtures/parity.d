@@ -13,7 +13,7 @@ private uint encode(scope ubyte[] bytes) nothrow @nogc
     immutable mount = NodeHandle(0, 1);
     immutable label = NodeHandle(7, 1);
     immutable canvas = NodeHandle(8, 1);
-    enum text = "<script id='fixture'>ignored</script> 🦊";
+    enum text = `<script id='fixture'>ignored</script><img src=x onerror="alert(1)"> 🦊`;
     const ubyte[24] rectangle = [
         1, 0, 0, 0, 43, 1, 0, 0, 149, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 255, 0, 0, 255
     ];

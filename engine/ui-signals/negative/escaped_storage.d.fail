@@ -1,0 +1,15 @@
+module escaped_storage;
+
+import flint.arena : Result;
+import flint.ui_signals : ObserverSlot, SignalGraph, SignalSlot;
+
+@safe:
+
+/// A graph borrows its slabs and cannot outlive stack storage.
+Result!SignalGraph escape() nothrow @nogc
+{
+    SignalSlot[4] signals;
+    ObserverSlot[1] observers;
+    uint[1] queue;
+    return SignalGraph.fromStorage(signals[], observers[], queue[]);
+}
