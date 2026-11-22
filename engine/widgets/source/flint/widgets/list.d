@@ -210,9 +210,52 @@ private size_t[] filtered(scope const(ListItem)[] items, string query)
     size_t[] visible;
     foreach (index, ref const item; items)
     {
-        string name;
-        if (foldGraphemes(item.label, name) && name.indexOf(keyword) >= 0)
+        if (keyword.length != 0 && asciiLabel(item.label) ? asciiContains(item.label,
+                keyword) : foldedContains(item.label, keyword))
             visible ~= index;
     }
     return visible;
+}
+
+private bool foldedContains(scope const(char)[] label, scope const(char)[] keyword)
+{
+    string name;
+    return foldGraphemes(label, name) && name.indexOf(keyword) >= 0;
+}
+
+private enum asciiLabelLimit = 1_048_576;
+
+/// Short ASCII labels fold to themselves except for A-Z, so they need no Unicode provider call.
+private bool asciiLabel(scope const(char)[] label) pure nothrow @nogc
+{
+    if (label.length > asciiLabelLimit)
+        return false;
+    foreach (ch; label)
+        if (ch >= 0x80)
+            return false;
+    return true;
+}
+
+/// Search a case-folded keyword in an ASCII label without materializing the folded label.
+private bool asciiContains(scope const(char)[] label, scope const(char)[] keyword) pure nothrow @nogc
+{
+    foreach (ch; keyword)
+        if (ch >= 0x80)
+            return false;
+    if (keyword.length > label.length)
+        return false;
+    foreach (start; 0 .. label.length - keyword.length + 1)
+    {
+        size_t matched;
+        while (matched < keyword.length && lower(label[start + matched]) == keyword[matched])
+            ++matched;
+        if (matched == keyword.length)
+            return true;
+    }
+    return false;
+}
+
+private char lower(char ch) pure nothrow @nogc
+{
+    return ch >= 'A' && ch <= 'Z' ? cast(char)(ch + ('a' - 'A')) : ch;
 }

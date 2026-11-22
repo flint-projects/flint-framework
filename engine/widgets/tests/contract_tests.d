@@ -3,7 +3,10 @@ module flint.widgets.contract_tests;
 import flint.arena : Status;
 import flint.style : foldGraphemes, visitGraphemeRanges, visitGraphemes;
 import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
-import flint.widgets : List, ListItem, Paginator, Progress, Spinner, Table, TextArea, TextInput, Viewport;
+import flint.widgets : Column, List, ListItem, Paginator, Progress, Spinner, Table, TextArea, TextInput, Viewport;
+import flint.tui : Size;
+import flint.tui.widget_test_display : capture;
+import std.string : indexOf;
 
 @safe:
 
@@ -139,4 +142,56 @@ unittest
     assert(Progress(double.nan).view(inactive, 0, 0, 1).code == Status.invalidArgument);
     assert(Progress(double.infinity).view(inactive, 0, 0, 1).code == Status.invalidArgument);
     assert(Paginator(0, 0).page == 0);
+}
+
+@("Table cells clip printable ASCII without splitting a trailing mark and pad every column")
+unittest
+{
+    Table table;
+    table.columns = [Column("Name", 4), Column("Value", 6), Column("", 0), Column("Tail", 9)];
+    table.rows = [["abcd\u0301", "line\nnext", "hidden", "z"], ["abcdef", "x"], []];
+    const output = capture(Size(14, 4), (ref Frame frame) @safe {
+        assert(table.view(frame, 0, 0, frame.columns, frame.rows).code == Status.ok);
+    });
+    assert(output == "\x1b[0m\x1b[2J\x1b[1;1H\x1b[0;1mNameValue Tail\x1b[2;1Habcd\u0301line  z   "
+            ~ "\x1b[3;1H\x1b[0mabcdx         \x1b[4;1H              ", output);
+}
+
+@("ASCII and Unicode labels filter exactly as their provider case folds")
+unittest
+{
+    Effects effects;
+    immutable labels = [
+        "Stra\u00DFe", "STRASSE street", "strasse", "XSTRASSEX", "Stras", "", "\u00C9COLE", "ecole",
+        "E\u0301COLE", "Kelvin", "\u212Aelvin", "tab\there", "TAB\tHERE", "a\x00b", "A\x00B"
+    ];
+    immutable queries = [
+        "STRASSE", "stra\u00DFe", "\u00E9cole", "ECOLE", "kelvin", "\u212A", "\t", "B\tH", "\x00",
+        "a\x00B", "s", "Z"
+    ];
+    List list;
+    foreach (index, label; labels)
+        list.items ~= ListItem(index + 1, label);
+    foreach (query; queries)
+    {
+        string keyword;
+        assert(foldGraphemes(query, keyword));
+        size_t[] expected;
+        foreach (index, label; labels)
+        {
+            string name;
+            if (foldGraphemes(label, name) && name.indexOf(keyword) >= 0)
+                expected ~= index;
+        }
+        list.filter = query;
+        list.update(Event.init, effects);
+        list.update(key(KeyCode.home), effects);
+        size_t[] shown;
+        while (list.selected != size_t.max && (shown.length == 0 || shown[$ - 1] != list.selected))
+        {
+            shown ~= list.selected;
+            list.update(key(KeyCode.down), effects);
+        }
+        assert(shown == expected, query);
+    }
 }

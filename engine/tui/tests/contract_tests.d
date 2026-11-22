@@ -11,6 +11,7 @@ import flint.tui : CommandId, Effects, Event, EventKind, Frame, Size;
 import flint.tui.commands : Commands;
 import flint.tui.effects : Control, now;
 import flint.tui.grid : Grid;
+import flint.tui.internal : Loop;
 import std.string : indexOf;
 
 @safe:
@@ -260,4 +261,63 @@ unittest
     next.quit(7);
     assert(control.exitCode() == 7);
     assert(next.tick(1).error.code == Status.invalidArgument);
+}
+
+@("A resize burst that returns to the displayed size still repaints the reflowed terminal once")
+unittest
+{
+    auto grid = new Grid(ColorProfile.none);
+    auto control = new Control(0);
+    scope (exit)
+        control.shutdown();
+    auto loop = Loop(grid, control, 1, 16);
+    Size[] resized;
+    string output;
+    void frame(Size[] burst...)
+    {
+        foreach (size; burst)
+            loop.queueResize(size);
+        output = null;
+        const status = loop.refresh(now(), (scope const(char)[] bytes) @safe {
+            output ~= bytes;
+            return Error.init;
+        }, (Event event, ref Effects effects) @safe {
+            if (event.kind == EventKind.resize)
+                resized ~= event.size;
+        }, (ref Frame target) @safe { assert(target.put(0, 0, "AB").code == Status.ok); });
+        assert(status.code == Status.ok, status.message);
+    }
+
+    frame(Size(8, 2));
+    assert(output.indexOf("\x1b[2J") >= 0);
+    frame(Size(8, 2));
+    assert(output.length == 0, "a duplicate same-size notification needs no repaint");
+    frame(Size(5, 2), Size(8, 2));
+    assert(output.indexOf("\x1b[2J") >= 0 && output.indexOf("AB") >= 0,
+            "a coalesced shrink and restore must invalidate the reflowed screen");
+    frame();
+    assert(output.length == 0);
+    assert(resized == [Size(8, 2), Size(8, 2), Size(8, 2)]);
+}
+
+@("Printable ASCII clips at the right edge and clears the wide graphemes it overwrites")
+unittest
+{
+    auto grid = new Grid(ColorProfile.none);
+    assert(grid.resize(Size(6, 1)).code == Status.ok);
+    assert(view(grid, (ref Frame frame) @safe {
+            assert(frame.put(3, 0, "abcdef").code == Status.ok);
+            assert(frame.put(0, 0, "").code == Status.ok);
+        }) == "\x1b[0m\x1b[2J\x1b[1;1H   abc");
+    const wide = view(grid, (ref Frame frame) @safe {
+        assert(frame.put(0, 0, "界界界").code == Status.ok);
+        assert(frame.put(1, 0, "x").code == Status.ok);
+        assert(frame.put(4, 0, "yz").code == Status.ok);
+    });
+    assert(wide == "\x1b[1;2Hx界yz", wide);
+    assert(view(grid, (ref Frame frame) @safe {
+            assert(frame.put(0, 0, "界界界").code == Status.ok);
+            assert(frame.put(1, 0, "x").code == Status.ok);
+            assert(frame.put(4, 0, "yz").code == Status.ok);
+        }).length == 0);
 }

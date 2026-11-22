@@ -7,7 +7,7 @@ import flint.arena : Error, Status;
 import flint.term : Event, EventKind, Session, Size;
 import flint.tui.commands : maximumCommands;
 import flint.tui.effects : Control, Effects, advance, now;
-import flint.tui.grid : Frame, Grid;
+import flint.tui.grid : Frame, Grid, Sink;
 import flint.tui.types : RuntimeOptions;
 
 @safe:
@@ -65,7 +65,7 @@ private int serve(ref Session session, scope Update update, scope View view, Run
     return handled.code == Status.ok ? effects.exitCode() : 1;
 }
 
-private struct Loop
+struct Loop
 {
     Grid grid;
     Control effects;
@@ -76,11 +76,14 @@ private struct Loop
     private uint left;
     private Size pendingSize;
     private bool pendingResize;
+    private bool pendingInvalidate;
     private bool repaint;
     private bool preferInput = true;
 
     void queueResize(Size size) nothrow @nogc
     {
+        // A burst can shrink and restore the terminal before one frame; the reflowed screen needs a repaint.
+        pendingInvalidate = pendingInvalidate || size != grid.size();
         pendingSize = size;
         pendingResize = true;
         repaint = true;
@@ -95,7 +98,8 @@ private struct Loop
             const instant = now();
             if (instant >= nextFrame)
             {
-                const refreshed = refresh(instant, session, update, view);
+                const refreshed = refresh(instant, (scope const(char)[] bytes) @safe => session.write(bytes),
+                        update, view);
                 if (refreshed.code != Status.ok)
                     return refreshed;
             }
@@ -168,7 +172,7 @@ private struct Loop
         repaint = true;
     }
 
-    private Error refresh(long instant, ref Session session, scope Update update, scope View view)
+    Error refresh(long instant, scope Sink write, scope Update update, scope View view)
     {
         left = budget;
         nextFrame = advance(instant, period);
@@ -179,6 +183,9 @@ private struct Loop
             const resized = grid.resize(pendingSize);
             if (resized.code != Status.ok)
                 return resized;
+            if (pendingInvalidate)
+                grid.invalidate();
+            pendingInvalidate = false;
             Event event;
             event.kind = EventKind.resize;
             event.size = pendingSize;
@@ -196,6 +203,6 @@ private struct Loop
             auto target = Frame(grid, generation);
             view(target);
         }
-        return grid.diff((scope const(char)[] bytes) @safe => session.write(bytes));
+        return grid.diff(write);
     }
 }

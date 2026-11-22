@@ -31,23 +31,48 @@ Error paintLine(ref Frame frame, uint column, uint row, uint width, scope const(
         return Error.init;
     const prefix = text.length > maxVisibleText ? text[0 .. maxVisibleText] : text;
     uint cells;
-    auto shown = appender!string;
-    visitGraphemes(prefix, (scope const(char)[] glyph, uint size, bool lineBreak) @safe {
-        if (lineBreak || size > width - cells)
-            return false;
-        shown.put(glyph);
-        cells += size;
-        return cells < width;
-    });
-    const drawn = frame.put(column, row, shown.data, style);
+    Error drawn;
+    const simple = asciiPrefix(prefix, width);
+    if (simple != size_t.max)
+    {
+        // Printable ASCII graphemes are single bytes and single cells; borrow the clipped prefix.
+        cells = cast(uint) simple;
+        drawn = frame.put(column, row, prefix[0 .. simple], style);
+    }
+    else
+    {
+        auto shown = appender!string;
+        visitGraphemes(prefix, (scope const(char)[] glyph, uint size, bool lineBreak) @safe {
+            if (lineBreak || size > width - cells)
+                return false;
+            shown.put(glyph);
+            cells += size;
+            return cells < width;
+        });
+        drawn = frame.put(column, row, shown.data, style);
+    }
     if (drawn.code != Status.ok || !pad)
         return drawn;
-    const remaining = width - cells;
-    if (remaining == 0)
-        return Error.init;
-    auto spaces = new char[remaining];
-    spaces[] = ' ';
-    return frame.put(column + cells, row, spaces, style);
+    static immutable char[64] spaces = ' ';
+    for (uint at = cells; at < width; at += spaces.length)
+    {
+        const count = width - at < spaces.length ? width - at : spaces.length;
+        const padded = frame.put(column + at, row, spaces[0 .. count], style);
+        if (padded.code != Status.ok)
+            return padded;
+    }
+    return Error.init;
+}
+
+/// Return the clipped length when the visible prefix is complete printable ASCII, otherwise size_t.max.
+private size_t asciiPrefix(scope const(char)[] text, uint width) pure nothrow @nogc
+{
+    const length = text.length < width ? text.length : width;
+    foreach (ch; text[0 .. length])
+        if (ch < ' ' || ch > '~')
+            return size_t.max;
+    // A following non-ASCII byte may extend the last grapheme, such as a combining mark.
+    return length == text.length || text[length] < 0x80 ? length : size_t.max;
 }
 
 private enum maxVisibleText = 1_048_576;

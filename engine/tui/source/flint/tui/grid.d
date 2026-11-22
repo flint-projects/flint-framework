@@ -101,6 +101,12 @@ final class Grid
         return Error.init;
     }
 
+    /// Repaint every cell on the next diff, for example after the terminal reflowed its contents.
+    void invalidate() nothrow @nogc
+    {
+        full = true;
+    }
+
     uint begin()
     {
         if (generation == uint.max)
@@ -132,8 +138,14 @@ final class Grid
         if (text.length > maximumText)
             return Error(Status.resourceExhausted, "frame text exceeds its byte limit");
         Cell paint = styleCell(style, profile);
-        if (text.length == 1 && text[0] >= ' ' && text[0] <= '~')
-            return place(column, row, text, 1, paint);
+        if (printableAscii(text))
+        {
+            // Each printable ASCII byte is its own one-cell grapheme, so no segmentation is needed.
+            const end = text.length < dimensions.columns - column ? column + text.length : dimensions.columns;
+            foreach (index; column .. end)
+                place(cast(uint) index, row, text[index - column .. index - column + 1], 1, paint);
+            return Error.init;
+        }
         Drawing drawing = Drawing(column, row, column, paint);
         visitGraphemes(text, (scope const(char)[] bytes, uint cells, bool lineEnd) @safe {
             return drawGlyph(drawing, bytes, cells, lineEnd);
@@ -317,6 +329,14 @@ private bool changed(scope const(Pixel)[] before, scope const(Pixel)[] after, ui
     if (column + 1 < before.length && (before[column].width == 2 || after[column].width == 2))
         return !equal(before[column + 1], after[column + 1]);
     return false;
+}
+
+private bool printableAscii(scope const(char)[] text) pure nothrow @nogc
+{
+    foreach (ch; text)
+        if (ch < ' ' || ch > '~')
+            return false;
+    return true;
 }
 
 private dchar firstScalar(scope const(char)[] utf8) pure nothrow @nogc
