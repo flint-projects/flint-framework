@@ -1,8 +1,20 @@
 #define _DEFAULT_SOURCE
+#if defined(__APPLE__)
+#define __STDC_WANT_LIB_EXT1__ 1
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__APPLE__)
+/* Darwin has no explicit_bzero. C11 Annex K memset_s may not be optimized away either. */
+static void explicit_bzero(void *data, size_t size)
+{
+    if (size != 0)
+        (void) memset_s(data, size, 0, size);
+}
+#endif
 
 typedef struct {
     size_t capacity;

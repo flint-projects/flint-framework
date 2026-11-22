@@ -6,6 +6,12 @@ import flint.arena : Error, Status;
 @safe:
 package(flint.prompt):
 
+// The native secret store (native/secret.c) is built for Linux and macOS.
+version (linux)
+    version = FlintPromptNative;
+else version (OSX)
+    version = FlintPromptNative;
+
 struct NativeSecret;
 
 private extern (C) @system nothrow @nogc
@@ -23,7 +29,7 @@ private extern (C) @system nothrow @nogc
 // SAFETY: Native allocation checks arithmetic. The move-only caller owns the resulting handle.
 @trusted NativeSecret* allocate(size_t capacity) nothrow @nogc
 {
-    version (linux)
+    version (FlintPromptNative)
         return flint_prompt_secret_new(capacity);
     else
         return null;
@@ -32,7 +38,7 @@ private extern (C) @system nothrow @nogc
 // SAFETY: The live owner provides a valid native handle or null. No payload pointer is returned.
 @trusted size_t count(const NativeSecret* storage) nothrow @nogc
 {
-    version (linux)
+    version (FlintPromptNative)
         return flint_prompt_secret_count(storage);
     else
         return 0;
@@ -41,7 +47,7 @@ private extern (C) @system nothrow @nogc
 // SAFETY: Native append bounds capacity and copies the scope bytes before returning on this owner thread.
 @trusted bool append(NativeSecret* storage, scope const(char)[] bytes) nothrow @nogc
 {
-    version (linux)
+    version (FlintPromptNative)
         return flint_prompt_secret_append(storage, bytes.ptr, bytes.length) != 0;
     else
         return false;
@@ -50,7 +56,7 @@ private extern (C) @system nothrow @nogc
 // SAFETY: Native trim bounds the requested length and wipes removed bytes while no callback is borrowing.
 @trusted void trim(NativeSecret* storage, size_t length) nothrow @nogc
 {
-    version (linux)
+    version (FlintPromptNative)
         flint_prompt_secret_trim(storage, length);
 }
 
@@ -58,7 +64,7 @@ private extern (C) @system nothrow @nogc
 // active borrow, including same-thread reentry through the scoped callback.
 @trusted void retire(NativeSecret* storage) nothrow @nogc
 {
-    version (linux)
+    version (FlintPromptNative)
         flint_prompt_secret_close(storage);
 }
 
@@ -68,7 +74,7 @@ private extern (C) @system nothrow @nogc
 {
     if (consumer is null)
         return Error(Status.invalidArgument, "missing secret consumer");
-    version (linux)
+    version (FlintPromptNative)
     {
         size_t length;
         const data = flint_prompt_secret_borrow(storage, &length);
@@ -86,6 +92,6 @@ private extern (C) @system nothrow @nogc
 // SAFETY: The mutable scratch slice belongs to the caller. The synchronous libc wipe does not retain it.
 @trusted void wipe(scope char[] bytes) nothrow @nogc
 {
-    version (linux)
+    version (FlintPromptNative)
         flint_prompt_wipe(bytes.ptr, bytes.length);
 }
