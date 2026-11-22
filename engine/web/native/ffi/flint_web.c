@@ -336,6 +336,19 @@ static int h2_received(nghttp2_session *session, const nghttp2_frame *frame, voi
     return 0;
 }
 
+/* RFC 9113 section 8.1: after a complete response, ask a client whose request is still open to stop
+ * sending with RST_STREAM(NO_ERROR). END_STREAM alone leaves the stream half-closed, and clients such
+ * as libcurl report the end of the response and its trailers only once the stream closes. */
+static int h2_sent(nghttp2_session *session, const nghttp2_frame *frame, void *user) {
+    (void)user;
+    if ((frame->hd.type != NGHTTP2_HEADERS && frame->hd.type != NGHTTP2_DATA) ||
+        !(frame->hd.flags & NGHTTP2_FLAG_END_STREAM) ||
+        nghttp2_session_get_stream_remote_close(session, frame->hd.stream_id) != 0)
+        return 0;
+    return nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE, frame->hd.stream_id, NGHTTP2_NO_ERROR) == 0
+        ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE;
+}
+
 static int h2_closed(nghttp2_session *session, int32_t stream, uint32_t code, void *user) {
     (void)session;
     free(take_trailer(user, stream));
@@ -393,6 +406,7 @@ static flint_h2_session *h2_create(uint32_t max_streams) {
     nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks, h2_data);
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks, h2_received);
     nghttp2_session_callbacks_set_on_stream_close_callback(callbacks, h2_closed);
+    nghttp2_session_callbacks_set_on_frame_send_callback(callbacks, h2_sent);
     nghttp2_option_set_max_send_header_block_length(options, FLINT_H2_MAX_OUTPUT_FIELD_BYTES);
     nghttp2_option_set_no_auto_window_update(options, 1);
     nghttp2_option_set_max_deflate_dynamic_table_size(options, 4096);

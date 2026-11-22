@@ -467,11 +467,10 @@ version (FlintNativeNghttp2) @system unittest
     assert(finishCall(duplex, arena, context) == RpcCode.ok);
     check(duplex.close());
 
+    // The Status action finishes without reading. Its status arrives while the upload is still open.
     auto terminal = open(fixture, service, "Status", context);
-    // The Status action finishes without reading; the transfer may already be complete.
-    const ended = terminal.finishSend(context);
-    assert(ended.code == Status.ok || ended.code == Status.conflict, ended.message);
     assert(finishCall(terminal, arena, context) == RpcCode.aborted);
+    assert(terminal.finishSend(context).code == Status.conflict);
     const status = terminal.status(arena);
     assert(equals(arena, status.value.message, cast(const(ubyte)[]) "10% \xf0\x9f\x9a\x80"));
     check(terminal.close());
@@ -534,6 +533,34 @@ version (FlintNativeNghttp2) @system unittest
     // Without TE: trailers the request is not gRPC.
     const noTe = rawCall(fixture, "Unary", null, true, null, arena);
     assert(noTe.status == 415);
+
+    // A server that rejects before the upload ends surfaces its status without the client ending it.
+    static struct Early
+    {
+        string method;
+        immutable(ubyte)[] wire;
+        HttpStreamField extra;
+        string expected;
+    }
+
+    foreach (item; [
+            Early("Unary", [1, 0, 0, 0, 0], te, "grpc-status: 12"),
+            Early("Unary", [3, 0, 0, 0, 0], te, "grpc-status: 3"),
+            Early("Unary", [0, 0, 0x40, 0, 1], te, "grpc-status: 8"),
+            Early("Small", [0, 0, 0, 0, 5, 1, 2, 3, 4, 5], te, "grpc-status: 8"),
+            Early("Wait", [0, 0, 0, 0, 1, 9], HttpStreamField("grpc-timeout", "50m"),
+                "grpc-status: 4"),
+            Early("Unary", null, HttpStreamField("grpc-timeout", "1x"), "grpc-status: 3"),
+            Early("Unary", null, HttpStreamField("grpc-encoding", "gzip"), "grpc-status: 12")
+        ])
+    {
+        const fields = item.extra.name == "te" ? [te] : [te, item.extra];
+        const outcome = rawCall(fixture, item.method, item.wire, false, fields, arena);
+        assert(outcome.status == 200 && contains(arena, outcome.trailers, item.expected), item.expected);
+        assert(arena.reset() == Status.ok);
+    }
+    const early = rawCall(fixture, "Unary", null, false, null, arena);
+    assert(early.status == 415);
 }
 
 @("grpc_wire_errors: client rejects missing status, oversized and compressed messages, truncation and bad media")
