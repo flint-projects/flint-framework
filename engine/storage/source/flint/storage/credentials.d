@@ -5,7 +5,7 @@ import core.atomic : atomicLoad, atomicStore;
 import core.thread : Thread;
 import core.time : msecs;
 import flint.arena : Error, Result, Status;
-import flint.conc : CancelSource, Context, Deadline, startManagedBackground;
+import flint.conc : Background, CancelSource, Context, Deadline, startManagedBackground;
 import flint.storage.sigv4 : CredentialView, validCredentials;
 import flint.storage.types : CredentialProvider, Credentials;
 
@@ -35,6 +35,7 @@ package(flint.storage) final class CredentialStore
 {
     private CredentialProvider fetch;
     private CancelSource stop;
+    private Background worker;
     private Context lifetime;
     private shared immutable(Credentials)* current;
     private shared bool initial;
@@ -54,7 +55,7 @@ package(flint.storage) final class CredentialStore
 
         move(source.value, stop);
         lifetime = stop.context();
-        const ready = startManagedBackground(&refreshLoop);
+        const ready = startManagedBackground(&refreshLoop, worker);
         if (ready.code != Status.ok)
         {
             stop.close();
@@ -90,6 +91,7 @@ package(flint.storage) final class CredentialStore
         stop.cancel();
         if (!atomicLoad(finished))
             return Error(Status.unavailable, "credential worker is still retiring");
+        worker.join();
         stop.close();
         return Error.init;
     }

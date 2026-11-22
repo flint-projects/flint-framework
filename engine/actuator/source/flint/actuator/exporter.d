@@ -9,7 +9,7 @@ import flint.actuator.otlp : acknowledged, measurements, traces;
 import flint.actuator.spans : SpanRecord, Spans;
 import flint.actuator.types : ActuatorOptions;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
-import flint.conc : CancelSource, Context, Deadline, startBackground;
+import flint.conc : Background, CancelSource, Context, Deadline, startBackground;
 import flint.http : ClientOptions, Header, HttpClient, HttpMethod, HttpRequest;
 import flint.reactor : Reactor;
 
@@ -95,6 +95,7 @@ package(flint.actuator) final class Exporter
     private Header[] headers;
     private HttpClient client;
     private CancelSource shutdown;
+    private Background worker;
     private string tracesUrl;
     private string metricsUrl;
     private string service;
@@ -150,7 +151,7 @@ package(flint.actuator) final class Exporter
         if (opened.code != Status.ok)
             return opened;
         shutdown = move(source.value);
-        const background = startBackground(&run);
+        const background = startBackground(&run, worker);
         if (background.code != Status.ok)
         {
             client.close();
@@ -186,6 +187,7 @@ package(flint.actuator) final class Exporter
             if (ready.code != Status.ok)
                 return ready;
         }
+        worker.join();
         return Error.init;
     }
 

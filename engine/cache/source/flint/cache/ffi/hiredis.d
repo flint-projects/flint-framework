@@ -1,7 +1,6 @@
 /// Typed hiredis boundary with detached reply ownership.
 module flint.cache.ffi.hiredis;
 
-import core.thread : Thread;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.cache.types : CacheOptions;
 
@@ -248,13 +247,4 @@ package(flint.cache) struct Bridge
                 return 0;
         }
     }
-}
-
-// SAFETY: Druntime owns a reference to the worker delegate until it returns. The worker uses
-// only its managed control object and the native state it owns, with no caller borrows.
-@trusted package(flint.cache) void startDriver(void delegate() @safe nothrow work)
-{
-    auto thread = new Thread(work);
-    thread.isDaemon = true;
-    thread.start();
 }

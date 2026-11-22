@@ -5,7 +5,6 @@ import core.stdc.errno : EINTR, errno;
 import core.sys.linux.sys.eventfd : EFD_CLOEXEC, EFD_NONBLOCK, eventfd, eventfd_read, eventfd_write;
 import core.sys.posix.poll : POLLIN, poll, pollfd;
 import core.sys.posix.unistd : close;
-import core.thread : Thread;
 import flint.arena : Error, Status;
 
 @safe:
@@ -51,13 +50,4 @@ package(flint.security) struct Wake
             descriptor = -1;
         }
     }
-}
-
-// SAFETY: Druntime retains the owned delegate until the worker returns. It captures only
-// the startup-owned verifier and no borrowed request storage.
-@trusted package(flint.security) void start(void delegate() @safe nothrow @nogc work)
-{
-    auto thread = new Thread(work);
-    thread.isDaemon = true;
-    thread.start();
 }

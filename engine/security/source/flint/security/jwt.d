@@ -3,7 +3,7 @@ module flint.security.jwt;
 
 import core.atomic : atomicLoad, atomicStore, cas, pause;
 import flint.arena : Error, RequestArena, Result, Status;
-import flint.conc : CancelSource, Context, Deadline;
+import flint.conc : Background, CancelSource, Context, Deadline, startBackground;
 import flint.conc.wait : waitUntil;
 import flint.http : ClientOptions, HttpClient, HttpRequest;
 import flint.security.base64url : decodeUrl64;
@@ -11,7 +11,7 @@ import flint.security.ffi.crypto : Key, beginRefresh, cryptoReady, registerIssue
 import flint.security.jwks : KeySet;
 import flint.security.jwt_parse : denied, parseClaims, parseHeader, tokenLimit;
 import flint.security.origin : sameAscii, validJwksUrl;
-import flint.security.sys.worker : Wake, start;
+import flint.security.sys.worker : Wake;
 import flint.security.types : JwtAlgorithm, JwtPolicy, Principal;
 
 @safe:
@@ -89,11 +89,8 @@ struct JwtVerifier
         const opened = prepared.prepare(policy.jwksCaBundle);
         if (opened.code != Status.ok)
             return opened;
-        try
-        {
-            start(&prepared.run);
-        }
-        catch (Exception)
+        const started = startBackground(&prepared.run, prepared.worker);
+        if (started.code != Status.ok)
         {
             prepared.cleanup();
             return Error(Status.unavailable, "unable to start the JWKS worker");
@@ -138,6 +135,7 @@ struct JwtVerifier
             if (waited.code != Status.ok)
                 return waited;
         }
+        state.worker.join();
         state = null;
         return Error.init;
     }
@@ -218,6 +216,7 @@ private final class Verifier
     private long renewAt;
     private bool closing;
     shared bool stopped;
+    Background worker;
 
     private string issuer;
     private string audience;

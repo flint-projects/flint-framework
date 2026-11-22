@@ -4,9 +4,9 @@ module flint.cache.remote;
 import core.atomic : atomicLoad, atomicStore;
 import core.lifetime : move;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
-import flint.cache.ffi.hiredis : Bridge, Kind, startDriver;
+import flint.cache.ffi.hiredis : Bridge, Kind;
 import flint.cache.types : Bytes, CacheOptions;
-import flint.conc : Context, Deadline;
+import flint.conc : Background, Context, Deadline, startManagedBackground;
 import flint.reactor : Backend, NativeInterest, NativeReadyFn, Reactor, ReactorOptions;
 
 @safe:
@@ -50,7 +50,13 @@ package(flint.cache) struct RemoteStore
             driver.native.destroy();
             return Result!RemoteStore(RemoteStore.init, posted);
         }
-        startDriver(&driver.run);
+        // The worker uses only its managed control object and the native state it owns.
+        const started = startManagedBackground(&driver.run, driver.worker);
+        if (started.code != Status.ok)
+        {
+            driver.native.destroy();
+            return Result!RemoteStore(RemoteStore.init, started);
+        }
         return Result!RemoteStore(RemoteStore(driver));
     }
 
@@ -116,6 +122,7 @@ package(flint.cache) struct RemoteStore
             if (waited.code != Status.ok)
                 return waited;
         }
+        control.worker.join();
         return Error.init;
     }
 
@@ -134,6 +141,7 @@ private final class Driver
 {
     Bridge native;
     Reactor loop;
+    Background worker;
     shared bool terminated;
 
     private Error outcome;

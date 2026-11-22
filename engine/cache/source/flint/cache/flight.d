@@ -7,7 +7,7 @@ import core.thread : Fiber, Thread;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.cache.sys.bytes : OwnedBytes;
 import flint.cache.sys.wake : Wake;
-import flint.conc : CancelSource, Context, Deadline, startBackground;
+import flint.conc : Background, CancelSource, Context, Deadline, startBackground;
 
 @safe:
 
@@ -52,6 +52,7 @@ private struct Participant
 package(flint.cache) final class Flights
 {
     private Mutex gate;
+    private Background worker;
     private Flight[] flights;
     private Participant[] people;
     private uint firstActive;
@@ -81,7 +82,7 @@ package(flint.cache) final class Flights
         const opened = wake.open();
         if (opened.code != Status.ok)
             return opened;
-        const started = startBackground(&monitor);
+        const started = startBackground(&monitor, worker);
         if (started.code != Status.ok)
             wake.release();
         return started;
@@ -317,18 +318,22 @@ package(flint.cache) final class Flights
 
     void close() nothrow @nogc
     {
-        gate.lock_nothrow();
-        scope (exit)
-            gate.unlock_nothrow();
-        if (closing)
-            return;
-        closing = true;
-        foreach (ref flight; flights)
         {
-            if (flight.present != 0 && !flight.settled)
-                flight.cancellation.cancel();
+            gate.lock_nothrow();
+            scope (exit)
+                gate.unlock_nothrow();
+            if (closing)
+                return;
+            closing = true;
+            foreach (ref flight; flights)
+            {
+                if (flight.present != 0 && !flight.settled)
+                    flight.cancellation.cancel();
+            }
+            wake.notify();
         }
-        wake.notify();
+        // The monitor returns once it observes `closing` under the gate.
+        worker.join();
     }
 
     private static void removeInterest(ref Participant person, ref Flight flight) nothrow @nogc

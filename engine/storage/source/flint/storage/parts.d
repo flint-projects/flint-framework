@@ -6,7 +6,7 @@ import core.lifetime : move;
 import core.thread : Thread;
 import core.time : msecs;
 import flint.arena : Buffer, Error, RequestArena, Status;
-import flint.conc : CancelSource, Context, Deadline, startBackground;
+import flint.conc : Background, CancelSource, Context, Deadline, startBackground;
 import flint.http : HttpMethod;
 import flint.storage.credentials : CredentialStore;
 import flint.storage.endpoint : Endpoint;
@@ -40,6 +40,7 @@ package(flint.storage) final class Part
     private shared bool stopping;
     private shared bool retired;
     private bool launched;
+    private Background thread;
     private Transport transport;
     private ubyte[] scratch;
     private Request request;
@@ -65,7 +66,7 @@ package(flint.storage) final class Part
         const opened = transport.open(options);
         if (opened.code != Status.ok)
             return opened;
-        const started = startBackground(&worker);
+        const started = startBackground(&worker, thread);
         launched = started.code == Status.ok;
         if (!launched)
             transport.close();
@@ -134,7 +135,10 @@ package(flint.storage) final class Part
     bool close() scope nothrow @nogc
     {
         atomicStore(stopping, true);
-        return !launched || atomicLoad(retired);
+        if (launched && !atomicLoad(retired))
+            return false;
+        thread.join();
+        return true;
     }
 
     private void worker() nothrow @nogc
