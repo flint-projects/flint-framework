@@ -6,7 +6,7 @@ import flint.arena : Error, Result, Status;
 
 version (linux)
 {
-    import flint.reactor.sys.sockets : Socket, socketError;
+    import flint.reactor.sys.sockets : Socket, acceptError, socketError;
     import core.stdc.errno : EAGAIN, ENOENT, EPERM, ENOSYS, ECANCELED, EOPNOTSUPP, EINVAL, ENOMEM;
 
 package(flint.reactor):
@@ -169,6 +169,9 @@ package(flint.reactor):
                 return Result!KernelEvent(KernelEvent.init);
             if (token == 1 && result >= 0)
                 return Result!KernelEvent(KernelEvent(true, token, Status.ok, 0, Socket(result)));
+            // Accept failures share the readiness backend's classification; cancellation stays distinct.
+            if (token == 1 && result != -ECANCELED)
+                return Result!KernelEvent(KernelEvent(true, token, acceptError(-result)));
             return Result!KernelEvent(KernelEvent(true, token, completionStatus(result),
                     result >= 0 ? cast(size_t) result : 0));
         }

@@ -65,6 +65,16 @@ package(flint.reactor) struct Mailbox
         }
     }
 
+    /// Whether a message is waiting. A concurrent producer may add one immediately afterwards.
+    bool pending() nothrow @nogc
+    {
+        while (!cas(&held, false, true))
+            yieldWorker();
+        scope (exit)
+            atomicStore(held, false);
+        return depth != 0;
+    }
+
     bool dequeue(out Message message) nothrow @nogc
     {
         while (!cas(&held, false, true))
@@ -149,6 +159,11 @@ package(flint.reactor) struct Timers
     void clear() nothrow @nogc
     {
         length = 0;
+    }
+
+    bool empty() const pure nothrow @nogc
+    {
+        return length == 0;
     }
 
     private void remove(size_t index) nothrow @nogc

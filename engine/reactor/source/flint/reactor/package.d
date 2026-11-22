@@ -22,7 +22,7 @@ public import flint.reactor.types : AcceptDelegate, AcceptFn, Backend, Completio
 version (Posix)
 {
     import flint.reactor.sys.sockets : Socket, acceptConnection, bindListener, closeSocket, receive,
-        socketPort, transmit;
+        sendImmediately, socketPort, transmit;
     import flint.reactor.sys.readiness : Interest, Readiness, ReadyEvent, destroyReadiness,
         directions, openReadiness, poll, setInterest;
 }
@@ -630,6 +630,8 @@ private struct FiberTask
     TaskContext context;
     Deadline wake;
     uint next;
+    /// Position in the worker's suspended list, or noSlot while free or running.
+    uint suspendedAt = noSlot;
     bool invokeIfCancelled;
 
     bool occupied() const pure nothrow @nogc
@@ -663,9 +665,17 @@ private struct Worker
     Mailbox mailbox;
     Timers timers;
     FiberTask[] fibers;
+    /// Dense list of fibers that yielded and await a deadline, cancellation or shutdown.
+    uint[] suspended;
+    uint suspendedCount;
     uint freeFiber = noSlot;
     uint activeFiber = noSlot;
     uint activeFiberCount;
+    /// Monotonic time before which this worker leaves pending connections in the backlog after
+    /// descriptor exhaustion, or zero while accepting.
+    long acceptResumeAt;
+    /// Earliest wake of a suspended fiber, long.min when one may be due, or long.max when none waits.
+    long nextWake = long.max;
 
     version (Posix) Readiness readiness;
 
@@ -728,6 +738,7 @@ private struct Worker
         }
         fibers[$ - 1].next = noSlot;
         freeFiber = 0;
+        suspended = new uint[fibers.length];
     }
 
     void releaseFibers()
@@ -794,8 +805,25 @@ private struct Worker
         activeFiber = slot;
         const failure = resumeFiber(task.fiber);
         activeFiber = noSlot;
-        if (task.fiber.state == Fiber.State.TERM)
+        if (task.fiber.state != Fiber.State.TERM)
         {
+            noteWake(task.wake);
+            if (task.suspendedAt == noSlot)
+            {
+                task.suspendedAt = suspendedCount;
+                suspended[suspendedCount++] = slot;
+            }
+        }
+        else
+        {
+            if (task.suspendedAt != noSlot)
+            {
+                // Swap-remove keeps the list dense; the moved entry has not been visited yet in this pass.
+                const moved = suspended[--suspendedCount];
+                suspended[task.suspendedAt] = moved;
+                fibers[moved].suspendedAt = task.suspendedAt;
+                task.suspendedAt = noSlot;
+            }
             resetFiber(task.fiber);
             task.task = null;
             task.boundTask = null;
@@ -810,21 +838,58 @@ private struct Worker
 
     private void resumeReadyTasks(bool stopping = false) nothrow @nogc
     {
-        if (activeFiberCount == 0)
+        nextWake = long.max;
+        if (suspendedCount == 0)
             return;
         const now = Deadline.afterMillis(0);
         uint used;
-        foreach (slot, ref task; fibers)
+        for (uint position = 0; position < suspendedCount;)
         {
             if (!stopping && used == runtime.options.completionsPerTick)
-                break;
-            if (task.occupied && (stopping || task.wake.monotonicNanoseconds <= now.monotonicNanoseconds
-                    || task.context.cancellation.check().code != Status.ok))
             {
-                resumeTask(cast(uint) slot);
-                ++used;
+                // Unvisited fibers may already be due; poll again without blocking.
+                nextWake = long.min;
+                break;
             }
+            const slot = suspended[position];
+            auto task = &fibers[slot];
+            if (stopping || task.wake.monotonicNanoseconds <= now.monotonicNanoseconds
+                    || task.context.cancellation.statusAt(now.monotonicNanoseconds) != Status.ok)
+            {
+                resumeTask(slot);
+                ++used;
+                // A terminated fiber left the list and another unvisited entry took its position.
+                if (position < suspendedCount && suspended[position] != slot)
+                    continue;
+            }
+            else
+                noteWake(task.wake);
+            ++position;
         }
+    }
+
+    private void noteWake(Deadline wake) nothrow @nogc
+    {
+        if (wake.monotonicNanoseconds < nextWake)
+            nextWake = wake.monotonicNanoseconds;
+    }
+
+    /// Bound the backend wait by the earliest timer, suspended fiber deadline and runnable mailbox work.
+    private uint loopWaitMillis() nothrow @nogc
+    {
+        if (nextWake == long.min || (freeFiber != noSlot && mailbox.pending()))
+            return 0;
+        if (nextWake == long.max && timers.empty)
+            return waitBudgetMillis;
+        const now = Deadline.afterMillis(0);
+        const wait = timers.waitMillis(now, waitBudgetMillis);
+        if (wait == 0 || nextWake <= now.monotonicNanoseconds)
+            return 0;
+        if (nextWake == long.max)
+            return wait;
+        const remaining = cast(ulong) nextWake - cast(ulong) now.monotonicNanoseconds;
+        const millis = remaining / 1_000_000 + (remaining % 1_000_000 != 0);
+        return millis < wait ? cast(uint) millis : wait;
     }
 
     void execute() nothrow @nogc
@@ -853,7 +918,7 @@ private struct Worker
             if (atomicLoad(runtime.state) != State.running)
                 break;
             advanceOperations();
-            const wait = timers.waitMillis(Deadline.afterMillis(0), waitBudgetMillis);
+            const wait = loopWaitMillis();
             version (ReactorReadinessOnly)
             {
                 waitForReadiness(wait);
@@ -996,6 +1061,36 @@ private struct Worker
         runtime.stop();
     }
 
+    /// Leave connections in the backlog for one loop budget instead of stopping on transient exhaustion.
+    private void pauseAccept() nothrow @nogc
+    {
+        acceptResumeAt = Deadline.afterMillis(waitBudgetMillis).monotonicNanoseconds;
+        version (Posix)
+        {
+            // A level-triggered listener would otherwise report readiness on every poll.
+            if (readiness.valid && setInterest(readiness, runtime.listener, listenToken,
+                    Interest.read, Interest.none) != Status.ok)
+                fail(Error(Status.ioError, "could not pause listener readiness"));
+        }
+    }
+
+    /// Whether the accept backoff has elapsed. Rearms readiness listeners when it has.
+    private bool acceptResumed() nothrow @nogc
+    {
+        if (acceptResumeAt == 0)
+            return true;
+        if (Deadline.afterMillis(0).monotonicNanoseconds < acceptResumeAt)
+            return false;
+        acceptResumeAt = 0;
+        version (Posix)
+        {
+            if (readiness.valid && setInterest(readiness, runtime.listener, listenToken,
+                    Interest.none, Interest.read) != Status.ok)
+                fail(Error(Status.ioError, "could not resume listener readiness"));
+        }
+        return true;
+    }
+
     private void admit(Socket incoming) nothrow @nogc
     {
         if (nextFree == noSlot || atomicLoad(runtime.state) != State.running)
@@ -1010,6 +1105,11 @@ private struct Worker
             closeSocket(incoming);
             fail(Error(Status.resourceExhausted, "connection identities exhausted"));
             return;
+        }
+        version (Posix)
+        {
+            // Best effort: a refused option changes latency only, never correctness.
+            sendImmediately(incoming);
         }
         const slot = nextFree;
         auto connection = &connections[slot];
@@ -1086,7 +1186,7 @@ private struct Worker
         }
         activeIo[operation.slot / ioWordBits] |= 1UL << (operation.slot % ioWordBits);
         ++liveOperations;
-        return Result!IoId(IoId(id, operation.slot, operation.generation));
+        return Result!IoId(IoId(id, operation.slot, cast(uint) operation.generation));
     }
 
     Status cancelIo(IoId operation) nothrow @nogc
@@ -1094,7 +1194,7 @@ private struct Worker
         if (operation.generation == 0 || operation.slot >= workItems.length)
             return Status.notFound;
         auto work = &workItems[operation.slot];
-        if (work.id.generation != operation.generation || work.connection != operation.connection)
+        if (cast(uint) work.id.generation != operation.generation || work.connection != operation.connection)
             return Status.notFound;
         return requestCancel(work.id, Status.cancelled);
     }
@@ -1119,6 +1219,10 @@ private struct Worker
 
     private void advanceOperations() nothrow @nogc
     {
+        if (liveOperations == 0)
+            return;
+        // One clock sample per pass: every active operation's deadline is judged against it.
+        const now = Deadline.afterMillis(0).monotonicNanoseconds;
         foreach (index, ref word; activeIo)
         {
             ulong unvisited = ulong.max;
@@ -1127,12 +1231,12 @@ private struct Worker
             {
                 const bit = bsf(available);
                 unvisited = (ulong.max << bit) << 1;
-                advanceOperation(workItems[index * ioWordBits + bit].id);
+                advanceOperation(workItems[index * ioWordBits + bit].id, now);
             }
         }
     }
 
-    private void observeCancellation(OperationId id) nothrow @nogc
+    private void observeCancellation(OperationId id, long now) nothrow @nogc
     {
         auto work = &workItems[id.slot];
         if (work.cancellation != Status.ok)
@@ -1142,14 +1246,14 @@ private struct Worker
             requestCancel(id, Status.cancelled);
             return;
         }
-        const status = work.context.check().code;
+        const status = work.context.statusAt(now);
         if (status == Status.timedOut || status == Status.cancelled)
             requestCancel(id, status);
     }
 
-    private void advanceOperation(OperationId id) nothrow @nogc
+    private void advanceOperation(OperationId id, long now) nothrow @nogc
     {
-        observeCancellation(id);
+        observeCancellation(id, now);
         auto work = &workItems[id.slot];
         if (work.cancellation != Status.ok)
         {
@@ -1259,6 +1363,8 @@ private struct Worker
 
         private void waitForReadiness(uint millis) nothrow @nogc
         {
+            if (runtime.listener.valid)
+                acceptResumed();
             ReadyEvent[64] events;
             const budget = runtime.options.completionsPerTick;
             const count = budget < events.length ? budget : events.length;
@@ -1268,6 +1374,7 @@ private struct Worker
                 fail(ready.error);
                 return;
             }
+            const now = Deadline.afterMillis(0).monotonicNanoseconds;
             foreach (event; events[0 .. ready.value])
             {
                 if (atomicLoad(runtime.state) != State.running)
@@ -1282,11 +1389,7 @@ private struct Worker
                 }
                 if (event.token == listenToken)
                 {
-                    auto incoming = acceptConnection(runtime.listener);
-                    if (incoming.ok)
-                        admit(incoming.value);
-                    else if (incoming.error.code != Status.unavailable)
-                        fail(incoming.error);
+                    acceptReady();
                     continue;
                 }
                 const id = ConnectionId(index, cast(ushort) event.token, event.token >> 16);
@@ -1294,16 +1397,27 @@ private struct Worker
                     continue;
                 auto connection = &connections[id.slot];
                 if ((event.directions & Interest.read) && connection.read.generation != 0)
-                    performReadyIo(connection.read);
+                    performReadyIo(connection.read, now);
                 if (validConnection(id) && (event.directions & Interest.write) && connection.write.generation != 0)
-                    performReadyIo(connection.write);
+                    performReadyIo(connection.write, now);
             }
         }
 
-        private void performReadyIo(OperationId id) nothrow @nogc
+        private void acceptReady() nothrow @nogc
+        {
+            auto incoming = acceptConnection(runtime.listener);
+            if (incoming.ok)
+                admit(incoming.value);
+            else if (incoming.error.code == Status.resourceExhausted)
+                pauseAccept();
+            else if (incoming.error.code != Status.unavailable)
+                fail(incoming.error);
+        }
+
+        private void performReadyIo(OperationId id, long now) nothrow @nogc
         {
             // The previous callback in this poll batch may have cancelled or queued an operation.
-            advanceOperation(id);
+            advanceOperation(id, now);
             auto work = &workItems[id.slot];
             if (work.id != id)
                 return;
@@ -1343,7 +1457,7 @@ private struct Worker
     {
         private void advanceAccept() nothrow @nogc
         {
-            if (acceptPending || !runtime.listener.valid)
+            if (acceptPending || !runtime.listener.valid || !acceptResumed())
                 return;
             version (Windows)
             {
@@ -1420,6 +1534,8 @@ private struct Worker
                 acceptCancelSent = false;
                 if (event.status == Status.ok)
                     admit(event.accepted);
+                else if (event.status == Status.resourceExhausted)
+                    pauseAccept();
                 else if (event.status != Status.unavailable && atomicLoad(runtime.state) == State.running)
                     fail(Error(event.status, "asynchronous accept failed"));
                 return;
@@ -1441,7 +1557,7 @@ private struct Worker
             if (work.id != id || !work.pending)
                 return;
             work.pending = false;
-            observeCancellation(id);
+            observeCancellation(id, Deadline.afterMillis(0).monotonicNanoseconds);
             if (work.cancellation != Status.ok || event.status != Status.unavailable)
                 completeIo(id, event.status, event.bytes);
         }
@@ -1491,5 +1607,24 @@ private struct Worker
                     waitForCompletions(waitBudgetMillis);
             }
         }
+    }
+}
+
+version (unittest)
+{
+    /// Test probe: whether the owner's accepted socket for `id` has TCP_NODELAY in effect.
+    package(flint.reactor) bool connectionSendsImmediately(ConnectionId id) nothrow @nogc
+    {
+        version (Posix)
+        {
+            import flint.reactor.sys.sockets : sendsImmediately;
+
+            if (currentRuntime is null || id.ownerCore != currentWorkerIndex)
+                return false;
+            auto worker = &currentRuntime.workers[currentWorkerIndex];
+            return worker.validConnection(id) && sendsImmediately(worker.connections[id.slot].socket);
+        }
+        else
+            return false;
     }
 }

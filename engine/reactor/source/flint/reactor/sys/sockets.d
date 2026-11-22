@@ -6,7 +6,8 @@ import flint.arena : Error, Result, Status;
 
 version (Posix)
 {
-    import core.stdc.errno : EACCES, EADDRINUSE, EAGAIN, EINTR, EMFILE, ENFILE, errno;
+    import core.stdc.errno : EACCES, EADDRINUSE, EAGAIN, ECONNABORTED, EINTR, EMFILE, ENFILE,
+        ENOBUFS, ENOMEM, EPERM, EPROTO, errno;
     import core.sys.posix.arpa.inet : ntohs;
     import core.sys.posix.fcntl : FD_CLOEXEC, F_GETFL, F_SETFL, F_SETFD, O_NONBLOCK, fcntl;
     import core.sys.posix.netdb : addrinfo, freeaddrinfo, getaddrinfo;
@@ -58,6 +59,45 @@ version (Posix)
         return Status.ioError;
     }
 
+    /// Classify a failed accept. Aborted handshakes and filtered peers affect only that connection and
+    /// report unavailable; descriptor or buffer exhaustion reports resourceExhausted so the owner can back
+    /// off and retry while the connection waits in the backlog. Other codes indicate a broken listener.
+    package(flint.reactor) Status acceptError(int code) pure nothrow @nogc
+    {
+        if (code == EAGAIN || code == EINTR || code == ECONNABORTED || code == EPROTO || code == EPERM)
+            return Status.unavailable;
+        if (code == EMFILE || code == ENFILE || code == ENOBUFS || code == ENOMEM)
+            return Status.resourceExhausted;
+        return Status.ioError;
+    }
+
+    /// Send small writes immediately. Responses written in several parts (HTTP/2 frames, gRPC, WebSocket)
+    /// otherwise wait for the peer's delayed acknowledgement under Nagle's algorithm. Go sets the same option.
+    // SAFETY: setsockopt copies one local integer for the caller's live descriptor and retains no pointer.
+    package(flint.reactor) Status sendImmediately(Socket socket) @trusted nothrow @nogc
+    {
+        import core.sys.posix.netinet.in_ : IPPROTO_TCP;
+        import core.sys.posix.netinet.tcp : TCP_NODELAY;
+
+        const int enabled = 1;
+        if (setsockopt(socket.descriptor, IPPROTO_TCP, TCP_NODELAY, &enabled, enabled.sizeof) != 0)
+            return socketError(errno);
+        return Status.ok;
+    }
+
+    /// Whether sendImmediately is in effect for the descriptor.
+    // SAFETY: getsockopt writes at most one local integer and its local length for the live descriptor.
+    package(flint.reactor) bool sendsImmediately(Socket socket) @trusted nothrow @nogc
+    {
+        import core.sys.posix.netinet.in_ : IPPROTO_TCP;
+        import core.sys.posix.netinet.tcp : TCP_NODELAY;
+        import core.sys.posix.sys.socket : getsockopt;
+
+        int enabled;
+        socklen_t length = enabled.sizeof;
+        return getsockopt(socket.descriptor, IPPROTO_TCP, TCP_NODELAY, &enabled, &length) == 0 && enabled != 0;
+    }
+
     // SAFETY: The owner passes its live descriptor exactly once and invalidates it before releasing ownership.
     package(flint.reactor) void closeSocket(ref Socket socket) @trusted nothrow @nogc
     {
@@ -76,7 +116,7 @@ version (Posix)
         {
             const descriptor = accept4(listener.descriptor, null, null, socketFlags);
             if (descriptor < 0)
-                return Result!Socket(Socket.init, Error(socketError(errno), "accept failed"));
+                return Result!Socket(Socket.init, Error(acceptError(errno), "accept failed"));
             return Result!Socket(Socket(descriptor));
         }
     }
@@ -97,7 +137,7 @@ version (Posix)
         {
             const descriptor = accept(listener.descriptor, null, null);
             if (descriptor < 0)
-                return Result!Socket(Socket.init, Error(socketError(errno), "accept failed"));
+                return Result!Socket(Socket.init, Error(acceptError(errno), "accept failed"));
             if (!prepare(descriptor))
             {
                 close(descriptor);

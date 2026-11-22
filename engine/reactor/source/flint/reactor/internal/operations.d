@@ -5,19 +5,25 @@ import flint.reactor.types : Completion, ConnectionId;
 
 @safe:
 
+/// Slot indices fit below maxPendingIoPerCore (8192); the remaining token bits carry the generation.
+package(flint.reactor) enum operationSlotBits = 13;
+private enum slotMask = (1UL << operationSlotBits) - 1;
+/// A slot retires only after 2^51 reservations, so one busy slot never exhausts the fixed table.
+private enum maxGeneration = ulong.max >> operationSlotBits;
+
 package(flint.reactor) struct OperationId
 {
     uint slot = uint.max;
-    uint generation;
+    ulong generation;
 
     ulong token() const pure nothrow @nogc
     {
-        return (cast(ulong) generation << 32) | slot;
+        return (generation << operationSlotBits) | slot;
     }
 
     static OperationId fromToken(ulong token) pure nothrow @nogc
     {
-        return OperationId(cast(uint) token, cast(uint)(token >> 32));
+        return OperationId(cast(uint)(token & slotMask), token >> operationSlotBits);
     }
 }
 
@@ -32,7 +38,7 @@ private enum Phase : ubyte
 private struct Operation
 {
     ConnectionId connection;
-    uint generation;
+    ulong generation;
     uint next;
     Phase phase;
     Status cancellation;
@@ -48,6 +54,7 @@ package(flint.reactor) struct OperationTable
 
     this(uint capacity)
     {
+        assert(capacity <= 1U << operationSlotBits);
         slots = new Operation[capacity];
         if (capacity == 0)
             return;
@@ -68,6 +75,9 @@ package(flint.reactor) struct OperationTable
         auto slot = &slots[index];
         nextFree = slot.next;
         ++slot.generation;
+        // Public IoId tickets carry the low 32 bits, and a zero ticket generation means no operation.
+        if (cast(uint) slot.generation == 0)
+            ++slot.generation;
         slot.connection = connection;
         slot.phase = Phase.queued;
         slot.cancellation = Status.ok;
@@ -122,7 +132,7 @@ package(flint.reactor) struct OperationTable
         if (slot.phase != Phase.ready)
             return Status.conflict;
         slot.phase = Phase.free;
-        if (slot.generation != uint.max)
+        if (slot.generation < maxGeneration - 1)
         {
             slot.next = nextFree;
             nextFree = id.slot;
@@ -134,5 +144,29 @@ package(flint.reactor) struct OperationTable
     {
         return id.slot < slots.length && slots[id.slot].phase != Phase.free && slots[id.slot].generation
             == id.generation;
+    }
+}
+
+@("operation slots stay reusable after 2^32 reservations and never repeat a kernel token")
+unittest
+{
+    // A worker owns only maxPendingIoPerCore slots and its free list reuses the most recent slot first,
+    // so one hot slot passes 2^32 reservations after hours of sustained traffic.
+    auto table = OperationTable(1);
+    table.slots[0].generation = uint.max - 2;
+    const connection = ConnectionId(0, 0, 1);
+    OperationId previous;
+    foreach (round; 0 .. 4)
+    {
+        const reserved = table.reserve(connection);
+        assert(reserved.ok, "a busy operation slot retired permanently");
+        const id = reserved.value;
+        assert(id.token != previous.token && OperationId.fromToken(id.token) == id);
+        assert(cast(uint) id.generation != 0, "the public ticket generation must stay nonzero");
+        assert(table.start(previous) == Status.notFound);
+        assert(table.start(id) == Status.ok);
+        assert(table.finish(id, Status.ok, 0).ok);
+        assert(table.retire(id) == Status.ok);
+        previous = id;
     }
 }
