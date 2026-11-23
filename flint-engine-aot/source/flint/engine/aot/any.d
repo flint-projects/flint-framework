@@ -421,7 +421,7 @@ struct Any
     /// A short rendering for diagnostics: the value of scalars and strings, the type name otherwise.
     string toString() const
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         switch (slot_)
         {
@@ -432,7 +432,7 @@ struct Any
         case Slot.reference, Slot.box:
             return object_ is null ? "null" : typeName_;
         case Slot.enumeration:
-            return typeName_ ~ "(" ~ long_.to!string ~ ")";
+            return typeName_ ~ "(" ~ decimal(long_) ~ ")";
         default:
             return scalarText();
         }
@@ -440,20 +440,22 @@ struct Any
 
     private string scalarText() const
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal, doubleText, utf8;
 
         switch (slot_)
         {
         case Slot.boolean:
             return long_ != 0 ? "true" : "false";
         case Slot.floating:
-            return double_.to!string;
+            return doubleText(double_);
         case Slot.unsigned:
-            return (cast(ulong) long_).to!string;
+            return decimal(cast(ulong) long_);
         case Slot.character:
-            return (cast(dchar) long_).to!string;
+            // An invalid code point renders as U+FFFD; to!string threw a UTFException.
+            const text = utf8(cast(dchar) long_);
+            return text is null ? "\uFFFD" : text;
         default:
-            return long_.to!string;
+            return decimal(long_);
         }
     }
 

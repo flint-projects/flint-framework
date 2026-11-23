@@ -35,11 +35,12 @@ class AotContractException : Exception
 /// Throw `AotContractException` unless `contractVersion` is this runtime's.
 void checkContractVersion(uint contractVersion) pure
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     if (contractVersion < oldestAotContractVersion || contractVersion > aotContractVersion)
-        throw new AotContractException("generated code targets Flint AOT contract " ~ contractVersion.to!string
-                ~ "; this runtime implements contract " ~ aotContractVersion.to!string ~ ". Rebuild with flint build.");
+        throw new AotContractException("generated code targets Flint AOT contract " ~ decimal(cast(
+                ulong) contractVersion) ~ "; this runtime implements contract " ~ decimal(
+                cast(ulong) aotContractVersion) ~ ". Rebuild with flint build.");
 }
 
 /// What generated modules register, in definition order. Methods are `scope`: generated code holds the
