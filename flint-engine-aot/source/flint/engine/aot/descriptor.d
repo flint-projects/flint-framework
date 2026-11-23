@@ -13,6 +13,7 @@ constructor when the type has one. The runtime's own descriptors for scalars and
 module flint.engine.aot.descriptor;
 
 import flint.engine.aot.any : Any;
+import flint.engine.aot.expression : ExpressionSpec;
 import flint.engine.aot.name : typeNameOf;
 
 @safe:
@@ -92,6 +93,17 @@ struct MethodDescriptor
     MergedAnnotation[] annotations;
     /// The position in the declaring descriptor's `methods`.
     uint index;
+    /// The compiled SpEL attributes of `annotations` (contract 3); empty for older generated code.
+    ExpressionSpec[] expressions;
+
+    /// The compiled expression of `attribute` on `annotation` (a fully qualified name), or null.
+    const(ExpressionSpec)* expression(scope const(char)[] annotation, scope const(char)[] attribute) const return
+    {
+        foreach (ref spec; expressions)
+            if (spec.annotation == annotation && spec.attribute == attribute)
+                return &spec;
+        return null;
+    }
 }
 
 /// Flint AOT's table for one type.

@@ -1174,7 +1174,9 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
         {
             const bean = spec.bean;
             multicaster.addApplicationListener(new ApplicationListenerMethodAdapter(spec,
-                    () => beanFactory.getBean(bean), (ApplicationEvent event) { publishEvent(event); }));
+                    () => beanFactory.getBean(bean), (ApplicationEvent event) { publishEvent(event); },
+                    (string name) => beanFactory.getBean(name),
+                    (string text) => getEnvironment().resolveRequiredPlaceholders(text)));
         }
     }
 

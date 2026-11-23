@@ -466,8 +466,9 @@ private final class Recorder : AotRegistry
 unittest
 {
     // The registry installs from a module constructor in generated code; here, directly.
-    assert(aotContractVersion == 2);
-    checkContractVersion(1); // contract 2 is additive: contract-1 code still runs
+    assert(aotContractVersion == 3);
+    checkContractVersion(1); // contracts 2 and 3 are additive: older generated code still runs
+    checkContractVersion(2);
     installRegistry(&populate);
     assert(installedRegistry() is &populate);
     auto recorder = new Recorder;
@@ -477,9 +478,9 @@ unittest
 
     bool threw;
     try
-        checkContractVersion(3);
+        checkContractVersion(4);
     catch (AotContractException e)
-        threw = e.msg == "generated code targets Flint AOT contract 3; this runtime implements contract 2. "
+        threw = e.msg == "generated code targets Flint AOT contract 4; this runtime implements contract 3. "
             ~ "Rebuild with flint build.";
     assert(threw);
 }
@@ -536,4 +537,27 @@ unittest
     auto map = aa.fromEntries([Any.of("a")], [Any.of(1)]);
     assert(map.get!(int[string])["a"] == 1 && aa.toKeys(map)[0].get!string == "a" && aa.toValues(map)[0].get!int == 1);
     assert(descriptorOf!Pet.length is null && descriptorOf!Pet.enumValue is null);
+}
+
+unittest
+{
+    // Contract 3: a method's compiled SpEL attributes, looked up by annotation and attribute.
+    import flint.engine.aot.any : Any;
+    import flint.engine.aot.descriptor : MethodDescriptor;
+    import flint.engine.aot.expression : EvaluationContext, ExpressionSpec;
+
+    static Any doubled(EvaluationContext context) @safe
+    {
+        return Any.of(context.argument(0).get!long * 2);
+    }
+
+    MethodDescriptor method = {
+        name: "find", expressions: [
+            ExpressionSpec("flint.cache.annotation.Cacheable", "key", "#id * 2", &doubled)
+        ]
+    };
+    const key = method.expression("flint.cache.annotation.Cacheable", "key");
+    assert(key !is null && key.source == "#id * 2");
+    assert(method.expression("flint.cache.annotation.Cacheable", "condition") is null);
+    assert(method.expression("flint.cache.annotation.CachePut", "key") is null);
 }

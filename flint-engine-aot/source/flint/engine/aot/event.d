@@ -4,6 +4,7 @@
 module flint.engine.aot.event;
 
 import flint.engine.aot.any : Any;
+import flint.engine.aot.expression : CompiledExpression;
 
 @safe:
 
@@ -20,4 +21,6 @@ struct EventListenerSpec
     int order = int.max;
     /// Call the method with the event (or the payload of a `PayloadApplicationEvent`).
     void function(Object bean, ref Any event) @safe invoke;
+    /// `condition` compiled by Flint AOT (contract 3); null when there is no condition or for older generated code.
+    CompiledExpression conditionExpression;
 }

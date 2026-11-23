@@ -34,6 +34,7 @@ import flint.context : ApplicationContext, ApplicationEvent, GenericApplicationL
 import flint.core.annotation : AliasFor, ClassRef;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.event : EventListenerSpec;
+import flint.engine.aot.expression : EvaluationContext;
 import flint.engine.aot.name : canonicalTypeName;
 import flint.java.lang : IllegalStateException;
 import flint.java.util : stableSort;
@@ -203,18 +204,24 @@ class ApplicationListenerMethodAdapter : GenericApplicationListener
     private EventListenerSpec spec;
     private Object delegate() @safe beanSupplier;
     private void delegate(ApplicationEvent) @safe resultPublisher;
+    private Object delegate(string) @safe beanResolver;
+    private string delegate(string) @safe placeholderResolver;
 
     /// An adapter for `spec`, resolving its bean with `beanSupplier` and publishing non-null results through
-    /// `resultPublisher`.
+    /// `resultPublisher`. A condition's `@name` beans and `${...}` placeholders resolve through `beanResolver` and
+    /// `placeholderResolver`.
     this(EventListenerSpec spec, Object delegate() @safe beanSupplier,
-            void delegate(ApplicationEvent) @safe resultPublisher = null)
+            void delegate(ApplicationEvent) @safe resultPublisher = null, Object delegate(
+                string) @safe beanResolver = null, string delegate(string) @safe placeholderResolver = null)
     {
-        if (spec.condition.length)
+        if (spec.condition.length && spec.conditionExpression is null)
             throw new IllegalStateException("@EventListener condition '" ~ spec.condition ~ "' on bean '"
-                    ~ spec.bean ~ "' needs SpEL, which Flint AOT does not compile yet (contract section 9)");
+                    ~ spec.bean ~ "' was not compiled (generated before AOT contract 3); rebuild with flint build");
         this.spec = spec;
         this.beanSupplier = beanSupplier;
         this.resultPublisher = resultPublisher;
+        this.beanResolver = beanResolver;
+        this.placeholderResolver = placeholderResolver;
     }
 
     /// Whether `event` (or its payload) is an instance of the listener's event type.
@@ -242,10 +249,23 @@ class ApplicationListenerMethodAdapter : GenericApplicationListener
             argument = payload.getPayload();
         else
             argument = Any.of(event);
+        if (!shouldHandle(event, argument))
+            return;
         auto bean = beanSupplier();
         if (bean is null)
             return; // the listener bean's factory returned null: nothing to call, as in Spring
         spec.invoke(bean, argument);
+    }
+
+    /// Whether the compiled condition, if any, holds for `event` (Spring's `shouldHandle`).
+    private bool shouldHandle(Object event, Any argument)
+    {
+        import flint.engine.aot.expression : isTrue;
+
+        if (spec.conditionExpression is null)
+            return true;
+        return isTrue(spec.conditionExpression(new EventEvaluationContext(event, argument,
+                beanResolver, placeholderResolver)));
     }
 
     /// The `@Order` of the method.
@@ -258,6 +278,66 @@ class ApplicationListenerMethodAdapter : GenericApplicationListener
     string getBeanName() const pure nothrow @nogc
     {
         return spec.bean;
+    }
+}
+
+/// The evaluation context of an `@EventListener` condition: the listener's argument, and `event` and `args` on
+/// the root (Spring's `EventExpressionRootObject`).
+private final class EventEvaluationContext : EvaluationContext
+{
+    private Object event;
+    private Any argument_;
+    private Object delegate(string) @safe beanResolver;
+    private string delegate(string) @safe placeholderResolver;
+
+    this(Object event, Any argument, Object delegate(string) @safe beanResolver,
+            string delegate(string) @safe placeholderResolver)
+    {
+        this.event = event;
+        this.argument_ = argument;
+        this.beanResolver = beanResolver;
+        this.placeholderResolver = placeholderResolver;
+    }
+
+    Any argument(size_t index)
+    {
+        return index == 0 ? argument_ : Any.init;
+    }
+
+    Any result()
+    {
+        return Any.init;
+    }
+
+    string methodName()
+    {
+        return null;
+    }
+
+    Any rootFunction(string name, scope Any[])
+    {
+        throw new IllegalStateException("@EventListener conditions have no root function '" ~ name ~ "'");
+    }
+
+    Any rootProperty(string name)
+    {
+        if (name == "event")
+            return Any.of(event);
+        if (name == "args")
+            return Any.of([argument_]);
+        throw new IllegalStateException("@EventListener conditions have no root property '" ~ name ~ "'");
+    }
+
+    Object bean(string name)
+    {
+        if (beanResolver is null)
+            throw new IllegalStateException("No bean resolver for @" ~ name);
+        return beanResolver(name);
+    }
+
+    string placeholder(string text)
+    {
+        return placeholderResolver is null ? text : placeholderResolver(text);
     }
 }
 

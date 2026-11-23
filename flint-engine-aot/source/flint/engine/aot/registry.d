@@ -17,7 +17,7 @@ import flint.engine.aot.query : DerivedQuery;
 
 /// The contract version this runtime implements. Contract 2 only added fields with defaults, so code generated
 /// for contract 1 is accepted too.
-enum uint aotContractVersion = 2;
+enum uint aotContractVersion = 3;
 
 /// The oldest contract version this runtime accepts.
 enum uint oldestAotContractVersion = 1;

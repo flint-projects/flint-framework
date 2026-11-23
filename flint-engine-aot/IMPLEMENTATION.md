@@ -1,7 +1,7 @@
 # Flint AOT runtime
 
 `flint:engine-aot` (`framework/engine-aot`, a Spring-layer module of `policy/framework.json` whose `sys` directory is the audited `unsafe` root) is the runtime half of the Flint AOT contract
-([docs/spring/aot-contract.md](../../docs/spring/aot-contract.md), contract 2, accepting contract-1 code). Generated modules and the
+([docs/spring/aot-contract.md](../../docs/spring/aot-contract.md), contract 3, accepting contract-1 and contract-2 code). Generated modules and the
 framework packages (`flint:beans`, `flint:context`, web-mvc, data) meet here. Every module is a leaf; there is no
 `package.d`.
 
@@ -38,3 +38,14 @@ Additive fields, so contract-1 generated code still runs (`checkContractVersion`
 `descriptorOf!T` fills the builders for enums, arrays and associative arrays directly, and for other types through
 static hooks (`__flintElements`/`__flintFromElements`, `__flintEntries`/`__flintFromEntries`,
 `__flintUnwrap`/`__flintWrap`) that flint:java's collections and `Optional` declare.
+
+## Contract 3
+
+Additive, so contract-1 and contract-2 generated code still runs (`checkContractVersion` accepts 1 to 3).
+`flint.engine.aot.expression` holds method-level SpEL compiled to D: `EvaluationContext` (arguments, result,
+method name, root functions and properties, beans, placeholders), `CompiledExpression` and `ExpressionSpec`.
+`MethodDescriptor.expressions` lists a method's compiled attributes (`expression(annotation, attribute)` finds
+one), and `EventListenerSpec.conditionExpression` is a listener's compiled condition. flint:context evaluates it
+before each dispatch (`isTrue`: a `bool` true or the string `true`); a condition without its compiled form fails at
+refresh.
+

@@ -37,7 +37,11 @@ Skipped Java tests (35 in the class):
 - eventListenerWorksWithCustomScope: custom scopes are not supported.
 - asyncProcessingApplied, asyncProcessingAppliedWithInterfaceProxy, asyncProcessingAppliedWithScopedProxy,
   exceptionNotPropagatedWithAsync: `@Async` on a task executor.
-- conditionMatch, conditionMatchWithProxy, conditionDoesNotMatch: SpEL conditions (contract section 9).
+- conditionMatchWithProxy: AOP proxies (MethodValidationPostProcessor).
+
+conditionMatch and conditionDoesNotMatch use the conditions as Flint AOT compiles them (contract 3); the
+timestamp is taken one millisecond early, because Flint's event clock has millisecond resolution and Java's test
+relies on the event being created strictly later.
 
 simpleEventJavaConfig and metaAnnotationIsDiscovered end in Java by removing listeners by id
 (`removeApplicationListeners` and `SmartApplicationListener.getListenerId`), which Flint's multicaster does not
@@ -52,6 +56,7 @@ import flint.context.event : ApplicationContextEvent, ContextClosedEvent, Contex
 import flint.engine.aot.any : Any;
 import flint.engine.aot.bean : BeanDefinition, BeanFactory;
 import flint.engine.aot.event : EventListenerSpec;
+import flint.engine.aot.expression : CompiledExpression, EvaluationContext;
 import flint.engine.aot.name : typeNameOf;
 import flint.engine.aot.registry : AotRegistry;
 import flint.java.lang : IllegalStateException;
@@ -640,4 +645,136 @@ unittest
     context.getBean!UseMissingEventListener();
     context.publishEvent(new TestEvent(null));
     context.close();
+}
+
+// ---- conditionMatch, conditionDoesNotMatch (contract 3: conditions compiled to D)
+
+private final class TestConditionEvaluator
+{
+    bool valid(double ratio)
+    {
+        return ratio == 42;
+    }
+}
+
+private final class ConditionalEventListener : TestEventListener
+{
+    void handleTimestamp(long timestamp) // @ConditionalEvent("#root.event.timestamp > #p0")
+    {
+        collectEvent(timestamp);
+    }
+
+    void handleRatio(double ratio) // @ConditionalEvent("@conditionEvaluator.valid(#p0)")
+    {
+        collectEvent(ratio);
+    }
+}
+
+private void listenTimestamp(Object bean, ref Any event)
+{
+    (cast(ConditionalEventListener) bean).handleTimestamp(event.get!long);
+}
+
+private void listenRatio(Object bean, ref Any event)
+{
+    (cast(ConditionalEventListener) bean).handleRatio(event.get!double);
+}
+
+private Any conditionMsgOk(EvaluationContext context) // "'OK'.equals(#root.event.msg)"
+{
+    return Any.of((cast(TestEvent) context.rootProperty("event").asObject()).msg == "OK");
+}
+
+private Any conditionPayloadOk(EvaluationContext context) // "#payload.startsWith('OK')"
+{
+    const payload = context.argument(0).get!string;
+    return Any.of(payload.length >= 2 && payload[0 .. 2] == "OK");
+}
+
+private Any conditionTimestamp(EvaluationContext context) // "#root.event.timestamp > #p0"
+{
+    auto event = cast(ApplicationEvent) context.rootProperty("event").asObject();
+    return Any.of(event.getTimestamp() > context.argument(0).get!long);
+}
+
+private Any conditionRatio(EvaluationContext context) // "@conditionEvaluator.valid(#p0)"
+{
+    return Any.of((cast(TestConditionEvaluator) context.bean("conditionEvaluator"))
+            .valid(context.argument(0).get!double));
+}
+
+private EventListenerSpec conditional(string eventType, string condition, void function(Object,
+        ref Any) @safe invoke, CompiledExpression expression)
+{
+    auto spec = EventListenerSpec("listener", eventType, condition, int.max, invoke);
+    spec.conditionExpression = expression;
+    return spec;
+}
+
+private void populateConditional(scope AotRegistry registry)
+{
+    registry.begin(3, 1);
+    basicConfiguration(registry);
+    registry.bean(record!TestConditionEvaluator("conditionEvaluator", &create!TestConditionEvaluator));
+    listenerBean!ConditionalEventListener(registry, "listener");
+    registry.listener(conditional(typeNameOf!TestEvent, "'OK'.equals(#root.event.msg)",
+            &listenHandle, &conditionMsgOk));
+    registry.listener(conditional("string", "#payload.startsWith('OK')", &listenHandleString, &conditionPayloadOk));
+    registry.listener(EventListenerSpec("listener", "bool", null, int.max, &listenHandleBooleanOrInteger));
+    registry.listener(EventListenerSpec("listener", "int", null, int.max, &listenHandleBooleanOrInteger));
+    registry.listener(conditional("long", "#root.event.timestamp > #p0", &listenTimestamp, &conditionTimestamp));
+    registry.listener(conditional("double", "@conditionEvaluator.valid(#p0)", &listenRatio, &conditionRatio));
+    registry.end();
+}
+
+unittest
+{
+    // conditionMatch
+    auto loaded = doLoad(&populateConditional);
+    const long timestamp = new TestEvent().getTimestamp() - 1;
+    auto event = new TestEvent(new Object, "OK");
+    auto listener = loaded.context.getBean!ConditionalEventListener();
+    loaded.eventCollector.assertNoEventReceived(listener);
+    loaded.context.publishEvent(event);
+    loaded.eventCollector.assertEvent(listener, event);
+    loaded.eventCollector.assertTotalEventsCount(1);
+    loaded.context.publishEvent("OK");
+    loaded.eventCollector.assertEvent(listener, event, "OK");
+    loaded.eventCollector.assertTotalEventsCount(2);
+    loaded.context.publishEvent("NOT OK");
+    loaded.eventCollector.assertTotalEventsCount(2);
+    loaded.context.publishEvent(timestamp);
+    loaded.eventCollector.assertEvent(listener, event, "OK", timestamp);
+    loaded.eventCollector.assertTotalEventsCount(3);
+    loaded.context.publishEvent(42.0);
+    loaded.eventCollector.assertEvent(listener, event, "OK", timestamp, 42.0);
+    loaded.eventCollector.assertTotalEventsCount(4);
+}
+
+unittest
+{
+    // conditionDoesNotMatch
+    auto loaded = doLoad(&populateConditional);
+    auto listener = loaded.context.getBean!ConditionalEventListener();
+    loaded.context.publishEvent(new TestEvent(new Object, "KO"));
+    loaded.context.publishEvent("KO");
+    loaded.context.publishEvent(long.max);
+    loaded.context.publishEvent(24.0);
+    loaded.eventCollector.assertNoEventReceived(listener);
+    loaded.eventCollector.assertTotalEventsCount(0);
+}
+
+unittest
+{
+    // A condition without its compiled form (generated code before contract 3) fails at refresh.
+    static void populate(scope AotRegistry registry) @safe
+    {
+        registry.begin(2, 1);
+        basicConfiguration(registry);
+        listenerBean!ConditionalEventListener(registry, "listener");
+        registry.listener(EventListenerSpec("listener", "string", "#payload == 'x'", int.max, &listenHandleString));
+        registry.end();
+    }
+
+    assert(collectException!IllegalStateException(new AnnotationConfigApplicationContext(&populate)) !is null);
 }
