@@ -222,7 +222,7 @@ version (linux)
                 echo(Backend.ioUring);
         }
 
-        @("io_uring reports the setup flags the kernel accepted: cooperative task running from Linux 5.19")
+        @("io_uring reports its accepted setup flags: deferred task running from 6.1, cooperative from 5.19")
         unittest
         {
             import core.sys.posix.sys.utsname : uname, utsname;
@@ -230,7 +230,9 @@ version (linux)
 
             if (environment.get("FLINT_TEST_URING_DENIED") == "1")
                 return;
-            enum uint cqsize = 1u << 3, cooperative = (1u << 8) | (1u << 9); // CQSIZE; COOP_TASKRUN | TASKRUN_FLAG
+            // CQSIZE; COOP_TASKRUN | TASKRUN_FLAG; R_DISABLED | SINGLE_ISSUER | DEFER_TASKRUN | TASKRUN_FLAG
+            enum uint cqsize = 1u << 3, cooperative = (1u << 8) | (1u << 9),
+                    deferred = (1u << 6) | (1u << 12) | (1u << 13) | (1u << 9);
             ReactorOptions options;
             options.cores = 1;
             options.backend = Backend.ioUring;
@@ -251,8 +253,13 @@ version (linux)
                 else
                     break;
             }
-            const recent = version_[0] > 5 || (version_[0] == 5 && version_[1] >= 19);
-            assert((flags & cooperative) == (recent ? cooperative : 0));
+            const mode = flags & (cooperative | deferred);
+            if (version_[0] > 6 || (version_[0] == 6 && version_[1] >= 1))
+                assert(mode == deferred);
+            else if (version_[0] > 5 || (version_[0] == 5 && version_[1] >= 19))
+                assert(mode == cooperative);
+            else
+                assert(mode == 0);
 
             options.backend = Backend.epoll;
             const readiness = Reactor.create(options);

@@ -18,6 +18,7 @@ struct flint_uring {
     size_t pending;
     size_t limit;
     unsigned setup_flags; /* the IORING_SETUP_* flags the kernel accepted */
+    int enabled;          /* a ring set up disabled has been enabled by its issuing thread */
 };
 
 static int required_operations_supported(struct io_uring *ring)
@@ -48,16 +49,25 @@ int flint_uring_open(unsigned entries, void **out)
      * holds what one loop pass prepares before it submits, and `reserve` submits early when it fills, so it is
      * capped: the kernel keeps both rings resident, and at the HTTP engine's 4,160 operations per worker a
      * submission queue as large as the completion queue cost 1 MiB of SQEs per worker. */
-    /* Cooperative task running (Linux 5.19): completions are processed when the loop next enters the kernel,
-     * instead of interrupting it for each one, and IORING_SQ_TASKRUN tells liburing when it must enter. A kernel
-     * that does not know the flags rejects them with EINVAL: retry without them. */
-    static const unsigned cooperative = IORING_SETUP_COOP_TASKRUN | IORING_SETUP_TASKRUN_FLAG;
+    /* Task running, best first; a kernel that does not know a flag rejects the set with EINVAL and the next is tried.
+     * - Deferred (Linux 6.1): completions are processed only when the ring's one issuing thread waits for them, with
+     *   no interruption and no cross-thread work. The ring starts disabled (R_DISABLED, 5.10) and the first thread
+     *   to submit or wait enables it and becomes its issuer (SINGLE_ISSUER, 6.0): each reactor worker owns its ring,
+     *   which the main thread creates and, after the workers have joined, closes, without submitting.
+     * - Cooperative (5.19): completions are processed when the loop next enters the kernel instead of interrupting
+     *   it for each one.
+     * TASKRUN_FLAG makes the kernel set IORING_SQ_TASKRUN when work is pending, so liburing's peek enters for it. */
+    static const unsigned attempts[] = {
+        IORING_SETUP_R_DISABLED | IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN | IORING_SETUP_TASKRUN_FLAG,
+        IORING_SETUP_COOP_TASKRUN | IORING_SETUP_TASKRUN_FLAG,
+        0,
+    };
     unsigned submission = entries < FLINT_URING_SQ_ENTRIES ? entries : FLINT_URING_SQ_ENTRIES;
     struct io_uring_params params;
     int status = -EINVAL;
-    for (int attempt = 0; attempt < 2 && status == -EINVAL; ++attempt) {
+    for (size_t attempt = 0; attempt < sizeof(attempts) / sizeof(attempts[0]) && status == -EINVAL; ++attempt) {
         memset(&params, 0, sizeof(params));
-        params.flags = IORING_SETUP_CQSIZE | (attempt == 0 ? cooperative : 0);
+        params.flags = IORING_SETUP_CQSIZE | attempts[attempt];
         params.cq_entries = entries;
         status = io_uring_queue_init_params(submission, &owner->ring, &params);
     }
@@ -94,6 +104,19 @@ void flint_uring_close(void *ring)
     free(owner);
 }
 
+/* A ring set up disabled is enabled by the first thread that submits to it or waits on it, which becomes its single
+   issuer; the reactor only ever does either on the ring's worker thread. */
+static int ensure_enabled(struct flint_uring *owner)
+{
+    if (owner->enabled || (owner->setup_flags & IORING_SETUP_R_DISABLED) == 0)
+        return 0;
+    int status = io_uring_enable_rings(&owner->ring);
+    if (status < 0)
+        return status;
+    owner->enabled = 1;
+    return 0;
+}
+
 static struct io_uring_sqe *reserve(struct flint_uring *owner)
 {
     if (owner->pending == owner->limit)
@@ -116,6 +139,9 @@ int flint_uring_accept(void *ring, int listener, uint64_t token)
 {
     if (ring == NULL || listener < 0 || token == 0)
         return -EINVAL;
+    int enabled = ensure_enabled(ring);
+    if (enabled < 0)
+        return enabled;
     struct io_uring_sqe *sqe = reserve(ring);
     if (sqe == NULL)
         return -EAGAIN;
@@ -128,6 +154,9 @@ int flint_uring_recv(void *ring, int fd, uint8_t *buffer, unsigned length, uint6
 {
     if (ring == NULL || fd < 0 || buffer == NULL || length == 0 || token == 0)
         return -EINVAL;
+    int enabled = ensure_enabled(ring);
+    if (enabled < 0)
+        return enabled;
     struct io_uring_sqe *sqe = reserve(ring);
     if (sqe == NULL)
         return -EAGAIN;
@@ -140,6 +169,9 @@ int flint_uring_send(void *ring, int fd, const uint8_t *buffer, unsigned length,
 {
     if (ring == NULL || fd < 0 || buffer == NULL || length == 0 || token == 0)
         return -EINVAL;
+    int enabled = ensure_enabled(ring);
+    if (enabled < 0)
+        return enabled;
     struct io_uring_sqe *sqe = reserve(ring);
     if (sqe == NULL)
         return -EAGAIN;
@@ -152,6 +184,9 @@ int flint_uring_poll_readable(void *ring, int fd, uint64_t token)
 {
     if (ring == NULL || fd < 0 || token == 0)
         return -EINVAL;
+    int enabled = ensure_enabled(ring);
+    if (enabled < 0)
+        return enabled;
     struct io_uring_sqe *sqe = reserve(ring);
     if (sqe == NULL)
         return -EAGAIN;
@@ -164,6 +199,19 @@ int flint_uring_cancel(void *ring, uint64_t target_token)
 {
     if (ring == NULL || target_token == 0)
         return -EINVAL;
+    int enabled = ensure_enabled(ring);
+    if (enabled < 0)
+        return enabled;
+    /* ADR-017 decision 7: a read the kernel can complete with data before its cancellation takes effect delivers
+       that data. With deferred task running, a receive whose data has arrived only completes when the issuer next
+       enters for events, after this cancellation would be submitted; run that pending work first, so such a read
+       posts its completion with the data, as it does when task work runs at once. Nothing is submitted here. */
+    struct flint_uring *owner = ring;
+    if ((owner->setup_flags & IORING_SETUP_DEFER_TASKRUN) != 0) {
+        int flushed = io_uring_get_events(&owner->ring);
+        if (flushed < 0 && flushed != -EINTR && flushed != -EAGAIN && flushed != -EBUSY)
+            return flushed;
+    }
     struct io_uring_sqe *sqe = reserve(ring);
     if (sqe == NULL)
         return -EAGAIN;
@@ -178,7 +226,9 @@ int flint_uring_wait(void *ring, unsigned timeout_ms, uint64_t *token_out, int *
         return -EINVAL;
     struct flint_uring *owner = ring;
     struct io_uring_cqe *cqe = NULL;
-    int status;
+    int status = ensure_enabled(owner);
+    if (status < 0)
+        return status;
     if (timeout_ms == 0) {
         /* A poll: submit what is queued (no syscall when nothing is) and take a completion if one is there. */
         status = io_uring_submit(&owner->ring);

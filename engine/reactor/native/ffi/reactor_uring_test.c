@@ -5,6 +5,7 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -197,22 +198,48 @@ static void ring_footprint(void)
     flint_uring_close(owner);
 }
 
-/* A kernel from 5.19 on accepts cooperative task running, and the ring records it; an older one gets a ring
-   without it (flint_uring_open retries without the flags on EINVAL) that still serves the round trip above. */
+/* The ring records the task-running mode the kernel accepted: deferred from 6.1 (disabled until its issuing thread
+   first uses it), cooperative from 5.19, neither before (flint_uring_open retries with less on EINVAL). Each mode
+   serves the round trips in this file. */
 static void negotiated_flags(void *owner)
 {
-    enum { cqsize = 1u << 3, coop_taskrun = 1u << 8, taskrun_flag = 1u << 9 };
+    enum {
+        cqsize = 1u << 3, r_disabled = 1u << 6, coop_taskrun = 1u << 8, taskrun_flag = 1u << 9,
+        single_issuer = 1u << 12, defer_taskrun = 1u << 13
+    };
+    const unsigned deferred = r_disabled | single_issuer | defer_taskrun | taskrun_flag;
+    const unsigned cooperative = coop_taskrun | taskrun_flag;
     struct utsname host;
     CHECK(uname(&host) == 0);
     int major = 0, minor = 0;
     CHECK(sscanf(host.release, "%d.%d", &major, &minor) == 2);
     const unsigned flags = flint_uring_setup_flags(owner);
     CHECK((flags & cqsize) != 0);
-    if (major > 5 || (major == 5 && minor >= 19))
-        CHECK((flags & (coop_taskrun | taskrun_flag)) == (coop_taskrun | taskrun_flag));
+    if (major > 6 || (major == 6 && minor >= 1))
+        CHECK((flags & (deferred | coop_taskrun)) == deferred);
+    else if (major > 5 || (major == 5 && minor >= 19))
+        CHECK((flags & (deferred | cooperative)) == cooperative);
     else
-        CHECK((flags & (coop_taskrun | taskrun_flag)) == 0);
+        CHECK((flags & (deferred | cooperative)) == 0);
     CHECK(flint_uring_setup_flags(NULL) == 0);
+}
+
+/* The reactor creates every ring on the thread that starts it and uses each from its worker thread: the first
+   thread that submits becomes the issuer of a deferred ring. */
+static void *round_trip_thread(void *owner)
+{
+    round_trip(owner);
+    return NULL;
+}
+
+static void issued_by_another_thread(void)
+{
+    void *owner = NULL;
+    CHECK(flint_uring_open(8, &owner) == 0);
+    pthread_t worker;
+    CHECK(pthread_create(&worker, NULL, round_trip_thread, owner) == 0);
+    CHECK(pthread_join(worker, NULL) == 0);
+    flint_uring_close(owner);
 }
 
 int main(int argc, char *argv[])
@@ -233,6 +260,7 @@ int main(int argc, char *argv[])
     accept_connection(owner);
     borrowed_readiness(owner);
     flint_uring_close(owner);
+    issued_by_another_thread();
     beyond_submission_queue();
     ring_footprint();
     return 0;
