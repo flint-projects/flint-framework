@@ -39,14 +39,17 @@ each dependency on demand, in Spring's sequence: instantiate, `BeanNameAware`/`B
 module flint.beans.factory.support;
 
 import flint.beans : BeansException;
-import flint.beans.factory : BeanCreationException, BeanCurrentlyInCreationException,
-    BeanDefinitionStoreException, BeanFactory, BeanFactoryAware, BeanNameAware,
-    BeanNotOfRequiredTypeException, DisposableBean, InitializingBean,
+import flint.beans.factory : BeanCreationException,
+    BeanCurrentlyInCreationException, BeanDefinitionStoreException,
+    BeanFactory, BeanFactoryAware, BeanIsNotAFactoryException, BeanNameAware,
+    BeanNotOfRequiredTypeException,
+    DisposableBean, FactoryBeanErased, InitializingBean,
     NoSuchBeanDefinitionException, NoUniqueBeanDefinitionException, SmartInitializingSingleton;
 import flint.beans.factory.config : BeanDefinition, BeanPostProcessor,
     ConfigurableListableBeanFactory, ConfigurationPropertiesBinder, DestructionAwareBeanPostProcessor;
 import flint.engine.aot.descriptor : DescriptorTable;
-import flint.core : AliasRegistry, AttributeAccessorSupport, Ordered, PriorityOrdered, SimpleAliasRegistry;
+import flint.core : AliasRegistry, AttributeAccessorSupport, OrderComparator, Ordered,
+    PriorityOrdered, SimpleAliasRegistry;
 import flint.core.convert : ConversionService, TypeDescriptor;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.bean : AotBeanDefinition = BeanDefinition, AotBeanFactory = BeanFactory, ScopeKind;
@@ -412,6 +415,8 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     private RootBeanDefinition[string] definitions;
     private string[] definitionNames;
     private Object[string] singletons;
+    private Object[string] factoryBeanObjects; // the objects of singleton FactoryBeans, by factory name
+    private OrderComparator dependencyComparator;
     private Object[string] rawInstances; // what the factory created: destruction callbacks receive it
     private DisposableBean[string] disposableBeans;
     private Object[string] earlySingletons;
@@ -475,6 +480,18 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     bool isAllowCircularReferences() const pure nothrow @nogc
     {
         return allowCircularReferences;
+    }
+
+    /// The comparator for ordering dependencies and picking the highest `@Priority` candidate; null for none.
+    void setDependencyComparator(OrderComparator comparator) pure nothrow @nogc
+    {
+        dependencyComparator = comparator;
+    }
+
+    /// The dependency comparator, or null.
+    OrderComparator getDependencyComparator() pure nothrow @nogc
+    {
+        return dependencyComparator;
     }
 
     /// Make `autowiredValue` injectable as `dependencyType` without being a bean (Spring's
@@ -822,25 +839,7 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     /// A null-supplied bean is not found, so the parent is asked next, as in Spring.
     private NamedBean resolveNamedBean(string type)
     {
-        auto names = getBeanNamesForTypeErased(type);
-        if (names.length > 1)
-        {
-            string[] autowireCandidates;
-            foreach (name; names)
-                if ((name in definitions) is null || definitions[name].isAutowireCandidate())
-                    autowireCandidates ~= name;
-            if (autowireCandidates.length)
-                names = autowireCandidates;
-        }
-        if (names.length > 1)
-        {
-            auto chosen = determinePrimaryCandidate(names, type);
-            if (chosen is null)
-                chosen = determineDefaultCandidate(names);
-            if (chosen is null)
-                throw new NoUniqueBeanDefinitionException(type, names);
-            names = [chosen];
-        }
+        auto names = uniqueCandidate(getBeanNamesForTypeErased(type), type);
         if (names.length == 1)
         {
             auto bean = doGetBean(names[0]);
@@ -856,19 +855,76 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         return NamedBean.init;
     }
 
+    /// `names` narrowed to autowire candidates, then to the primary, highest-priority or default one. Throws
+    /// `NoUniqueBeanDefinitionException` when several remain.
+    private string[] uniqueCandidate(string[] names, string type)
+    {
+        if (names.length <= 1)
+            return names;
+        string[] autowireCandidates;
+        foreach (name; names)
+            if ((name in definitions) is null || definitions[name].isAutowireCandidate())
+                autowireCandidates ~= name;
+        if (autowireCandidates.length)
+            names = autowireCandidates;
+        if (names.length <= 1)
+            return names;
+        auto chosen = determinePrimaryCandidate(names, type);
+        if (chosen is null)
+            chosen = determineHighestPriorityCandidate(names, type);
+        if (chosen is null)
+            chosen = determineDefaultCandidate(names);
+        if (chosen is null)
+            throw new NoUniqueBeanDefinitionException(type, names);
+        return [chosen];
+    }
+
     /// Whether a definition or singleton named `name` exists (here or in the parent).
     bool containsBean(string name)
     {
-        const beanName = canonicalName(name);
+        const beanName = canonicalName(transformedBeanName(name));
         if (containsSingleton(beanName) || containsBeanDefinition(beanName))
-            return true;
+            return !isFactoryDereference(name) || isFactoryBean(beanName);
         return parent !is null && parent.containsBean(name);
+    }
+
+    /// Whether the bean `name` is a `FactoryBean`: its instance is one, or its definition's types list one.
+    bool isFactoryBean(string name)
+    {
+        const beanName = canonicalName(transformedBeanName(name));
+        if (auto singleton = beanName in singletons)
+            return cast(FactoryBeanErased)*singleton !is null;
+        if (auto definition = beanName in definitions)
+        {
+            if (factoryObjectTypes(*definition).length)
+                return true;
+            foreach (type; definition.getTypes())
+                if (type == typeNameOf!FactoryBeanErased)
+                    return true;
+            return false;
+        }
+        if (auto listable = cast(DefaultListableBeanFactory) parent)
+            return listable.isFactoryBean(name);
+        return false;
+    }
+
+    /// The types a FactoryBean definition's object can be injected as (Flint AOT's `objectTypes`, else the
+    /// `factoryBeanObjectType` attribute); empty when the definition declares none.
+    private static string[] factoryObjectTypes(ref RootBeanDefinition definition)
+    {
+        if (auto types = definition.getAotDefinition().objectTypes)
+            return types;
+        auto attribute = definition.getAttribute("factoryBeanObjectType");
+        return attribute.typeName == "string" ? [attribute.get!string] : null;
     }
 
     /// Whether `name` is a singleton.
     bool isSingleton(string name)
     {
-        const beanName = canonicalName(name);
+        const beanName = canonicalName(transformedBeanName(name));
+        if (auto singleton = beanName in singletons)
+            if (auto factory = cast(FactoryBeanErased)*singleton)
+                return isFactoryDereference(name) || factory.isSingleton();
         if (containsSingleton(beanName) && !containsBeanDefinition(beanName))
             return true;
         return getBeanDefinition(beanName).isSingleton();
@@ -883,17 +939,16 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     /// Whether the bean `name` can be injected as `typeName`.
     bool isTypeMatchErased(string name, string typeName)
     {
-        const beanName = canonicalName(name);
+        const dereference = isFactoryDereference(name);
+        const beanName = canonicalName(transformedBeanName(name));
         auto singleton = beanName in singletons;
+        auto factory = singleton is null ? null : cast(FactoryBeanErased)*singleton;
+        if (factory !is null && !dereference)
+            return isFactoryObjectOfType(factory, beanName, typeName);
         if (singleton !is null && !isNullBean(*singleton) && isInstanceOfType(*singleton, typeName))
             return true;
         if (auto definition = beanName in definitions)
-        {
-            foreach (type; definition.getTypes())
-                if (type == typeName)
-                    return true;
-            return definition.getBeanClassName() == typeName;
-        }
+            return isDefinitionOfType(*definition, typeName, dereference);
         if (singleton !is null)
             return false;
         if (parent !is null)
@@ -901,11 +956,39 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         throw new NoSuchBeanDefinitionException(name);
     }
 
+    /// Whether the object of the singleton `factory` named `beanName` is a `typeName`.
+    private bool isFactoryObjectOfType(FactoryBeanErased factory, string beanName, string typeName)
+    {
+        if (factory.getObjectType() == typeName)
+            return true;
+        auto created = beanName in factoryBeanObjects;
+        return created !is null && isInstanceOfType(*created, typeName);
+    }
+
+    /// Whether `definition`'s bean (or, for a FactoryBean without `dereference`, its object) is a `typeName`.
+    private static bool isDefinitionOfType(ref RootBeanDefinition definition, string typeName, bool dereference)
+    {
+        auto objectTypes = factoryObjectTypes(definition);
+        auto types = objectTypes.length && !dereference ? objectTypes : definition.getTypes();
+        foreach (type; types)
+            if (type == typeName)
+                return true;
+        return !(objectTypes.length && !dereference) && definition.getBeanClassName() == typeName;
+    }
+
     /// The bean's type name: the singleton instance's class when there is one, else the definition's; or null.
     string getTypeName(string name)
     {
-        const beanName = canonicalName(name);
+        const beanName = canonicalName(transformedBeanName(name));
         auto singleton = beanName in singletons;
+        if (!isFactoryDereference(name))
+        {
+            if (auto factory = singleton is null ? null : cast(FactoryBeanErased)*singleton)
+                return factory.getObjectType();
+            if (auto definition = beanName in definitions)
+                if (auto objectTypes = factoryObjectTypes(*definition))
+                    return definition.isAbstract() ? null : objectTypes[0];
+        }
         if (singleton !is null && !isNullBean(*singleton))
             return canonicalTypeName(typeid(*singleton).name);
         if (auto definition = beanName in definitions)
@@ -940,10 +1023,18 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
                 continue;
             if (isTypeMatchErased(name, typeName))
                 result ~= name;
+            else if (isFactoryBean(name) && isTypeMatchErased(FACTORY_BEAN_PREFIX ~ name, typeName))
+                result ~= FACTORY_BEAN_PREFIX ~ name; // the factory itself matches, as Spring's `&name`
         }
         foreach (name; singletonOrder)
-            if ((name in definitions) is null && isInstanceOfType(singletons[name], typeName))
+        {
+            if ((name in definitions) !is null)
+                continue;
+            if (isTypeMatchErased(name, typeName))
                 result ~= name;
+            else if (cast(FactoryBeanErased) singletons[name]!is null && isInstanceOfType(singletons[name], typeName))
+                result ~= FACTORY_BEAN_PREFIX ~ name;
+        }
         return result;
     }
 
@@ -991,7 +1082,7 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         {
             auto definition = definitions[name];
             if (!definition.isAbstract() && definition.isSingleton() && !definition.isLazyInit())
-                doGetBean(name);
+                doGetRawBean(name, name); // a FactoryBean itself, not its object (Spring's SmartFactoryBean aside)
         }
         foreach (name; definitionNames.dup)
             if (auto smart = cast(SmartInitializingSingleton) getSingleton(name))
@@ -1005,7 +1096,75 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     /// dependency, so it is destroyed after it (Spring's `currentlyCreatedBean` and autowired-bean tracking).
     protected Object doGetBean(string name)
     {
-        const beanName = canonicalName(name);
+        const dereference = isFactoryDereference(name);
+        const beanName = canonicalName(transformedBeanName(name));
+        return objectForBeanInstance(doGetRawBean(beanName, name), beanName, dereference);
+    }
+
+    /// Whether `name` dereferences a factory (`&name`).
+    private static bool isFactoryDereference(string name) pure nothrow @nogc
+    {
+        return name.length && name[0] == FACTORY_BEAN_PREFIX[0];
+    }
+
+    /// `name` without its factory-dereference prefixes.
+    private static string transformedBeanName(string name) pure nothrow @nogc
+    {
+        while (isFactoryDereference(name))
+            name = name[1 .. $];
+        return name;
+    }
+
+    /// The bean itself, or a FactoryBean's object unless `dereference` asks for the factory.
+    private Object objectForBeanInstance(Object instance, string beanName, bool dereference)
+    {
+        auto factory = cast(FactoryBeanErased) instance;
+        if (dereference)
+        {
+            if (factory is null && !isNullBean(instance))
+                throw new BeanIsNotAFactoryException(beanName, canonicalTypeName(typeid(instance).name));
+            return instance;
+        }
+        if (factory is null)
+            return instance;
+        if (factory.isSingleton() && (beanName in singletons) !is null)
+        {
+            if (auto cached = beanName in factoryBeanObjects)
+                return *cached;
+            auto created = objectFromFactoryBean(factory, beanName);
+            factoryBeanObjects[beanName] = created;
+            return created;
+        }
+        return objectFromFactoryBean(factory, beanName);
+    }
+
+    /// The factory's object, post-processed after initialization (Spring's `postProcessObjectFromFactoryBean`);
+    /// a null object is a `NullBean`.
+    private Object objectFromFactoryBean(FactoryBeanErased factory, string beanName)
+    {
+        Object created;
+        try
+            created = factory.getObjectErased();
+        catch (BeanCurrentlyInCreationException e)
+            throw e;
+        catch (Exception e)
+            throw new BeanCreationException(beanName, "FactoryBean threw exception on object creation", e);
+        if (created is null)
+            return new NullBean;
+        foreach (processor; postProcessors)
+        {
+            if (auto processed = processor.postProcessAfterInitialization(created, beanName))
+                created = processed;
+            else
+                break;
+        }
+        return created;
+    }
+
+    /// The bean named `beanName` as created, a FactoryBean itself rather than its object. `name` is the name
+    /// asked for, passed on to the parent.
+    private Object doGetRawBean(string beanName, string name)
+    {
         if (auto singleton = beanName in singletons)
             return dependedOn(beanName, *singleton);
         if (auto early = beanName in earlySingletons)
@@ -1273,6 +1432,9 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         auto primary = determinePrimaryCandidate(candidates, type);
         if (primary !is null)
             return primary;
+        auto priority = determineHighestPriorityCandidate(candidates, type);
+        if (priority !is null)
+            return priority;
         if (qualifier !is null)
             foreach (name; candidates)
                 if (name == qualifier)
@@ -1308,6 +1470,38 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             regular = name;
         }
         return regular;
+    }
+
+    /// The candidate with the highest `@Priority` (the lowest value) through the dependency comparator; null without a
+    /// comparator or when no candidate declares one. Throws `NoUniqueBeanDefinitionException` when several share
+    /// the highest priority.
+    protected string determineHighestPriorityCandidate(string[] candidates, string type)
+    {
+        if (dependencyComparator is null)
+            return null;
+        string highest;
+        int highestPriority;
+        bool tied;
+        foreach (name; candidates)
+        {
+            auto priority = dependencyComparator.getPriorityOfType(getTypeName(name));
+            if (!priority.isPresent())
+                continue;
+            const value = priority.get();
+            if (highest !is null && value == highestPriority)
+                tied = true;
+            else if (highest is null || value < highestPriority)
+            {
+                highest = name;
+                highestPriority = value;
+                tied = false;
+            }
+        }
+        if (tied)
+            throw new NoUniqueBeanDefinitionException(type, candidates,
+                    "Multiple beans found with the same highest " ~ "priority (" ~ valueOf(
+                        highestPriority) ~ ") among candidates: " ~ joinBrackets(candidates));
+        return highest;
     }
 
     private string determineDefaultCandidate(string[] candidates)
@@ -1362,7 +1556,11 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         if (auto ordered = cast(Ordered) bean)
             return ordered.getOrder();
         auto definition = name in definitions;
-        return definition is null ? Ordered.LOWEST_PRECEDENCE : definition.getOrder();
+        const order = definition is null ? Ordered.LOWEST_PRECEDENCE : definition.getOrder();
+        if (order != Ordered.LOWEST_PRECEDENCE || dependencyComparator is null)
+            return order;
+        auto priority = dependencyComparator.getPriorityOfType(getTypeName(name)); // @Priority orders, as in Spring
+        return priority.isPresent() ? priority.get() : order;
     }
 
     private static int compareOrder(Object a, int orderA, Object b, int orderB)
@@ -1437,6 +1635,7 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         if ((beanName in singletons) is null)
             return;
         singletons.remove(beanName);
+        factoryBeanObjects.remove(beanName);
         string[] kept;
         foreach (name; singletonOrder)
             if (name != beanName)

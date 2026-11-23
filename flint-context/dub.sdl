@@ -10,6 +10,7 @@ dependency "flint:java" version="*"
 dependency "flint:core" version="*"
 dependency "flint:beans" version="*"
 dependency "flint:jakarta-validation" version="*"
+dependency "flint:engine-reactor" version="*"
 
 configuration "library" {
     targetType "library"

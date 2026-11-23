@@ -80,4 +80,7 @@ struct BeanDefinition
     uint rank;
     /// Wrap the target in its generated AOP proxy; null when not advised.
     Object function(Object target, BeanFactory factory) @safe proxy;
+    /// For a `FactoryBean!T` class (contract 3): the types its object can be injected as, `T` first, as `types`
+    /// lists the factory's own; empty otherwise (Spring's `FactoryBean.OBJECT_TYPE_ATTRIBUTE`, plus supertypes).
+    string[] objectTypes;
 }

@@ -254,7 +254,48 @@ class ApplicationListenerMethodAdapter : GenericApplicationListener
         auto bean = beanSupplier();
         if (bean is null)
             return; // the listener bean's factory returned null: nothing to call, as in Spring
-        spec.invoke(bean, argument);
+        if (spec.invokeForResult is null)
+        {
+            spec.invoke(bean, argument);
+            return;
+        }
+        handleResult(event, spec.invokeForResult(bean, argument));
+    }
+
+    /// Publish a listener's result as replies (Spring's `handleResult`): each element of an array or `Collection`,
+    /// else the result itself; null values are ignored.
+    private void handleResult(Object event, Any result)
+    {
+        import flint.java.util : RawCollection;
+
+        if (auto collection = cast(RawCollection) result.asObject())
+        {
+            foreach (element; collection.toAnyArray())
+                publishReply(event, element);
+        }
+        else if (result.holds!(Any[]))
+        {
+            foreach (element; result.get!(Any[]))
+                publishReply(event, element);
+        }
+        else if (result.holds!(string[]))
+        {
+            foreach (element; result.get!(string[]))
+                publishReply(event, element is null ? Any.init : Any.of(element));
+        }
+        else
+            publishReply(event, result);
+    }
+
+    /// Publish one reply: an event as it is, any other non-null value as a payload event from the listener's event.
+    private void publishReply(Object event, Any reply)
+    {
+        if (reply.isNull || resultPublisher is null)
+            return;
+        if (auto replyEvent = cast(ApplicationEvent) reply.asObject())
+            resultPublisher(replyEvent);
+        else
+            resultPublisher(new PayloadApplicationEvent(event, reply));
     }
 
     /// Whether the compiled condition, if any, holds for `event` (Spring's `shouldHandle`).

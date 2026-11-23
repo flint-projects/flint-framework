@@ -45,7 +45,8 @@ Additive, so contract-1 and contract-2 generated code still runs (`checkContract
 `flint.engine.aot.expression` holds method-level SpEL compiled to D: `EvaluationContext` (arguments, result,
 method name, root functions and properties, beans, placeholders), `CompiledExpression` and `ExpressionSpec`.
 `MethodDescriptor.expressions` lists a method's compiled attributes (`expression(annotation, attribute)` finds
-one), and `EventListenerSpec.conditionExpression` is a listener's compiled condition. flint:context evaluates it
+one), `EventListenerSpec.conditionExpression` is a listener's compiled condition, and `EventListenerSpec.invokeForResult`
+calls a listener that returns a value, whose result flint:context publishes as replies. flint:context evaluates it
 before each dispatch (`isTrue`: a `bool` true or the string `true`); a condition without its compiled form fails at
 refresh.
 

@@ -155,6 +155,13 @@ class OrderComparator
         return Optional!int.empty();
     }
 
+    /// A priority value for the type named `typeName` (Java's `getPriority(Class)` on a bean type); this
+    /// implementation has none (empty).
+    Optional!int getPriorityOfType(string)
+    {
+        return Optional!int.empty();
+    }
+
     /// Sort `list` with the default comparator (stable).
     static void sort(T)(List!T list)
     {

@@ -29,9 +29,7 @@ resolved by the generator, and `@Order` is the spec's order.
 Skipped Java tests (35 in the class):
 - simpleEventXmlConfig: XML configuration.
 - methodSignatureNoEvent: an `@EventListener` method with two parameters is rejected by Flint AOT at build time.
-- simpleReply, nullReplyIgnored, arrayReply, collectionReply, collectionReplyNullValue, completableFutureReply,
-  monoReply, fluxReply, replyWithPayload: `EventListenerSpec.invoke` returns nothing, so a listener's result cannot
-  be published as a reply.
+- completableFutureReply, monoReply, fluxReply: asynchronous results.
 - eventListenerWorksWithSimpleInterfaceProxy, eventListenerWorksWithAnnotatedInterfaceProxy,
   eventListenerWorksWithCglibProxy, privateMethodOnCglibProxyFails: AOP and scoped proxies.
 - eventListenerWorksWithCustomScope: custom scopes are not supported.
@@ -777,4 +775,147 @@ unittest
     }
 
     assert(collectException!IllegalStateException(new AnnotationConfigApplicationContext(&populate)) !is null);
+}
+
+// ---- simpleReply, nullReplyIgnored, arrayReply, collectionReply, collectionReplyNullValue, replyWithPayload
+
+private final class AnotherTestEvent : ApplicationEvent
+{
+    Any content;
+
+    this(Object source, Any content)
+    {
+        super(source);
+        this.content = content;
+    }
+}
+
+private final class ReplyEventListener : AbstractTestEventListener
+{
+    Any handle(AnotherTestEvent event) // @EventListener, returning Object
+    {
+        collectEvent(event);
+        if (event.content.isNull)
+            return Any.init;
+        if (event.content.typeName == "string")
+        {
+            const s = event.content.get!string;
+            return s == "String" ? event.content : Any.of(cast(ApplicationEvent) new TestEvent(this, s));
+        }
+        return event.content;
+    }
+}
+
+private Any listenReply(Object bean, ref Any event)
+{
+    return (cast(ReplyEventListener) bean).handle(event.get!AnotherTestEvent);
+}
+
+private void populateReply(scope AotRegistry registry)
+{
+    registry.begin(3, 1);
+    basicConfiguration(registry);
+    listenerBean!TestEventListener(registry, "listener");
+    listenerBean!ReplyEventListener(registry, "replyEventListener");
+    testEventListenerSpecs(registry, "listener");
+    auto spec = EventListenerSpec("replyEventListener", typeNameOf!AnotherTestEvent, null, int.max, null);
+    spec.invokeForResult = &listenReply;
+    registry.listener(spec);
+    registry.end();
+}
+
+private struct ReplyFixture
+{
+    Loaded loaded;
+    ReplyEventListener reply;
+    TestEventListener listener;
+}
+
+private ReplyFixture replyFixture()
+{
+    auto loaded = doLoad(&populateReply);
+    auto fixture = ReplyFixture(loaded, loaded.context.getBean!ReplyEventListener(),
+            loaded.context.getBean!TestEventListener());
+    loaded.eventCollector.assertNoEventReceived(fixture.listener);
+    loaded.eventCollector.assertNoEventReceived(fixture.reply);
+    return fixture;
+}
+
+unittest
+{
+    // simpleReply: the returned event is published.
+    auto f = replyFixture();
+    auto event = new AnotherTestEvent(new Object, Any.of("dummy"));
+    f.loaded.context.publishEvent(event);
+    f.loaded.eventCollector.assertEvent(f.reply, event);
+    auto received = f.loaded.eventCollector.getEvents(f.listener);
+    assert(received.length == 1 && (cast(TestEvent) received[0].asObject()).msg == "dummy");
+    assert((cast(TestEvent) received[0].asObject()).getSource() is f.reply);
+    f.loaded.eventCollector.assertTotalEventsCount(2);
+}
+
+unittest
+{
+    // nullReplyIgnored
+    auto f = replyFixture();
+    auto event = new AnotherTestEvent(new Object, Any.init);
+    f.loaded.context.publishEvent(event);
+    f.loaded.eventCollector.assertEvent(f.reply, event);
+    f.loaded.eventCollector.assertNoEventReceived(f.listener);
+    f.loaded.eventCollector.assertTotalEventsCount(1);
+}
+
+unittest
+{
+    // arrayReply: each element is published.
+    auto f = replyFixture();
+    auto event = new AnotherTestEvent(new Object, Any.of(["first", "second"]));
+    f.loaded.context.publishEvent(event);
+    f.loaded.eventCollector.assertEvent(f.reply, event);
+    f.loaded.eventCollector.assertEvent(f.listener, "first", "second");
+    f.loaded.eventCollector.assertTotalEventsCount(3);
+}
+
+unittest
+{
+    // collectionReply: each element is published; nothing listens for the long.
+    import flint.java.util : LinkedHashSet;
+
+    auto f = replyFixture();
+    auto replies = new LinkedHashSet!Any;
+    replies.add(Any.of("first"));
+    replies.add(Any.of(4L));
+    replies.add(Any.of("third"));
+    auto event = new AnotherTestEvent(new Object, Any.of(replies));
+    f.loaded.context.publishEvent(event);
+    f.loaded.eventCollector.assertEvent(f.reply, event);
+    f.loaded.eventCollector.assertEvent(f.listener, "first", "third");
+    f.loaded.eventCollector.assertTotalEventsCount(3);
+}
+
+unittest
+{
+    // collectionReplyNullValue: a null element is skipped.
+    import flint.java.util : ArrayList;
+
+    auto f = replyFixture();
+    auto replies = new ArrayList!Any;
+    replies.add(Any.init);
+    replies.add(Any.of("test"));
+    auto event = new AnotherTestEvent(new Object, Any.of(replies));
+    f.loaded.context.publishEvent(event);
+    f.loaded.eventCollector.assertEvent(f.reply, event);
+    f.loaded.eventCollector.assertEvent(f.listener, "test");
+    f.loaded.eventCollector.assertTotalEventsCount(2);
+}
+
+unittest
+{
+    // replyWithPayload: a non-event result is published as a payload.
+    auto f = replyFixture();
+    auto event = new AnotherTestEvent(new Object, Any.of("String"));
+    f.loaded.context.publishEvent(event);
+    f.loaded.eventCollector.assertEvent(f.reply, event);
+    f.loaded.eventCollector.assertEvent(f.listener, "String");
+    f.loaded.eventCollector.assertTotalEventsCount(2);
 }

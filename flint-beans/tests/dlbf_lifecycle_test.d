@@ -53,17 +53,17 @@ Skipped Java tests (of the 190 in the class; the others are in this file, `dlbf_
   canReferenceParentBeanFromChildViaAlias, getTypeWorksAfterParentChildMerging,
   mergedBeanDefinitionChangesRetainedAfterFreezeConfiguration, explicitScopeInheritanceForChildBeanDefinitions,
   scopeInheritanceForChildBeanDefinitions.
-- FactoryBean (not supported in Phase 1): factoryBeanDidNotCreatePrototype,
-  prototypeFactoryBeanIgnoredByNonEagerTypeMatching, singletonFactoryBeanIgnoredByNonEagerTypeMatching,
-  nonInitializedFactoryBeanIgnoredByNonEagerTypeMatching, nonInitializedFactoryBeanIgnoredByEagerTypeMatching,
-  initializedFactoryBeanFoundByNonEagerTypeMatching, getFactoryBeanByTypeWithPrimary,
-  autowireBeanWithFactoryBeanByType, autowireBeanWithFactoryBeanByTypeWithPrimary, autowireBeanWithFactoryBeanByName,
-  autowireBeanByTypeWithTwoPrimaryFactoryBeans, getTypeForAbstractFactoryBean,
-  getBeanNamesForTypeBeforeFactoryBeanCreation, getBeanNamesForTypeAfterFactoryBeanCreation,
-  getBeanNamesForTypeWithPrototypeScopedFactoryBean, getBeanNamesForTypeWithFactoryBeanDefinedAsTargetType,
-  circularReferenceThroughFactoryBeanAutowiring, circularReferenceThroughFactoryBeanTypeCheck,
-  avoidCircularReferenceThroughAutowiring, prototypeFactoryBeanNotEagerlyCalled,
-  prototypeFactoryBeanNotEagerlyCalledInCaseOfBeanClassName, lazyInitFactory, smartInitFactory.
+- FactoryBean tests needing reflective autowiring, `SmartFactoryBean`, target types or circular creation through a
+  factory (the type-matching, naming and abstract-type tests are in factory_bean_priority_test):
+  factoryBeanDidNotCreatePrototype, prototypeFactoryBeanIgnoredByNonEagerTypeMatching,
+  singletonFactoryBeanIgnoredByNonEagerTypeMatching, nonInitializedFactoryBeanIgnoredByNonEagerTypeMatching,
+  nonInitializedFactoryBeanIgnoredByEagerTypeMatching, initializedFactoryBeanFoundByNonEagerTypeMatching,
+  getFactoryBeanByTypeWithPrimary, autowireBeanWithFactoryBeanByType, autowireBeanWithFactoryBeanByTypeWithPrimary,
+  autowireBeanWithFactoryBeanByName, autowireBeanByTypeWithTwoPrimaryFactoryBeans,
+  getBeanNamesForTypeWithFactoryBeanDefinedAsTargetType, circularReferenceThroughFactoryBeanAutowiring,
+  circularReferenceThroughFactoryBeanTypeCheck, avoidCircularReferenceThroughAutowiring,
+  prototypeFactoryBeanNotEagerlyCalled, prototypeFactoryBeanNotEagerlyCalledInCaseOfBeanClassName, lazyInitFactory,
+  smartInitFactory.
 - Factory-method definitions (`setFactoryMethodName`; `@Bean` methods are generated code):
   staticFactoryMethodFoundByNonEagerTypeMatching, staticPrototypeFactoryMethodFoundByNonEagerTypeMatching,
   nonStaticFactoryMethodFoundByNonEagerTypeMatching, nonStaticPrototypeFactoryMethodFoundByNonEagerTypeMatching,
@@ -79,10 +79,8 @@ Skipped Java tests (of the 190 in the class; the others are in this file, `dlbf_
   createBeanWithPreferredDefaultConstructor, configureBean, configureBeanWithAutowiring,
   fieldSettingWithInstantiationAwarePostProcessorNoShortCircuit,
   fieldSettingWithInstantiationAwarePostProcessorWithShortCircuit (InstantiationAwareBeanPostProcessor).
-- `@Priority` candidate selection and the dependency comparator (not implemented): getBeanByTypeWithPriority,
-  mapInjectionWithPriority, getBeanByTypeWithMultipleHighestPriorityCandidates,
-  getBeanByTypeWithMultipleNonHighestPriorityCandidates, getBeanByTypeWithPriorityAndNullInstance,
-  getBeanByTypePrimaryHasPrecedenceOverPriority, autowireBeanByTypeWithTwoMatchesAndPriority,
+- `@Priority` tests needing reflective autowiring or provider ordering across parent factories (the `getBean`
+  ones are in factory_bean_priority_test): mapInjectionWithPriority, autowireBeanByTypeWithTwoMatchesAndPriority,
   autowireBeanByTypeWithIdenticalPriorityCandidates, autowireBeanByTypePrimaryTakesPrecedenceOverPriority,
   beanProviderWithParentBeanFactoryDetectsOrder, beanProviderWithParentBeanFactoryAndMixedOrder.
 - `AbstractBeanDefinition.ORDER_ATTRIBUTE` and `getOrder(beanName)` (not ported): orderFromAttribute,

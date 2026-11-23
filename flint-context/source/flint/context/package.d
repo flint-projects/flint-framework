@@ -37,7 +37,8 @@ import flint.core.env : ConfigurableEnvironment, Environment, EnvironmentCapable
 import flint.core.io : ResourceLoader;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.name : typeNameOf;
-import flint.java.lang : Runnable;
+import flint.java.lang : Runnable, RuntimeException;
+import flint.java.util : Locale;
 
 @safe:
 
@@ -241,6 +242,51 @@ interface MessageSourceResolvable
     string getDefaultMessage();
 }
 
+/// Resolves messages, with parameterization and internationalization (Spring's `MessageSource`).
+interface MessageSource
+{
+    /// The message for `code` in `locale` with `args`, else `defaultMessage` (rendered with `args`); null when
+    /// neither exists and the source does not use the code as the default.
+    string getMessage(string code, Any[] args, string defaultMessage, Locale locale);
+    /// The message for `code` in `locale`. Throws `NoSuchMessageException` when there is none.
+    string getMessage(string code, Any[] args, Locale locale);
+    /// The message for the first resolvable code, else the resolvable's default message. Throws
+    /// `NoSuchMessageException` when neither exists.
+    string getMessage(MessageSourceResolvable resolvable, Locale locale);
+}
+
+/// A `MessageSource` with a parent consulted for codes it cannot resolve.
+interface HierarchicalMessageSource : MessageSource
+{
+    /// Set the parent; null for none.
+    void setParentMessageSource(MessageSource parent);
+    /// The parent, or null.
+    MessageSource getParentMessageSource();
+}
+
+/// Notified of the `MessageSource` (usually the context) it runs in.
+interface MessageSourceAware : Aware
+{
+    /// Set the message source.
+    void setMessageSource(MessageSource messageSource);
+}
+
+/// Thrown when a message cannot be resolved.
+class NoSuchMessageException : RuntimeException
+{
+    /// `No message found under code 'c' for locale 'l'.`
+    this(string code, Locale locale)
+    {
+        super("No message found under code '" ~ code ~ "' for locale '" ~ locale.toString() ~ "'.");
+    }
+
+    /// For the default locale.
+    this(string code)
+    {
+        this(code, Locale.getDefault());
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Contexts
 
@@ -256,7 +302,7 @@ class ApplicationContextException : FatalBeanException
 
 /// Central interface to provide configuration for an application: beans, environment, events and resources.
 interface ApplicationContext : EnvironmentCapable, ListableBeanFactory, HierarchicalBeanFactory,
-    ApplicationEventPublisher, ResourceLoader
+    MessageSource, ApplicationEventPublisher, ResourceLoader
 {
     /// The unique id of this context.
     string getId();

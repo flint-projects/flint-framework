@@ -209,26 +209,42 @@ final class MergedAnnotations
     }
 }
 
-/// General utility for determining the order of an object from its descriptor's `@Order`.
+/// General utility for determining the order of an object from its descriptor's `@Order`, else Jakarta's
+/// `@Priority`.
 struct OrderUtils
 {
-    /// The `@Order` value on `descriptor`'s type, or `defaultOrder`.
+    /// The `@Order` (else `@Priority`) value on `descriptor`'s type, or `defaultOrder`.
     static int getOrder(const Descriptor descriptor, int defaultOrder)
     {
-        auto order = descriptor is null ? null : descriptor.annotation(typeNameOf!Order);
-        return order is null ? defaultOrder : order.value.get!(const Order).value;
+        const order = findOrder(descriptor);
+        return order.isPresent() ? order.get() : defaultOrder;
     }
 
-    /// The `@Order` value on `descriptor`'s type; `found` is false when there is none.
+    /// The `@Order` (else `@Priority`) value on `descriptor`'s type; `found` is false when there is none.
     static int getOrder(const Descriptor descriptor, out bool found)
     {
+        const order = findOrder(descriptor);
+        found = order.isPresent();
+        return found ? order.get() : 0;
+    }
+
+    /// The `@Order` (else `@Priority`) value on `descriptor`'s type, or empty.
+    static Optional!int findOrder(const Descriptor descriptor)
+    {
         if (descriptor is null)
-            return 0;
-        auto order = descriptor.annotation(typeNameOf!Order);
-        found = order !is null;
-        if (!found)
-            return 0;
-        return order.value.get!(const Order).value;
+            return Optional!int.empty();
+        if (auto order = descriptor.annotation(typeNameOf!Order))
+            return Optional!int.of(order.value.get!(const Order).value);
+        return getPriority(descriptor);
+    }
+
+    /// The `@Priority` value on `descriptor`'s type, or empty.
+    static Optional!int getPriority(const Descriptor descriptor)
+    {
+        import flint.jakarta.annotation : Priority;
+
+        auto priority = descriptor is null ? null : descriptor.annotation(typeNameOf!Priority);
+        return priority is null ? Optional!int.empty() : Optional!int.of(priority.value.get!(const Priority).value);
     }
 }
 
@@ -252,17 +268,25 @@ class AnnotationAwareOrderComparator : OrderComparator
         return new AnnotationAwareOrderComparator;
     }
 
-    /// `Ordered.getOrder()`, else the `@Order` of the object's class.
+    /// `Ordered.getOrder()`, else the `@Order` (or `@Priority`) of the object's class.
     protected override Optional!int findOrder(Object obj)
     {
         auto order = super.findOrder(obj);
         if (order.isPresent() || descriptors is null || obj is null)
             return order;
-        auto descriptor = descriptors.find(canonicalTypeName(typeid(obj).name));
-        auto annotation = descriptor is null ? null : descriptor.annotation(typeNameOf!Order);
-        if (annotation is null)
-            return Optional!int.empty();
-        return Optional!int.of(annotation.value.get!(const Order).value);
+        return OrderUtils.findOrder(descriptors.find(canonicalTypeName(typeid(obj).name)));
+    }
+
+    /// The `@Priority` of the object's class, or empty.
+    override Optional!int getPriority(Object obj)
+    {
+        return obj is null ? Optional!int.empty() : getPriorityOfType(canonicalTypeName(typeid(obj).name));
+    }
+
+    /// The `@Priority` of the type named `typeName`, or empty.
+    override Optional!int getPriorityOfType(string typeName)
+    {
+        return descriptors is null ? Optional!int.empty() : OrderUtils.getPriority(descriptors.find(typeName));
     }
 }
 

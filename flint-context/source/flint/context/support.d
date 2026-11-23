@@ -41,11 +41,14 @@ import flint.beans.factory.config : BeanDefinition, BeanFactoryPostProcessor, Be
 import flint.beans.factory.support : BeanDefinitionRegistry, DefaultListableBeanFactory, RootBeanDefinition;
 import flint.context : ApplicationContext, ApplicationContextAware, ApplicationContextException,
     ApplicationEvent, ApplicationEventPublisher, ApplicationEventPublisherAware,
-    ConfigurableApplicationContext, EnvironmentAware, GenericApplicationListener,
-    Lifecycle, LifecycleProcessor, Phased, ResourceLoaderAware, SmartLifecycle;
+    ConfigurableApplicationContext,
+    EnvironmentAware, GenericApplicationListener, HierarchicalMessageSource,
+    Lifecycle, LifecycleProcessor, MessageSource, MessageSourceAware, MessageSourceResolvable,
+    NoSuchMessageException, Phased, ResourceLoaderAware, SmartLifecycle;
 import flint.context.event : ApplicationEventMulticaster, ApplicationListenerMethodAdapter, ContextClosedEvent,
     ContextRefreshedEvent, ContextStartedEvent, ContextStoppedEvent, SimpleApplicationEventMulticaster;
 import flint.core : Ordered, PriorityOrdered;
+import flint.core.annotation.types : AnnotationAwareOrderComparator;
 import flint.core.convert : ConversionService;
 import flint.core.env : ConfigurableEnvironment, Environment, Profiles, StandardEnvironment;
 import flint.core.io : DefaultResourceLoader, Resource, ResourceLoader;
@@ -59,7 +62,7 @@ import flint.engine.aot.name : canonicalTypeName, typeNameOf;
 import flint.engine.aot.query : DerivedQuery;
 import flint.engine.aot.registry : AotRegistry, RegistryPopulator, checkContractVersion, installedRegistry;
 import flint.java.lang : IllegalStateException, Runnable, valueOf;
-import flint.java.util : LinkedHashMap, Map, stableSort;
+import flint.java.util : LinkedHashMap, Locale, Map, Properties, stableSort;
 import flint.util : Assert, StringUtils, StringValueResolver;
 
 @safe:
@@ -172,6 +175,8 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
     enum LIFECYCLE_PROCESSOR_BEAN_NAME = "lifecycleProcessor";
     /// The name of the `ApplicationEventMulticaster` bean.
     enum APPLICATION_EVENT_MULTICASTER_BEAN_NAME = "applicationEventMulticaster";
+    /// The name of the `MessageSource` bean; without one, the context delegates to its parent.
+    enum MESSAGE_SOURCE_BEAN_NAME = "messageSource";
 
     private string id;
     private string displayName;
@@ -183,6 +188,7 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
     private ApplicationEvent[] earlyEvents;
     private bool collectingEarlyEvents;
     private ApplicationEventMulticaster multicaster;
+    private MessageSource messageSource;
     private LifecycleProcessor lifecycleProcessor;
     private long startupDate;
     private bool active;
@@ -343,6 +349,7 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
             postProcessBeanFactory(beanFactory);
             invokeBeanFactoryPostProcessors(beanFactory);
             registerBeanPostProcessors(beanFactory);
+            initMessageSource();
             initApplicationEventMulticaster();
             onRefresh();
             registerListeners();
@@ -453,6 +460,54 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
             beans ~= beanFactory.getBean(name);
         foreach (bean; sortByOrder(beans))
             beanFactory.addBeanPostProcessor(cast(BeanPostProcessor) bean);
+    }
+
+    /// The `messageSource` bean (given the parent context as its parent), or a `DelegatingMessageSource` to the
+    /// parent context.
+    protected void initMessageSource()
+    {
+        auto beanFactory = getBeanFactory();
+        if (beanFactory.containsLocalBean(MESSAGE_SOURCE_BEAN_NAME))
+        {
+            messageSource = cast(MessageSource) beanFactory.getBean(MESSAGE_SOURCE_BEAN_NAME);
+            auto hierarchical = cast(HierarchicalMessageSource) messageSource;
+            if (hierarchical !is null && getParent() !is null && hierarchical.getParentMessageSource() is null)
+                hierarchical.setParentMessageSource(getParent());
+        }
+        else
+        {
+            auto delegating = new DelegatingMessageSource;
+            delegating.setParentMessageSource(getParent());
+            messageSource = delegating;
+            beanFactory.registerSingleton(MESSAGE_SOURCE_BEAN_NAME, delegating);
+        }
+    }
+
+    /// The context's message source. Throws `IllegalStateException` before `refresh`.
+    protected MessageSource getMessageSource()
+    {
+        if (messageSource is null)
+            throw new IllegalStateException("MessageSource not initialized - call 'refresh' before accessing "
+                    ~ "messages via the context: " ~ getDisplayName());
+        return messageSource;
+    }
+
+    /// See `MessageSource`.
+    string getMessage(string code, Any[] args, string defaultMessage, Locale locale)
+    {
+        return getMessageSource().getMessage(code, args, defaultMessage, locale);
+    }
+
+    /// See `MessageSource`.
+    string getMessage(string code, Any[] args, Locale locale)
+    {
+        return getMessageSource().getMessage(code, args, locale);
+    }
+
+    /// See `MessageSource`.
+    string getMessage(MessageSourceResolvable resolvable, Locale locale)
+    {
+        return getMessageSource().getMessage(resolvable, locale);
     }
 
     /// The `applicationEventMulticaster` bean, or a `SimpleApplicationEventMulticaster`.
@@ -792,6 +847,8 @@ class ApplicationContextAwareProcessor : BeanPostProcessor
             aware.setResourceLoader(applicationContext);
         if (auto aware = cast(ApplicationEventPublisherAware) bean)
             aware.setApplicationEventPublisher(applicationContext);
+        if (auto aware = cast(MessageSourceAware) bean)
+            aware.setMessageSource(applicationContext);
         if (auto aware = cast(ApplicationContextAware) bean)
             aware.setApplicationContext(applicationContext);
         return bean;
@@ -1083,6 +1140,8 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
         refreshed = true;
         beanFactory.setConversionService(getConfigurableEnvironment().getConversionService());
         beanFactory.setDescriptorTable(descriptors);
+        if (beanFactory.getDependencyComparator() is null) // AnnotationConfigUtils' comparator: @Order and @Priority
+            beanFactory.setDependencyComparator(new AnnotationAwareOrderComparator(descriptors));
     }
 
     /// Nothing to release beyond the destroyed singletons.
@@ -1171,13 +1230,17 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
     protected override void registerAdditionalListeners(ApplicationEventMulticaster multicaster)
     {
         foreach (spec; eventListeners)
-        {
-            const bean = spec.bean;
             multicaster.addApplicationListener(new ApplicationListenerMethodAdapter(spec,
-                    () => beanFactory.getBean(bean), (ApplicationEvent event) { publishEvent(event); },
+                    beanSupplier(spec.bean), (ApplicationEvent event) { publishEvent(event); },
                     (string name) => beanFactory.getBean(name),
                     (string text) => getEnvironment().resolveRequiredPlaceholders(text)));
-        }
+    }
+
+    /// A supplier of the bean `name`, in a frame of its own: a lambda in the loop above would share the loop
+    /// variable, so every listener would resolve the last one's bean.
+    private Object delegate() @safe beanSupplier(string name)
+    {
+        return () => beanFactory.getBean(name);
     }
 
     // ---- Programmatic registration
@@ -1448,5 +1511,586 @@ private final class ContextConditions : ConditionContext
                 .getProperty(key)))
             result ~= StringUtils.trimWhitespace(entry);
         return result;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Message sources
+
+/// The message-format support of message sources (Spring's `MessageSourceSupport`).
+abstract class MessageSourceSupport
+{
+    private bool alwaysUseMessageFormat;
+
+    /// Parse messages without arguments with `MessageFormat` too (so `''` becomes `'`); off by default.
+    void setAlwaysUseMessageFormat(bool alwaysUseMessageFormat) pure nothrow @nogc
+    {
+        this.alwaysUseMessageFormat = alwaysUseMessageFormat;
+    }
+
+    /// Whether every message is parsed with `MessageFormat`.
+    protected bool isAlwaysUseMessageFormat() const pure nothrow @nogc
+    {
+        return alwaysUseMessageFormat;
+    }
+
+    /// `defaultMessage` rendered with `args` (Spring's `renderDefaultMessage`).
+    protected string renderDefaultMessage(string defaultMessage, Any[] args, Locale locale)
+    {
+        return formatMessage(defaultMessage, args, locale);
+    }
+
+    /// `msg` formatted with `args` by `MessageFormat`, or as is without arguments unless always formatting.
+    protected string formatMessage(string msg, Any[] args, Locale locale)
+    {
+        import flint.java.text : MessageFormat;
+
+        if (msg is null || (!alwaysUseMessageFormat && args.length == 0))
+            return msg;
+        return new MessageFormat(msg, locale).format(args);
+    }
+}
+
+/++
+Spring's `AbstractMessageSource`: resolves codes through `resolveCode`/`resolveCodeWithoutArguments`, then the
+parent, then common messages; renders `MessageSourceResolvable` arguments (field names) recursively.
++/
+abstract class AbstractMessageSource : MessageSourceSupport, HierarchicalMessageSource
+{
+    private MessageSource parentMessageSource;
+    private Properties commonMessages;
+    private bool useCodeAsDefaultMessage;
+
+    /// Set the parent.
+    void setParentMessageSource(MessageSource parent)
+    {
+        parentMessageSource = parent;
+    }
+
+    /// The parent, or null.
+    MessageSource getParentMessageSource()
+    {
+        return parentMessageSource;
+    }
+
+    /// Locale-independent messages, consulted after the bundles and the parent.
+    void setCommonMessages(Properties commonMessages)
+    {
+        this.commonMessages = commonMessages;
+    }
+
+    /// The common messages, or null.
+    Properties getCommonMessages()
+    {
+        return commonMessages;
+    }
+
+    /// Use the code itself as the message when none is found (instead of throwing).
+    void setUseCodeAsDefaultMessage(bool useCodeAsDefaultMessage) pure nothrow @nogc
+    {
+        this.useCodeAsDefaultMessage = useCodeAsDefaultMessage;
+    }
+
+    /// Whether the code is the default message.
+    protected bool isUseCodeAsDefaultMessage() const pure nothrow @nogc
+    {
+        return useCodeAsDefaultMessage;
+    }
+
+    /// See `MessageSource`.
+    final string getMessage(string code, Any[] args, string defaultMessage, Locale locale)
+    {
+        auto msg = getMessageInternal(code, args, locale);
+        if (msg !is null)
+            return msg;
+        if (defaultMessage is null)
+            return getDefaultMessage(code);
+        return renderDefaultMessage(defaultMessage, resolveArguments(args, locale), locale);
+    }
+
+    /// See `MessageSource`.
+    final string getMessage(string code, Any[] args, Locale locale)
+    {
+        auto msg = getMessageInternal(code, args, locale);
+        if (msg !is null)
+            return msg;
+        auto fallback = getDefaultMessage(code);
+        if (fallback !is null)
+            return fallback;
+        throw new NoSuchMessageException(code, locale);
+    }
+
+    /// See `MessageSource`.
+    final string getMessage(MessageSourceResolvable resolvable, Locale locale)
+    {
+        auto codes = resolvable.getCodes();
+        foreach (code; codes)
+            if (auto message = getMessageInternal(code, resolvable.getArguments(), locale))
+                return message;
+        if (auto fallback = getDefaultMessage(resolvable, locale))
+            return fallback;
+        throw new NoSuchMessageException(codes.length ? codes[$ - 1] : null, locale);
+    }
+
+    /// The message for `code`, from this source, the parent or the common messages; null when none.
+    protected string getMessageInternal(string code, Any[] args, Locale locale)
+    {
+        if (code is null)
+            return null;
+        Any[] arguments = args;
+        if (!isAlwaysUseMessageFormat() && args.length == 0)
+        {
+            if (auto message = resolveCodeWithoutArguments(code, locale))
+                return message;
+        }
+        else
+        {
+            arguments = resolveArguments(args, locale);
+            if (auto message = resolveCode(code, arguments, locale))
+                return message;
+        }
+        if (commonMessages !is null)
+        {
+            auto common = commonMessages.getProperty(code);
+            if (common !is null)
+                return formatMessage(common, arguments, locale);
+        }
+        return getMessageFromParent(code, arguments, locale);
+    }
+
+    /// The parent's message for `code`, or null.
+    protected string getMessageFromParent(string code, Any[] args, Locale locale)
+    {
+        if (parentMessageSource is null)
+            return null;
+        if (auto parent = cast(AbstractMessageSource) parentMessageSource)
+            return parent.getMessageInternal(code, args, locale);
+        return parentMessageSource.getMessage(code, args, null, locale);
+    }
+
+    /// The resolvable's default message (rendered when it asks to be), else its last code when the code is the
+    /// default message; null otherwise.
+    protected string getDefaultMessage(MessageSourceResolvable resolvable, Locale locale)
+    {
+        auto defaultMessage = resolvable.getDefaultMessage();
+        auto codes = resolvable.getCodes();
+        if (defaultMessage !is null)
+        {
+            auto resolvableSupport = cast(DefaultMessageSourceResolvable) resolvable;
+            if (resolvableSupport !is null && !resolvableSupport.shouldRenderDefaultMessage())
+                return defaultMessage;
+            if (codes.length && defaultMessage == codes[0])
+                return defaultMessage;
+            return renderDefaultMessage(defaultMessage, resolveArguments(resolvable.getArguments(), locale), locale);
+        }
+        return codes.length ? getDefaultMessage(codes[0]) : null;
+    }
+
+    /// The code when it is the default message, else null.
+    protected string getDefaultMessage(string code)
+    {
+        return useCodeAsDefaultMessage ? code : null;
+    }
+
+    /// The arguments with each `MessageSourceResolvable` resolved to its message.
+    protected Any[] resolveArguments(Any[] args, Locale locale)
+    {
+        if (args.length == 0)
+            return args;
+        Any[] resolved;
+        foreach (arg; args)
+        {
+            if (auto resolvable = cast(MessageSourceResolvable) arg.asObject())
+                resolved ~= Any.of(getMessage(resolvable, locale));
+            else
+                resolved ~= arg;
+        }
+        return resolved;
+    }
+
+    /// The message for `code` without arguments, or null: `resolveCode` with no arguments by default.
+    protected string resolveCodeWithoutArguments(string code, Locale locale)
+    {
+        return resolveCode(code, null, locale);
+    }
+
+    /// The message for `code` formatted with `args`, or null.
+    protected abstract string resolveCode(string code, Any[] args, Locale locale);
+}
+
+/// A `MessageSource` holding messages registered in code (Spring's `StaticMessageSource`), for tests.
+class StaticMessageSource : AbstractMessageSource
+{
+    private string[string] messages;
+
+    /// Register `msg` for `code` in `locale`.
+    void addMessage(string code, Locale locale, string msg)
+    {
+        Assert.notNull(code, "Code must not be null");
+        Assert.notNull(msg, "Message must not be null");
+        messages[code ~ "_" ~ locale.toString()] = msg;
+    }
+
+    /// Register every entry of `messages` in `locale`.
+    void addMessages(string[string] messages, Locale locale)
+    {
+        foreach (code, msg; messages)
+            addMessage(code, locale, msg);
+    }
+
+    protected override string resolveCodeWithoutArguments(string code, Locale locale)
+    {
+        return messages.get(code ~ "_" ~ locale.toString(), null);
+    }
+
+    protected override string resolveCode(string code, Any[] args, Locale locale)
+    {
+        auto msg = resolveCodeWithoutArguments(code, locale);
+        return msg is null ? null : formatMessage(msg, args, locale);
+    }
+
+    /// `StaticMessageSource: {code_locale=message, ...}`.
+    override string toString()
+    {
+        string result = "StaticMessageSource: {";
+        bool first = true;
+        foreach (key, value; messages)
+        {
+            result ~= (first ? "" : ", ") ~ key ~ "=" ~ value;
+            first = false;
+        }
+        return result ~ "}";
+    }
+}
+
+/// A `MessageSource` that delegates every call to its parent; the context's default (Spring's
+/// `DelegatingMessageSource`).
+class DelegatingMessageSource : MessageSourceSupport, HierarchicalMessageSource
+{
+    private MessageSource parentMessageSource;
+
+    /// Set the parent.
+    void setParentMessageSource(MessageSource parent)
+    {
+        parentMessageSource = parent;
+    }
+
+    /// The parent, or null.
+    MessageSource getParentMessageSource()
+    {
+        return parentMessageSource;
+    }
+
+    /// The parent's message, else `defaultMessage` rendered with `args`.
+    string getMessage(string code, Any[] args, string defaultMessage, Locale locale)
+    {
+        if (parentMessageSource !is null)
+            return parentMessageSource.getMessage(code, args, defaultMessage, locale);
+        return defaultMessage is null ? null : renderDefaultMessage(defaultMessage, args, locale);
+    }
+
+    /// The parent's message. Throws `NoSuchMessageException` without a parent.
+    string getMessage(string code, Any[] args, Locale locale)
+    {
+        if (parentMessageSource !is null)
+            return parentMessageSource.getMessage(code, args, locale);
+        throw new NoSuchMessageException(code, locale);
+    }
+
+    /// The parent's message, else the resolvable's default message. Throws `NoSuchMessageException` without either.
+    string getMessage(MessageSourceResolvable resolvable, Locale locale)
+    {
+        if (parentMessageSource !is null)
+            return parentMessageSource.getMessage(resolvable, locale);
+        if (resolvable.getDefaultMessage() !is null)
+            return renderDefaultMessage(resolvable.getDefaultMessage(), resolvable.getArguments(), locale);
+        auto codes = resolvable.getCodes();
+        throw new NoSuchMessageException(codes.length ? codes[0] : null, locale);
+    }
+
+    /// `parent` or `Empty MessageSource`.
+    override string toString()
+    {
+        return parentMessageSource !is null ? valueOf(cast(Object) parentMessageSource) : "Empty MessageSource";
+    }
+}
+
+/// The basenames and settings of a resource-based message source (Spring's `AbstractResourceBasedMessageSource`).
+abstract class AbstractResourceBasedMessageSource : AbstractMessageSource
+{
+    private string[] basenames;
+    private string defaultEncoding;
+    private bool fallbackToSystemLocale = true;
+    private Locale defaultLocale;
+    private bool hasDefaultLocale;
+    private long cacheMillis = -1;
+
+    /// A single basename (`messages/messages` reads `messages/messages[_<locale>].properties`).
+    void setBasename(string basename)
+    {
+        setBasenames(basename);
+    }
+
+    /// The basenames, consulted in order.
+    void setBasenames(string[] basenames...)
+    {
+        this.basenames = null;
+        addBasenames(basenames);
+    }
+
+    /// Add basenames, trimmed, without duplicates.
+    void addBasenames(string[] basenames...)
+    {
+        foreach (basename; basenames)
+        {
+            Assert.hasText(basename, "Basename must not be empty");
+            const trimmed = StringUtils.trimWhitespace(basename);
+            bool present;
+            foreach (existing; this.basenames)
+                present |= existing == trimmed;
+            if (!present)
+                this.basenames ~= trimmed;
+        }
+    }
+
+    /// The basenames.
+    string[] getBasenameSet()
+    {
+        return basenames.dup;
+    }
+
+    /// The encoding of the properties files (UTF-8 when unset, as Java's properties bundles). Throws
+    /// `UnsupportedCharsetException` for an unknown name.
+    void setDefaultEncoding(string defaultEncoding)
+    {
+        import flint.java.nio.charset : Charset;
+
+        if (defaultEncoding !is null)
+            cast(void) Charset.forName(defaultEncoding);
+        this.defaultEncoding = defaultEncoding;
+    }
+
+    /// The encoding, or null.
+    protected string getDefaultEncoding()
+    {
+        return defaultEncoding;
+    }
+
+    /// Fall back to the default locale's files when the requested locale has none (default true).
+    void setFallbackToSystemLocale(bool fallbackToSystemLocale) pure nothrow @nogc
+    {
+        this.fallbackToSystemLocale = fallbackToSystemLocale;
+    }
+
+    /// Whether to fall back to the system locale.
+    protected bool isFallbackToSystemLocale() const pure nothrow @nogc
+    {
+        return fallbackToSystemLocale;
+    }
+
+    /// The locale to fall back to instead of the system's.
+    void setDefaultLocale(Locale defaultLocale)
+    {
+        this.defaultLocale = defaultLocale;
+        hasDefaultLocale = true;
+    }
+
+    /// Whether there is a locale to fall back to: a configured one, or the system's when falling back.
+    protected bool hasFallbackLocale() const pure nothrow @nogc
+    {
+        return hasDefaultLocale || fallbackToSystemLocale;
+    }
+
+    /// The fallback locale: the configured one, else the system's (`hasFallbackLocale` says whether to use it).
+    protected Locale getDefaultLocale()
+    {
+        return hasDefaultLocale ? defaultLocale : Locale.getDefault();
+    }
+
+    /// How long loaded files stay cached, in seconds; -1 caches forever.
+    void setCacheSeconds(int cacheSeconds) pure nothrow @nogc
+    {
+        cacheMillis = cacheSeconds * 1000L;
+    }
+
+    /// How long loaded files stay cached, in milliseconds; -1 caches forever. Flint caches forever.
+    void setCacheMillis(long cacheMillis) pure nothrow @nogc
+    {
+        this.cacheMillis = cacheMillis;
+    }
+
+    /// The cache duration.
+    protected long getCacheMillis() const pure nothrow @nogc
+    {
+        return cacheMillis;
+    }
+}
+
+/++
+A message source reading `<basename>[_<language>[_<COUNTRY>]].properties` through the resource loader
+(`classpath:` by default), with Java's `ResourceBundle` lookup: the most specific file first, then less specific
+ones, then the default locale's files when falling back, then the base file. Files are read once.
++/
+class ResourceBundleMessageSource : AbstractResourceBasedMessageSource
+{
+    import flint.core.io : DefaultResourceLoader, ResourceLoader;
+
+    private ResourceLoader resourceLoader;
+    private Properties[string] bundles; // by file name; null for a missing file
+
+    /// A source reading from the class path.
+    this()
+    {
+        resourceLoader = new DefaultResourceLoader;
+    }
+
+    /// Read files through `resourceLoader`.
+    void setResourceLoader(ResourceLoader resourceLoader)
+    {
+        this.resourceLoader = resourceLoader is null ? new DefaultResourceLoader : resourceLoader;
+    }
+
+    protected override string resolveCodeWithoutArguments(string code, Locale locale)
+    {
+        foreach (basename; getBasenameSet())
+            foreach (file; candidateFiles(basename, locale))
+                if (auto bundle = loadBundle(file))
+                {
+                    auto msg = bundle.getProperty(code);
+                    if (msg !is null)
+                        return msg;
+                }
+        return null;
+    }
+
+    protected override string resolveCode(string code, Any[] args, Locale locale)
+    {
+        auto msg = resolveCodeWithoutArguments(code, locale);
+        return msg is null ? null : formatMessage(msg, args, locale);
+    }
+
+    /// The files consulted for `locale`, most specific first (Java's `ResourceBundle.Control` candidates).
+    protected string[] candidateFiles(string basename, Locale locale)
+    {
+        string[] files = localeFiles(basename, locale);
+        bool anyExists;
+        foreach (file; files)
+            anyExists |= loadBundle(file) !is null;
+        if (!anyExists && hasFallbackLocale() && getDefaultLocale() != locale)
+            files ~= localeFiles(basename, getDefaultLocale());
+        return files ~ (basename ~ ".properties");
+    }
+
+    private static string[] localeFiles(string basename, Locale locale)
+    {
+        string[] files;
+        if (locale.getVariant().length)
+            files ~= basename ~ "_" ~ locale.getLanguage() ~ "_" ~ locale.getCountry() ~ "_" ~ locale.getVariant()
+                ~ ".properties";
+        if (locale.getCountry().length)
+            files ~= basename ~ "_" ~ locale.getLanguage() ~ "_" ~ locale.getCountry() ~ ".properties";
+        if (locale.getLanguage().length)
+            files ~= basename ~ "_" ~ locale.getLanguage() ~ ".properties";
+        return files;
+    }
+
+    /// The properties of `file`, read once; null when it does not exist.
+    protected Properties loadBundle(string file)
+    {
+        if (auto cached = file in bundles)
+            return *cached;
+        auto resource = resourceLoader.getResource(file);
+        Properties properties;
+        if (resource.exists())
+        {
+            properties = new Properties;
+            properties.load(decode(resource.getContentAsByteArray()));
+        }
+        bundles[file] = properties;
+        return properties;
+    }
+
+    /// The file's text: ISO-8859-1 when that is the encoding, else UTF-8.
+    private string decode(ubyte[] content)
+    {
+        import flint.java.nio.charset : Charset, StandardCharsets;
+
+        const encoding = getDefaultEncoding();
+        if (encoding is null || Charset.forName(encoding) != StandardCharsets.ISO_8859_1)
+            return cast(string) content.idup;
+        import flint.engine.aot.text : utf8;
+
+        string text;
+        foreach (b; content)
+            text ~= utf8(cast(dchar) b);
+        return text;
+    }
+
+    /// `ResourceBundleMessageSource: basenames=[...]`.
+    override string toString()
+    {
+        return "ResourceBundleMessageSource: basenames=[" ~ joinNames(getBasenameSet()) ~ "]";
+    }
+
+    private static string joinNames(string[] names)
+    {
+        string result;
+        foreach (i, name; names)
+            result ~= (i ? ", " : "") ~ name;
+        return result;
+    }
+}
+
+/// Convenient access to a `MessageSource` with a default locale (Spring's `MessageSourceAccessor`).
+class MessageSourceAccessor
+{
+    private MessageSource messageSource;
+    private Locale defaultLocale;
+    private bool hasDefaultLocale;
+
+    /// An accessor using `LocaleContextHolder`'s locale by default.
+    this(MessageSource messageSource)
+    {
+        this.messageSource = messageSource;
+    }
+
+    /// An accessor using `defaultLocale`.
+    this(MessageSource messageSource, Locale defaultLocale)
+    {
+        this.messageSource = messageSource;
+        this.defaultLocale = defaultLocale;
+        hasDefaultLocale = true;
+    }
+
+    /// The default locale: the given one, else the current fiber's.
+    protected Locale getDefaultLocale()
+    {
+        import flint.context.i18n : LocaleContextHolder;
+
+        return hasDefaultLocale ? defaultLocale : LocaleContextHolder.getLocale();
+    }
+
+    /// The message for `code` in the default locale.
+    string getMessage(string code, Any[] args = null)
+    {
+        return messageSource.getMessage(code, args, getDefaultLocale());
+    }
+
+    /// The message for `code` in `locale`.
+    string getMessage(string code, Any[] args, Locale locale)
+    {
+        return messageSource.getMessage(code, args, locale);
+    }
+
+    /// The message for `code`, else `defaultMessage`.
+    string getMessage(string code, Any[] args, string defaultMessage)
+    {
+        return messageSource.getMessage(code, args, defaultMessage, getDefaultLocale());
+    }
+
+    /// The message for `resolvable` in the default locale.
+    string getMessage(MessageSourceResolvable resolvable)
+    {
+        return messageSource.getMessage(resolvable, getDefaultLocale());
     }
 }

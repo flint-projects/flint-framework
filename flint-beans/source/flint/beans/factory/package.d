@@ -49,7 +49,7 @@ The root interface for accessing a bean container.
 +/
 interface BeanFactory
 {
-    /// The prefix that dereferences a `FactoryBean` (`&myBean`). FactoryBeans are not supported in Phase 1.
+    /// The prefix that dereferences a `FactoryBean`: `&myBean` is the factory, `myBean` its object.
     enum FACTORY_BEAN_PREFIX = "&";
 
     /++
@@ -514,6 +514,75 @@ class BeanNotOfRequiredTypeException : BeansException
     string getActualType() const pure nothrow @nogc
     {
         return actualType;
+    }
+}
+
+/// Thrown when a bean is not a factory, but `&name` asked for its factory.
+class BeanIsNotAFactoryException : BeanNotOfRequiredTypeException
+{
+    /// `Bean named 'n' is expected to be of type 'flint.beans.factory.FactoryBean' but was actually of type 'a'`.
+    this(string name, string actualType)
+    {
+        super(name, "flint.beans.factory.FactoryBean", actualType);
+    }
+}
+
+/++
+The erased side of `FactoryBean!T` that the bean factory calls (the proposed D-22 pattern): `mixin
+FactoryBean!T.Defaults` implements it from `getObject`.
++/
+interface FactoryBeanErased
+{
+    /// The object, as `getObject` returns it.
+    Object getObjectErased();
+    /// The type name of the objects this factory creates, or null when unknown in advance.
+    string getObjectType();
+    /// Whether `getObject` returns the same object every time.
+    bool isSingleton();
+}
+
+/++
+Spring's `FactoryBean<T>`: a bean that is a factory for the object exposed under its name. `getBean("name")`
+returns the object, and `getBean("&name")` the factory. Implementations mix in `Defaults` for Java's default
+`isSingleton()` (true), `getObjectType()` (`T`'s name, Java's `Class`, R4) and the erased accessor:
+
+---
+final class WidgetFactory : FactoryBean!Widget
+{
+    mixin FactoryBean!Widget.Defaults;
+
+    Widget getObject() { return new Widget; }
+}
+---
++/
+interface FactoryBean(T) : FactoryBeanErased
+{
+    /// The attribute naming a definition's object type when it cannot be deduced.
+    enum OBJECT_TYPE_ATTRIBUTE = "factoryBeanObjectType";
+
+    /// The object this factory manages; may be null.
+    T getObject();
+
+    /// Java's default methods, and the erased accessor.
+    mixin template Defaults()
+    {
+        /// `getObject()`, as an `Object`.
+        Object getObjectErased()
+        {
+            return cast(Object) getObject();
+        }
+
+        /// `T`'s canonical name.
+        string getObjectType()
+        {
+            return imported!"flint.engine.aot.name".typeNameOf!(typeof(getObject()));
+        }
+
+        /// `true`.
+        bool isSingleton()
+        {
+            return true;
+        }
     }
 }
 
