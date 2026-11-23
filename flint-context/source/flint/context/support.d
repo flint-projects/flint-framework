@@ -376,9 +376,9 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
     /// Mark the context active and validate the required properties.
     protected void prepareRefresh()
     {
-        import std.datetime.systime : Clock;
+        import flint.engine.aot.clock : currentTimeMillis;
 
-        startupDate = Clock.currTime().toUnixTime() * 1000L;
+        startupDate = currentTimeMillis();
         closed = false;
         active = true;
         initPropertySources();

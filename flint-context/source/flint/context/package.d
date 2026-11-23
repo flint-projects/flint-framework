@@ -54,10 +54,10 @@ abstract class ApplicationEvent
     /// An event published by `source`, stamped with the current time.
     this(Object source)
     {
-        import std.datetime.systime : Clock;
+        import flint.engine.aot.clock : currentTimeMillis;
 
         this.source = source;
-        timestamp = Clock.currTime().toUnixTime() * 1000L + Clock.currTime().fracSecs.total!"msecs";
+        timestamp = currentTimeMillis();
     }
 
     /// The object on which the event initially occurred.
