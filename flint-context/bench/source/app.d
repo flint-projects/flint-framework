@@ -4,9 +4,17 @@ module app;
 import flint.context : ApplicationEvent, ApplicationListener;
 import flint.context.event : ContextClosedEvent, ContextRefreshedEvent;
 import flint.context.support : GenericApplicationContext;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 private final class Recorder : ApplicationListener!ApplicationEvent
 {
@@ -29,6 +37,6 @@ int main(string[] args)
     auto recorder = context.getBean!Recorder();
     const named = context.containsBean("audit") ? " audit" : " recorder";
     context.close();
-    writeln(recorder.events ~ named ~ (context.isActive() ? " active" : " inactive"));
+    emit(recorder.events ~ named ~ (context.isActive() ? " active" : " inactive"));
     return 0;
 }

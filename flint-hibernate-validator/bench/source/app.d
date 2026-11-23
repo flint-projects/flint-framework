@@ -5,9 +5,17 @@ import flint.engine.aot.descriptor : DescriptorTable, descriptorOf;
 import flint.hibernate.validator : HibernateValidatorConfiguration;
 import flint.jakarta.validation : Validation;
 import flint.jakarta.validation.constraints : NotBlank, Size;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 /// @Size(min = 2, max = 30), written without named arguments for the formatter.
 private enum Size cityLength = () { Size size; size.min = 2; size.max = 30; return size; }();
@@ -33,6 +41,6 @@ int main(string[] args)
     string outcome;
     foreach (violation; validator.validate(new Owner(args.length > 1 ? "George" : "", "A")))
         outcome ~= violation.getPropertyPath().toString() ~ ":" ~ violation.getMessage() ~ ";";
-    writeln(outcome);
+    emit(outcome);
     return 0;
 }

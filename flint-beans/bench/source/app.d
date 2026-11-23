@@ -5,9 +5,17 @@ import flint.beans.factory : BeanNameAware, InitializingBean;
 import flint.beans.factory.support : DefaultListableBeanFactory;
 import flint.engine.aot.bean : AotBeanDefinition = BeanDefinition, AotBeanFactory = BeanFactory;
 import flint.engine.aot.name : typeNameOf;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 private interface Greeter
 {
@@ -50,6 +58,6 @@ int main(string[] args)
     auto factory = new DefaultListableBeanFactory;
     factory.registerAotDefinition(record);
     auto english = factory.getBean!English();
-    writeln(factory.getBean!Greeter().greet() ~ " " ~ english.name ~ (english.initialized ? " initialized" : ""));
+    emit(factory.getBean!Greeter().greet() ~ " " ~ english.name ~ (english.initialized ? " initialized" : ""));
     return 0;
 }

@@ -3,9 +3,17 @@ module app;
 
 import flint.jakarta.validation : NoProviderFoundException, Validation;
 import flint.jakarta.validation.constraints : Min, NotNull;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 private struct Visit
 {
@@ -24,6 +32,6 @@ int main(string[] args)
         Validation.buildDefaultValidatorFactory();
     catch (NoProviderFoundException)
         outcome ~= " no-provider";
-    writeln(outcome);
+    emit(outcome);
     return 0;
 }

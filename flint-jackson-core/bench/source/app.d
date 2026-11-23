@@ -4,9 +4,17 @@ module app;
 import flint.jackson.core : ObjectWriteContext;
 import flint.jackson.core.json : JsonFactory;
 import flint.jackson.core.util : ByteArrayBuilder;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 int main(string[] args)
 {
@@ -22,6 +30,6 @@ int main(string[] args)
     g.writeEndArray();
     g.writeEndObject();
     g.close();
-    writeln(output.toUtf8String());
+    emit(output.toUtf8String());
     return 0;
 }

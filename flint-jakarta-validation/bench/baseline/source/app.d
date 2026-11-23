@@ -1,13 +1,21 @@
 /// Control for the flint:jakarta-validation probe: the same program and output without the module (PROBE_CONTRACT.md).
 module app;
 
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
 
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
+
 int main(string[] args)
 {
-    writeln(args.length > 1 ? "{jakarta.validation.constraints.NotNull.message} no-provider"
+    emit(args.length > 1 ? "{jakarta.validation.constraints.NotNull.message} no-provider"
             : "{jakarta.validation.constraints.NotNull.message} 1 no-provider");
     return 0;
 }

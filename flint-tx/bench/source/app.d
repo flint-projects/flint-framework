@@ -4,9 +4,17 @@ module app;
 import flint.dao : EmptyResultDataAccessException;
 import flint.dao.support : DataAccessUtils;
 import flint.java.util : ArrayList;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 int main(string[] args)
 {
@@ -21,6 +29,6 @@ int main(string[] args)
     {
         outcome ~= " " ~ cast(char)('0' + ex.getExpectedSize());
     }
-    writeln(outcome);
+    emit(outcome);
     return 0;
 }

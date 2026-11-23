@@ -3,9 +3,17 @@ module app;
 
 import flint.engine.jdbc : FlintDriver, numberParameters, parseUrl;
 import flint.java.sql : DriverManager;
-import std.stdio : writeln;
+import core.stdc.stdio : fputc, stdout;
 
 @safe:
+
+/// Writes one line without Phobos, so the probe adds no std.format template instances to the module's count.
+private void emit(scope const(char)[] text) nothrow @nogc
+{
+    foreach (c; text)
+        fputc(c, stdout);
+    fputc('\n', stdout);
+}
 
 int main(string[] args)
 {
@@ -14,6 +22,6 @@ int main(string[] args)
     size_t count;
     const sql = numberParameters(args.length > 1 ? "select ? from t where a = ?" : "select ?", count);
     const registered = DriverManager.getDriver(url) !is null && new FlintDriver().acceptsURL(url);
-    writeln(settings.connectionString ~ " | " ~ sql ~ (registered ? " | registered" : " | missing"));
+    emit(settings.connectionString ~ " | " ~ sql ~ (registered ? " | registered" : " | missing"));
     return 0;
 }
