@@ -1,7 +1,7 @@
 /// MethodValidationInterceptor and MethodValidationPostProcessor over a stub executable validator: which methods
 /// they advise, the order of validation around the call, unwrapping a SpringValidatorAdapter, and the
 /// ConstraintViolationException they throw. Hibernate Validator's own executable validation is tested in
-/// framework/hibernate-validator/tests/executable_validation_test.d.
+/// flint-hibernate-validator/tests/executable_validation_test.d.
 module method_validation_test;
 
 import flint.engine.aot.any : Any;

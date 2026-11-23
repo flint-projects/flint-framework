@@ -40,4 +40,4 @@ work or an idempotent close of an already-released handle.
 
 - `rtest acc-cloud codec both`: DMD rc=0, LDC rc=0 (2 modules passed, all three codecs and libarchive selected).
 - `negative/check.py dmd` and `ldc2`: 3/3 rejected.
-- `tools/gates.py --package codec --gate structural`: rc=0. `tools/quality.py --path packages/engine-codec`: 0 issues.
+- `tools/gates.py --package codec --gate structural`: rc=0. `tools/quality.py --path engine/codec`: 0 issues.

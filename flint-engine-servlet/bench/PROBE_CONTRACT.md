@@ -4,4 +4,4 @@ The fixture configures a `ServletEngine` and registers a servlet at `/` without 
 
 The baseline in `baseline/` declares the module's direct dependencies (flint:arena, flint:conc, flint:engine-aot, flint:engine-web, flint:jakarta-servlet, flint:java), but not the module. It prints the same line computed without the module.
 
-`tools/measure_builds.py` takes the larger O3/Oz stripped-size difference as the module's `incremental_linked_bytes`, and counts the template instances of the invocations that compile `framework/engine-servlet`. The budget is in `policy/framework.json` (`tools/framework_budgets.py`).
+`tools/measure_builds.py` takes the larger O3/Oz stripped-size difference as the module's `incremental_linked_bytes`, and counts the template instances of the invocations that compile `flint-engine-servlet`. The budget is in `policy/framework.json` (`tools/framework_budgets.py`).

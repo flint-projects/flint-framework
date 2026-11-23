@@ -48,4 +48,4 @@ No other always-success or ignored-input paths found.
 
 - `rtest acc-cloud mail both` plain: DMD rc=0, LDC rc=0. Under `tests/fixture/run.py --server <go fixture>`: DMD rc=0, LDC rc=0.
 - `tests/fixture/negative.py dmd ldc2`: both rejected.
-- `tools/gates.py --package mail --gate structural`: rc=0. `tools/quality.py --path packages/engine-mail`: 0 issues.
+- `tools/gates.py --package mail --gate structural`: rc=0. `tools/quality.py --path engine/mail`: 0 issues.

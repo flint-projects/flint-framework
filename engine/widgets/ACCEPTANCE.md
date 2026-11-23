@@ -2,7 +2,7 @@
 
 Source: `handoff/specs/tier-4/widgets.md` section 6. Unit tests run with `dub test :widgets` on DMD and LDC.
 The PTY snapshot runs `fixtures/test_snapshot.py fixtures/build/test-widgets-pty` (build with
-`dub build --root=packages/engine-widgets/fixtures`).
+`dub build --root=engine/widgets/fixtures`).
 
 | ID | Required item | Covering test(s) | Status |
 | --- | --- | --- | --- |
@@ -11,7 +11,7 @@ The PTY snapshot runs `fixtures/test_snapshot.py fixtures/build/test-widgets-pty
 | WIDGET-02 | Paste at the 4096-byte limit accepts complete graphemes only | `tests/contract_tests.d:The byte cap rejects incomplete paste clusters and normalizes CRLF` | covered |
 | WIDGET-02 | Cap falling inside a multibyte character or grapheme | `tests/contract_tests.d:WIDGET-02 a grapheme crossing the byte cap is rejected whole, including typed input` (combining sequence at 4095, truncated scalar, typed key at the cap, ZWJ emoji over a 3-byte cap) | added |
 | WIDGET-03 | Filter removes the selected item, all remaining items disabled: deterministic no-selection | `tests/contract_tests.d:WIDGET-03 filtering away the selection over disabled survivors leaves no selection`; `List filtering preserves stable identity and guards disabled submissions` | added |
-| WIDGET-03 | Enter does not submit a disabled item | `WIDGET-03 ...` (Enter and every navigation key keep `size_t.max`); prompt PTY `select`/`multi` with a disabled first choice (`packages/engine-prompt/fixtures/test_prompt.py`) | added |
+| WIDGET-03 | Enter does not submit a disabled item | `WIDGET-03 ...` (Enter and every navigation key keep `size_t.max`); prompt PTY `select`/`multi` with a disabled first choice (`engine/prompt/fixtures/test_prompt.py`) | added |
 | WIDGET-04 | Empty columns | `tests/contract_tests.d:Table cells clip printable ASCII without splitting a trailing mark and pad every column` (zero-width column); `WIDGET-04 tables without columns, narrower areas and stale selections stay in bounds` (no columns) | added |
 | WIDGET-04 | Short rows padded | `Table cells clip ...` (rows with 2 and 0 cells) | covered |
 | WIDGET-04 | Oversized cell clipped, no bounds access | `Table cells clip ...`; `WIDGET-04 ...` (40-cell column in a 5-cell frame, stale selection 99, origin outside the frame) | covered |

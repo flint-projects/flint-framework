@@ -18,7 +18,7 @@ def main():
         "redis_private_bridge": ("Bridge", "visible"),
     }
     for fixture, markers in probes.items():
-        path = root / "packages/engine-cache/negative" / f"{fixture}.d"
+        path = root / "engine/cache/negative" / f"{fixture}.d"
         command = [args.compiler, "-preview=dip1000", "-o-", *includes, path]
         result = subprocess.run(command, capture_output=True, text=True, check=False)
         output = result.stdout + result.stderr

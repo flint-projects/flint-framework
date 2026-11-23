@@ -41,9 +41,9 @@ operations. `Transactional` is metadata only; the spec limits it to generated re
 ```sh
 FLINT_SQL_PG_TEST_DSN=... dub test :sql --compiler=dmd
 FLINT_SQL_PG_TEST_DSN=... dub test :sql --compiler=ldc2
-python3 packages/engine-sql/fixtures/negative/verify.py <log-dir>
-python3 packages/engine-sql/tests/native_asan.py --prefix <native>/install/linux-x86_64-glibc --output <dir>
-packages/engine-sql/bench/build/probe-sql --measure [<dsn>]
+python3 engine/sql/fixtures/negative/verify.py <log-dir>
+python3 engine/sql/tests/native_asan.py --prefix <native>/install/linux-x86_64-glibc --output <dir>
+engine/sql/bench/build/probe-sql --measure [<dsn>]
 DFLAGS='-g -O1 -unittest -preview=dip1000 -boundscheck=on -fsanitize=address' ASAN_OPTIONS=detect_leaks=0 \
   dub test :sql --compiler=ldc2 --build=plain
 ```

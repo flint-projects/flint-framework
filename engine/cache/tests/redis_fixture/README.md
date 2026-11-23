@@ -12,12 +12,12 @@ Prepare the pinned provider, build the Go fixture, and supply a Valkey server bi
 
 ~~~sh
 python3 tools/native_build.py --library hiredis --target linux-x86_64-glibc --phase build --emit-dub
-go build -trimpath -o artifacts/redis-fixture packages/engine-cache/tests/redis_fixture/server.go
-python3 packages/engine-cache/tests/redis_fixture/run.py --server artifacts/redis-fixture \
+go build -trimpath -o artifacts/redis-fixture engine/cache/tests/redis_fixture/server.go
+python3 engine/cache/tests/redis_fixture/run.py --server artifacts/redis-fixture \
   --valkey "$VALKEY_SERVER" -- dub test :cache --compiler=dmd
-python3 packages/engine-cache/tests/redis_fixture/run.py --server artifacts/redis-fixture \
+python3 engine/cache/tests/redis_fixture/run.py --server artifacts/redis-fixture \
   --valkey "$VALKEY_SERVER" -- dub test :cache --compiler=ldc2
-python3 packages/engine-cache/tests/redis_fixture/native.py --prefix "$FLINT_NATIVE_PREFIX" \
+python3 engine/cache/tests/redis_fixture/native.py --prefix "$FLINT_NATIVE_PREFIX" \
   --server artifacts/redis-fixture --valkey "$VALKEY_SERVER" --output artifacts/redis-native-corpus
 ~~~
 
@@ -26,6 +26,6 @@ python3 packages/engine-cache/tests/redis_fixture/native.py --prefix "$FLINT_NAT
 The feature and reference exercise SET with TTL, a hit, eviction, and a miss against real Valkey over a warmed TLS connection. They check 1,024 cycles each at 64 bytes and 4 KiB, emit matching checksums, and report cycle p99 and D GC allocation. The native corpus separately observes native allocation calls.
 
 ~~~sh
-python3 packages/engine-cache/bench/redis/check.py --prefix "$FLINT_NATIVE_PREFIX" \
+python3 engine/cache/bench/redis/check.py --prefix "$FLINT_NATIVE_PREFIX" \
   --server artifacts/redis-fixture --valkey "$VALKEY_SERVER" --output artifacts/cache-redis-probes
 ~~~

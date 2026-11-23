@@ -1,6 +1,6 @@
 # flint:engine-style acceptance traceability
 
-Source: `handoff/specs/tier-4/style.md` section 6 ("Acceptance, edge cases and required tests"). Unit tests run with `dub test :style` on DMD and LDC against the pinned utf8proc (Unicode 18.0.0) native provider. Compile-negative fixtures run with `python3 packages/engine-style/negative/check.py <dmd|ldc2>`; each case must be rejected as not visible/accessible from the application module, and a positive control must compile.
+Source: `handoff/specs/tier-4/style.md` section 6 ("Acceptance, edge cases and required tests"). Unit tests run with `dub test :style` on DMD and LDC against the pinned utf8proc (Unicode 18.0.0) native provider. Compile-negative fixtures run with `python3 engine/style/negative/check.py <dmd|ldc2>`; each case must be rejected as not visible/accessible from the application module, and a positive control must compile.
 
 | # | Section 6 item (abridged) | Covering test(s) | Status |
 | --- | --- | --- | --- |

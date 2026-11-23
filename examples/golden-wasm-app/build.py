@@ -3,7 +3,7 @@
 import argparse,subprocess
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
-# examples/framework/<app> in the monorepo; a flint checkout named by FLINT_ROOT otherwise (flint-framework).
+# examples/<app> in the monorepo; a flint checkout named by FLINT_ROOT otherwise (flint-framework).
 import os
 candidate=HERE.parents[2]
 ROOT=Path(os.environ['FLINT_ROOT']) if os.environ.get('FLINT_ROOT') else candidate

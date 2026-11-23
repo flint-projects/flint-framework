@@ -12,9 +12,9 @@ Prepare the locked HTTP provider, then run the linked fixtures with DMD and LDC:
 
 ```sh
 python3 tools/native_build.py --profile http --target linux-x86_64-glibc --phase build --emit-dub
-python3 packages/engine-storage/tests/local_peer.py dub test :storage --compiler=dmd
-python3 packages/engine-storage/tests/local_peer.py dub test :storage --compiler=ldc2
-python3 packages/engine-storage/tests/minio_peer.py /path/to/minio dub test :storage --compiler=ldc2
+python3 engine/storage/tests/local_peer.py dub test :storage --compiler=dmd
+python3 engine/storage/tests/local_peer.py dub test :storage --compiler=ldc2
+python3 engine/storage/tests/minio_peer.py /path/to/minio dub test :storage --compiler=ldc2
 python3 tools/gates.py --package storage --gate structural
 ```
 

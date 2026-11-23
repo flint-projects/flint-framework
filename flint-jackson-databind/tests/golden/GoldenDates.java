@@ -1,4 +1,4 @@
-// Writes tests/golden/dates.tsv, which framework/jackson-databind/tests/java_util_date_test.d compares: Jackson
+// Writes tests/golden/dates.tsv, which flint-jackson-databind/tests/java_util_date_test.d compares: Jackson
 // 3.1.8's java.util.Date support (JavaUtilDateSerializer, JavaUtilDateDeserializer, StdDateFormat, and
 // SimpleDateFormat for @JsonFormat patterns) under Spring Boot 4.2's default mapper. A case's format is applied as
 // the Date config override, which Jackson merges exactly like a property's @JsonFormat:

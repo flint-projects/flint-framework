@@ -28,8 +28,8 @@ python3 tools/native_build.py --profile tui --target linux-x86_64-glibc --phase 
 dub test :tui --compiler=dmd
 dub test :tui --compiler=ldc2
 python3 tools/gates.py --package tui --gate structural
-dub build --root=packages/engine-tui/fixtures --compiler=ldc2
-python3 packages/engine-tui/fixtures/test_pty.py packages/engine-tui/fixtures/build/test-tui-pty
+dub build --root=engine/tui/fixtures --compiler=ldc2
+python3 engine/tui/fixtures/test_pty.py engine/tui/fixtures/build/test-tui-pty
 ```
 
 The PTY fixture checks resize during rendering, focus and paste input,
@@ -39,7 +39,7 @@ reference replay the same 10,000 transitions at each of two terminal
 sizes. Both also support an idle terminal probe.
 
 ```sh
-dub build --root=packages/engine-tui/bench --compiler=ldc2
-packages/engine-tui/bench/build/probe-tui --measure
-python3 packages/engine-tui/bench/idle.py packages/engine-tui/bench/build/probe-tui
+dub build --root=engine/tui/bench --compiler=ldc2
+engine/tui/bench/build/probe-tui --measure
+python3 engine/tui/bench/idle.py engine/tui/bench/build/probe-tui
 ```

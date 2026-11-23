@@ -2,8 +2,8 @@
 
 Source: `handoff/specs/tier-4/tui.md` section 6. Unit tests run with `dub test :tui` on DMD and LDC.
 PTY rows run `fixtures/test_pty.py fixtures/build/test-tui-pty` (build with
-`dub build --root=packages/engine-tui/fixtures`). Compile-negative fixtures run with
-`python3 packages/engine-tui/negative/check.py <dmd|ldc2>`, which also compiles a repaired positive control.
+`dub build --root=engine/tui/fixtures`). Compile-negative fixtures run with
+`python3 engine/tui/negative/check.py <dmd|ldc2>`, which also compiles a repaired positive control.
 
 | ID | Required item | Covering test(s) | Status |
 | --- | --- | --- | --- |

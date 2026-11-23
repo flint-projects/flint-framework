@@ -1,4 +1,4 @@
-// Writes tests/golden/javatime.tsv, which framework/jackson-databind/tests/javatime_test.d compares: Jackson 3.1.8's
+// Writes tests/golden/javatime.tsv, which flint-jackson-databind/tests/javatime_test.d compares: Jackson 3.1.8's
 // java.time support (tools.jackson.databind.ext.javatime) under Spring Boot 4.2's default mapper, with the
 // timestamp features switched on, with @JsonFormat patterns, and when reading (the value's toString() or "!" and
 // the exception's original message). Each line is `kind<TAB>case<TAB>input<TAB>result`.

@@ -19,6 +19,6 @@ digests to invalidate the owning leaf after a resource-only edit and compiles a 
 per compiler invocation.
 
 - Run the DUB unit suite with both DMD and LDC.
-- Run `python3 packages/engine-template/negative/check.py dmd` and repeat with `ldc2` for compiler rejection cases.
-- Run `packages/engine-template/bench/scaling.py` with the pinned compiler paths and an output directory.
+- Run `python3 engine/template/negative/check.py dmd` and repeat with `ldc2` for compiler rejection cases.
+- Run `engine/template/bench/scaling.py` with the pinned compiler paths and an output directory.
 - Build the feature and equivalent baseline under `bench` to replay the 1 KiB and 64 KiB fixtures.

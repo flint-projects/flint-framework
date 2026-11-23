@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, str(Path(os.environ.get('FLINT_ROOT') or Path(__file__).resolve().parents[2]) / 'tests'))
 from flint_testing import FLINT_ROOT, package_dir, repo_dir  # noqa: E402,F401
 ROOT = FLINT_ROOT
-FIXTURE = repo_dir('framework', 'tests/framework/integration/graceful-shutdown')
+FIXTURE = repo_dir('framework', 'tests/integration/graceful-shutdown')
 BINARY = FIXTURE / 'build' / 'flint-graceful-shutdown-fixture'
 
 

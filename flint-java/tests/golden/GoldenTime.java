@@ -1,4 +1,4 @@
-// Writes the golden file that framework/java/tests/time_test.d and framework/jackson-databind/tests/time_test.d
+// Writes the golden file that flint-java/tests/time_test.d and flint-jackson-databind/tests/time_test.d
 // compare: for each java.time value, a line `label<TAB>toString()<TAB>Jackson 3.1.8 writeValueAsString`.
 //   javac -cp 'jackson-*' GoldenTime.java && java -cp 'jackson-*:.' GoldenTime time.tsv
 import java.nio.file.Files;

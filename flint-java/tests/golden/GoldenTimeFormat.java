@@ -1,4 +1,4 @@
-// Writes the golden file that framework/java/tests/time_test.d compares: java.time formatting with
+// Writes the golden file that flint-java/tests/time_test.d compares: java.time formatting with
 // DateTimeFormatter (ISO constants and ofPattern), and parsing with the result's toString() or the exception
 // message. Each line is `kind<TAB>formatter<TAB>input<TAB>result`.
 //   javac GoldenTimeFormat.java && java GoldenTimeFormat time_format.tsv

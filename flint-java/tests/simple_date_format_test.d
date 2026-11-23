@@ -1,6 +1,6 @@
 /++
 Flint tests: `SimpleDateFormat`, `GregorianCalendar` and `TimeZone` against JDK 21. `golden/dates.tsv` is the
-file framework/jackson-databind/tests/golden/GoldenDates.java writes: Jackson 3.1.8's `java.util.Date` cases.
+file flint-jackson-databind/tests/golden/GoldenDates.java writes: Jackson 3.1.8's `java.util.Date` cases.
 Jackson formats and parses a `@JsonFormat` pattern with `new SimpleDateFormat(pattern, locale)` in the format's
 zone, so every pattern case is a JDK `SimpleDateFormat` result; these tests replay those cases here.
 +/

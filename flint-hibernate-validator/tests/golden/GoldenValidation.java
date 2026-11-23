@@ -1,4 +1,4 @@
-// Writes the golden file that framework/hibernate-validator/tests/golden_test.d compares line for line.
+// Writes the golden file that flint-hibernate-validator/tests/golden_test.d compares line for line.
 // Hibernate Validator 9.1.6.Final with Jakarta Validation 3.1.1 and Expressly 6.0 (EL), as Spring Boot 4.2 resolves
 // them, validates one bean; each violation prints as path<TAB>message<TAB>template<TAB>invalid value, sorted,
 // because Hibernate returns a HashSet.

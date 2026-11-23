@@ -45,9 +45,9 @@ was resident. Both buffers are read only after being written, so `Session.this()
 ## Commands
 
 ```sh
-python3 packages/engine-storage/tests/local_peer.py dub test :storage --compiler=dmd
-python3 packages/engine-storage/tests/local_peer.py dub test :storage --compiler=ldc2
-python3 packages/engine-storage/fixtures/negative/verify.py <log-dir>
-python3 packages/engine-storage/bench/loopback.py packages/engine-storage/bench/build/probe-storage
-python3 packages/engine-storage/bench/loopback.py packages/engine-storage/bench/baseline/build/probe-storage-baseline
+python3 engine/storage/tests/local_peer.py dub test :storage --compiler=dmd
+python3 engine/storage/tests/local_peer.py dub test :storage --compiler=ldc2
+python3 engine/storage/fixtures/negative/verify.py <log-dir>
+python3 engine/storage/bench/loopback.py engine/storage/bench/build/probe-storage
+python3 engine/storage/bench/loopback.py engine/storage/bench/baseline/build/probe-storage-baseline
 ```

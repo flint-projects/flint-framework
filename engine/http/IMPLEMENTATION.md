@@ -34,18 +34,18 @@ Build the pinned provider and start the local protocol peers around each test co
 
 ~~~sh
 python3 tools/native_build.py --profile http --target linux-x86_64-glibc --phase build --emit-dub
-go build -trimpath -o artifacts/http-fixture packages/engine-http/tests/fixture/server.go
-python3 packages/engine-http/tests/fixture/run.py --server artifacts/http-fixture -- dub test :http --compiler=dmd
-python3 packages/engine-http/tests/fixture/run.py --server artifacts/http-fixture -- dub test :http --compiler=ldc2
-python3 packages/engine-http/tests/fixture/negative.py dmd
-python3 packages/engine-http/tests/fixture/negative.py ldc2
+go build -trimpath -o artifacts/http-fixture engine/http/tests/fixture/server.go
+python3 engine/http/tests/fixture/run.py --server artifacts/http-fixture -- dub test :http --compiler=dmd
+python3 engine/http/tests/fixture/run.py --server artifacts/http-fixture -- dub test :http --compiler=ldc2
+python3 engine/http/tests/fixture/negative.py dmd
+python3 engine/http/tests/fixture/negative.py ldc2
 python3 tools/gates.py --package http --gate structural
 ~~~
 
 The protocol tests exercise certificate and redirect policy, all two-byte UTF-8 splits, server writes from 1 through 4,096 bytes, the 8 MiB body boundary, arena generations, typed bindings, 64 simultaneous HTTP/2 requests on one connection, and owner-loop cancellation. The native fixture links against the provider receipt and instruments easy and multi calls, a pending threaded resolver, and native pause state. Run it with the install prefix printed by native preparation.
 
 ~~~sh
-python3 packages/engine-http/tests/fixture/native.py --prefix "$FLINT_HTTP_NATIVE_PREFIX" \
+python3 engine/http/tests/fixture/native.py --prefix "$FLINT_HTTP_NATIVE_PREFIX" \
   --server artifacts/http-fixture --output artifacts/http-native-corpus
 ~~~
 

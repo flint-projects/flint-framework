@@ -1,4 +1,4 @@
-// Writes the golden file that framework/hibernate-validator/tests/regex_test.d compares line for line: each case's
+// Writes the golden file that flint-hibernate-validator/tests/regex_test.d compares line for line: each case's
 // java.util.regex result on JDK 21, Pattern.compile(regex, flags).matcher(input).matches(), or "error" when the
 // pattern does not compile. Fields are tab-separated and escaped (backslash t, n, r and backslash, and backslash-u with four hex digits for other controls).
 //   javac GoldenRegex.java && java GoldenRegex regex.tsv

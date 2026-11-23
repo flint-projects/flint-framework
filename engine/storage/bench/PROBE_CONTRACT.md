@@ -24,7 +24,7 @@ The fixed 3,000,000-byte CLI, 8,000,000-byte REST, 300,000-byte raw browser WASM
 
 Prepare the pinned curl and OpenSSL archives with the native HTTP profile. Build `bench` and
 `bench/baseline` with DUB and the same compiler flags, then run each linked executable through
-`python3 packages/engine-storage/bench/loopback.py /path/to/executable`. The harness binds a numeric
+`python3 engine/storage/bench/loopback.py /path/to/executable`. The harness binds a numeric
 loopback address, supplies fixture-only credentials through compile-time constants and verifies
 each SigV4 request independently. Four initial part responses wait for all four signed uploads,
 which proves the selected concurrency was exercised.

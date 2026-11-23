@@ -34,7 +34,7 @@ def main():
     args = parser.parse_args()
     package = Path(__file__).resolve().parents[1]
     source = package / "native" / "ffi"
-    # The engines' shared headers: native/framework/include in the monorepo, native/include in flint-framework.
+    # The engines' shared headers: native/include in the monorepo, native/include in flint-framework.
     shared = next(path for path in (package.parents[1] / "native" / "framework" / "include",
                                     package.parents[1] / "native" / "include") if path.is_dir())
     args.output.mkdir(parents=True, exist_ok=True)

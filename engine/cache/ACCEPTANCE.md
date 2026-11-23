@@ -36,10 +36,10 @@ The stripe count is already clamped to the entry capacity (`State` constructor),
 ## Commands
 
 ```sh
-go build -trimpath -o <dir>/redis-fixture packages/engine-cache/tests/redis_fixture/server.go
-python3 packages/engine-cache/tests/redis_fixture/run.py --server <dir>/redis-fixture --valkey <valkey-server> -- dub test :cache --compiler=dmd
-python3 packages/engine-cache/tests/redis_fixture/run.py --server <dir>/redis-fixture --valkey <valkey-server> -- dub test :cache --compiler=ldc2
-python3 packages/engine-cache/tests/redis_fixture/native.py --prefix <native-prefix> --server <dir>/redis-fixture --valkey <valkey-server> --output <dir>/corpus
-python3 packages/engine-cache/tests/redis_fixture/negative.py dmd    # and ldc2
-packages/engine-cache/bench/build/probe-cache
+go build -trimpath -o <dir>/redis-fixture engine/cache/tests/redis_fixture/server.go
+python3 engine/cache/tests/redis_fixture/run.py --server <dir>/redis-fixture --valkey <valkey-server> -- dub test :cache --compiler=dmd
+python3 engine/cache/tests/redis_fixture/run.py --server <dir>/redis-fixture --valkey <valkey-server> -- dub test :cache --compiler=ldc2
+python3 engine/cache/tests/redis_fixture/native.py --prefix <native-prefix> --server <dir>/redis-fixture --valkey <valkey-server> --output <dir>/corpus
+python3 engine/cache/tests/redis_fixture/negative.py dmd    # and ldc2
+engine/cache/bench/build/probe-cache
 ```

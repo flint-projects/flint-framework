@@ -1,4 +1,4 @@
-// Writes the golden files that framework/jackson-databind/tests/golden_test.d compares byte for byte.
+// Writes the golden files that flint-jackson-databind/tests/golden_test.d compares byte for byte.
 // The mapper is configured as Spring Boot 4.2's JacksonAutoConfiguration configures it by default:
 // JsonMapper.builder().findAndAddModules().build(), Jackson 3.1.8 defaults otherwise.
 //   javac -cp jackson-databind-3.1.8.jar:jackson-core-3.1.8.jar:jackson-annotations-2.21.jar GoldenDatabind.java

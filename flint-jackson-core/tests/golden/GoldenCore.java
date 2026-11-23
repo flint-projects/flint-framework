@@ -1,4 +1,4 @@
-// Writes the golden files that framework/jackson-core/tests/golden_test.d compares byte for byte.
+// Writes the golden files that flint-jackson-core/tests/golden_test.d compares byte for byte.
 // Run with the jars Spring Boot 4.2.0 resolves (jackson-core 3.1.8):
 //   javac -cp jackson-core-3.1.8.jar GoldenCore.java && java -cp jackson-core-3.1.8.jar:. GoldenCore core
 // Every case here has a twin in golden_test.d that makes the same calls on Flint's generator.

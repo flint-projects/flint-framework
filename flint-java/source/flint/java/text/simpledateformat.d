@@ -1,6 +1,6 @@
 /++
 `java.text.DateFormat`, `SimpleDateFormat`, `ParsePosition` and `ParseException` (clean room, from the Java SE
-specification), checked against JDK 21 by framework/java/tests/golden/dates.tsv.
+specification), checked against JDK 21 by flint-java/tests/golden/dates.tsv.
 
 `SimpleDateFormat` formats and parses through a `GregorianCalendar`, as Java's does: every pattern letter of
 `GyMdkHmsSEDFwWahKzZYuXL`, quoting with `'`, Java's messages for an illegal letter or an open quote, lenient

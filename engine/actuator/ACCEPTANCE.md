@@ -1,6 +1,6 @@
 # flint:engine-actuator acceptance traceability
 
-Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance"; this spec numbers the acceptance table 7, not 6). Unit tests run with `dub test :actuator` on DMD and LDC. Fixture commands run from `packages/engine-actuator/fixtures/export` after `dub build`; `<fx>` is `build/actuator-export-fixture`.
+Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance"; this spec numbers the acceptance table 7, not 6). Unit tests run with `dub test :actuator` on DMD and LDC. Fixture commands run from `engine/actuator/fixtures/export` after `dub build`; `<fx>` is `build/actuator-export-fixture`.
 
 | # | Section 7 item (abridged) | Covering test(s) | Status |
 | --- | --- | --- | --- |
@@ -21,7 +21,7 @@ Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, 
 | 6a | export_overload: "queue stays <=8192 spans ... drops are counted" | `tests/acceptance.d:export_overload: an offline collector keeps the ring bounded, counts drops and never fails requests` (reduced 32-slot ring, refused port); fixture `<fx> http://127.0.0.1:43189 43190 600` | added |
 | 6b | export_overload: "Hold exporter offline for ten minutes ... request latency stays bounded" | fixture `<fx> http://127.0.0.1:43189 43190 600` (600 s, liveness requested once per second, slowest recorded). Run of 2026-11-21 on a shared, loaded host: 14,959,360 spans attempted, pending peak 8,192, 14,951,169 dropped, 598 liveness requests all 200, slowest 7.84 ms, peak RSS 18.2 MB, exit 0 | covered |
 | 7 | scrape_race: "Continuously record during scrapes; no invalid text, deadlock or negative bucket count" | `tests/behavior.d:scrape emits complete cumulative bucket sets while a producer updates them` (2000 scrapes against a live writer thread) | covered |
-| 8a | observe_bench: "counter and histogram operations for 1/8/32 cores; no D allocation" | `bench/` probe (`dub run --build=release` in `packages/engine-actuator/bench`): per-worker `GC.stats.allocatedInCurrentThread` delta must be 0 or the probe exits nonzero | covered |
+| 8a | observe_bench: "counter and histogram operations for 1/8/32 cores; no D allocation" | `bench/` probe (`dub run --build=release` in `engine/actuator/bench`): per-worker `GC.stats.allocatedInCurrentThread` delta must be 0 or the probe exits nonzero | covered |
 | 8b | observe_bench: "no global hot lock" | same probe; `add`/`record` touch only the caller's cache-aligned per-core cell (`metrics.d` `Cell`), no registry mutex on the update path | covered |
 | 9 | General: native boundary corpora under ASan | actuator has no `ffi/`/`sys/` boundary and adds no C library (spec section 5); HTTP/TLS is exercised through `flint:engine-http` | n/a |
 

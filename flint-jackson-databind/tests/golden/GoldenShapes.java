@@ -1,4 +1,4 @@
-// Writes tests/golden/shapes.tsv, which framework/jackson-databind/tests/shapes_test.d compares: Jackson 3.1.8 under
+// Writes tests/golden/shapes.tsv, which flint-jackson-databind/tests/shapes_test.d compares: Jackson 3.1.8 under
 // Spring Boot 4.2's default mapper on arrays, byte[] (Base64), Optional, maps, enums and records, written and read.
 // Each line is `kind<TAB>case<TAB>input<TAB>result`; a read prints the value's text or "!" and the original message.
 //   javac -cp 'jars/*' GoldenShapes.java && java -cp 'jars/*:.' GoldenShapes shapes.tsv
