@@ -77,6 +77,22 @@ BuiltinConstraint read(string type, ref const Any annotation)
     return c;
 }
 
+/// Read a user-defined constraint `annotation` of type `A`: its `message` and the attributes EL can see.
+BuiltinConstraint readCustom(A)(ref const Any annotation)
+{
+    BuiltinConstraint c;
+    c.annotationType = typeNameOf!A;
+    const a = annotation.get!A();
+    c.annotation = Any.of(mutableCopy(a));
+    c.message = a.message;
+    static foreach (i; 0 .. A.tupleof.length)
+    {
+        static if (__traits(identifier, A.tupleof[i]) != "message" && __traits(compiles, elValue(a.tupleof[i])))
+            c.attributes ~= Attribute(__traits(identifier, A.tupleof[i]), elValue(a.tupleof[i]));
+    }
+    return c;
+}
+
 private void readInto(A)(ref BuiltinConstraint c, ref const Any annotation)
 {
     const a = annotation.get!A();

@@ -21,7 +21,7 @@ module flint.jakarta.validation;
 
 import flint.engine.aot.any : Any;
 import flint.jakarta.validation.metadata : ConstraintDescriptor;
-import flint.java.lang : RuntimeException;
+import flint.java.lang : ClassRef, RuntimeException;
 
 @safe:
 
@@ -214,17 +214,35 @@ interface ConstraintValidator(A, T)
     bool isValid(T value, ConstraintValidatorContext context);
 }
 
+/**
+ * Marks an annotation as being a Jakarta Validation constraint: `@Constraint(validatedBy: [classOf!MyValidator])`
+ * on the annotation struct. Flint binds the validator classes explicitly (Hibernate Validator's `ConstraintMapping`),
+ * so `validatedBy` documents the binding and lets the engine report a missing one.
+ */
+struct Constraint
+{
+    /// The `ConstraintValidator` classes implementing the constraint.
+    ClassRef[] validatedBy;
+}
+
 /// Provides contextual data and operation when applying a given constraint validator.
 interface ConstraintValidatorContext
 {
+    /// `ConstraintViolation` builder allowing to optionally associate the violation report to a sub path.
+    interface ConstraintViolationBuilder
+    {
+        /// Adds the new `ConstraintViolation` to report during the validation; returns the original context.
+        ConstraintValidatorContext addConstraintViolation();
+    }
+
+    /// Returns a constraint violation builder building a violation report with the given message template.
+    ConstraintViolationBuilder buildConstraintViolationWithTemplate(string messageTemplate);
+
     /// Disables the default `ConstraintViolation` object generation (which is using the message template declared on the constraint).
     void disableDefaultConstraintViolation();
 
     /// The current un-interpolated default message.
     string getDefaultConstraintMessageTemplate();
-
-    /// Adds a violation with `messageTemplate` at the current path (Java's `buildConstraintViolationWithTemplate(t).addConstraintViolation()`).
-    void addConstraintViolation(string messageTemplate);
 }
 
 /// Base exception of all Jakarta Validation "unexpected" problems.

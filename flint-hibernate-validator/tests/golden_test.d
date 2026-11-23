@@ -6,7 +6,9 @@ module golden_test;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : DescriptorTable, descriptorOf;
 import flint.hibernate.validator : HibernateValidatorConfiguration;
-import flint.jakarta.validation : ConstraintViolation, Valid, Validation, Validator;
+import flint.jakarta.validation : Constraint, ConstraintValidator, ConstraintValidatorContext, ConstraintViolation,
+    Valid, Validation, Validator;
+import flint.java.lang : classOf;
 import flint.jakarta.validation.constraints;
 import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset,
     ZonedDateTime;
@@ -24,6 +26,90 @@ private final class Pet
         this.name = name;
         this.type = type;
     }
+}
+
+/// spring-petclinic-rest's PetAgeValidation and PetAgeValidator.
+@Constraint(validatedBy: [classOf!PetAgeValidator])
+private struct PetAgeValidation
+{
+    string message = "Birth date must not be in the future or older than 50 years";
+}
+
+private final class PetAgeValidator : ConstraintValidator!(PetAgeValidation, LocalDate)
+{
+    void initialize(PetAgeValidation constraintAnnotation)
+    {
+    }
+
+    bool isValid(LocalDate birthDate, ConstraintValidatorContext context)
+    {
+        const today = LocalDate.now();
+        if (birthDate.isAfter(today))
+        {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("Birth date cannot be in the future")
+                .addConstraintViolation();
+            return false;
+        }
+        if (birthDate.isBefore(today.minusYears(50)))
+        {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("Birth date cannot be older than 50 years")
+                .addConstraintViolation();
+            return false;
+        }
+        return true;
+    }
+}
+
+/// A custom constraint that keeps its default violation and adds one with an attribute in its template.
+@Constraint(validatedBy: [classOf!EvenValidator])
+private struct Even
+{
+    string message = "must be even, not ${validatedValue}";
+    int divisor = 2;
+}
+
+private final class EvenValidator : ConstraintValidator!(Even, int)
+{
+    private int divisor;
+
+    void initialize(Even even)
+    {
+        divisor = even.divisor;
+    }
+
+    bool isValid(int value, ConstraintValidatorContext context)
+    {
+        if (value % divisor == 0)
+            return true;
+        context.buildConstraintViolationWithTemplate("{divisor} does not divide it").addConstraintViolation();
+        return false;
+    }
+}
+
+/// The @Pattern expressions spring-petclinic-rest's DTOs declare, on non-ASCII input. (Java's `unset = null`
+/// birth date has no D twin: a struct is never null.)
+private final class Petclinic
+{
+    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`) string spanish = "Jos\u00e9 Mar\u00eda";
+    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`) string chinese = "\u674e";
+    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`) string supplementary = "\U0001D49Cda";
+    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`) string greekDigit = "\u0395\u03bb\u03ad\u03bd\u03b7 2";
+    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`) string combining = "Rene\u0301e";
+    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}\.?$`) string fourParts = "Van Der Berg Smith";
+    @Pattern(regexp : `[\s\S]*\S[\s\S]*`) string blank = " \t ";
+    @Pattern(regexp : `[\s\S]*\S[\s\S]*`) string nbsp = "\u00a0";
+    @Pattern(regexp : `^[\p{L}][\p{L}\s\-']{0,79}$`) string petType = "\u00dcnicorn's-pet";
+    @Pattern(regexp : `^[\p{L}][\p{L}\s\-']{0,79}$`) string digitFirst = "9cats";
+    @Pattern(regexp : `^[\p{L}][\p{L}\s\-&/]{0,79}$`) string specialty = "dentistry & surgery/x";
+    @Pattern(regexp : `^ROLE_[A-Z][A-Z0-9_]{1,74}$`) string role = "OWNER_ADMIN";
+    @Pattern(regexp : `\P{L}+`) string notLetters = "12\u00e9";
+    @PetAgeValidation LocalDate future = LocalDate.of(2999, 1, 1);
+    @PetAgeValidation LocalDate ancient = LocalDate.of(1900, 1, 1);
+    @PetAgeValidation LocalDate fine = LocalDate.of(2020, 2, 2);
+    @Even int odd = 7;
+    @Even(divisor : 5) int five = 10;
 }
 
 private final class Owner
@@ -151,16 +237,21 @@ private Validator validator()
             descriptorOf!(Pet[string])()
         ])
         table.add(d);
+    table.add(descriptorOf!Petclinic());
     auto configuration = cast(HibernateValidatorConfiguration) Validation.byDefaultProvider();
     assert(configuration !is null, "Hibernate Validator registers itself as the default provider");
-    return configuration.descriptors(table).buildValidatorFactory().getValidator();
+    auto mapping = configuration.createConstraintMapping();
+    mapping.constraintDefinition!PetAgeValidation().validatedBy!PetAgeValidator();
+    mapping.constraintDefinition!Even().includeExistingValidators(false).validatedBy!EvenValidator();
+    return configuration.descriptors(table).addMapping(mapping).buildValidatorFactory().getValidator();
 }
 
 @("golden: paths, interpolated messages, templates and invalid values match Hibernate Validator")
 unittest
 {
     string[] lines;
-    foreach (v; validator().validate(new Owner()))
+    auto validator = validator();
+    foreach (v; validator.validate(new Owner()) ~ validator.validate(new Petclinic()))
         lines ~= v.getPropertyPath()
             .toString() ~ "\t" ~ v.getMessage() ~ "\t" ~ v.getMessageTemplate() ~ "\t" ~ valueOf(v.getInvalidValue());
     import std.algorithm.sorting : sort;

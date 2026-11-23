@@ -16,6 +16,7 @@
 module flint.hibernate.validator;
 
 import flint.engine.aot.descriptor : DescriptorTable;
+import flint.hibernate.validator.cfg : ConstraintMapping;
 import flint.hibernate.validator.internal.engine : ValidatorFactoryImpl;
 import flint.hibernate.validator.messageinterpolation : ResourceBundleMessageInterpolator;
 import flint.jakarta.validation : Configuration, MessageInterpolator, Validation, ValidatorFactory;
@@ -44,6 +45,7 @@ final class HibernateValidatorConfiguration : Configuration
 {
     private MessageInterpolator interpolator;
     private DescriptorTable table;
+    private ConstraintMapping[] mappings;
 
     /// Defines the message interpolator used; null restores `ResourceBundleMessageInterpolator`.
     Configuration messageInterpolator(MessageInterpolator interpolator)
@@ -66,10 +68,28 @@ final class HibernateValidatorConfiguration : Configuration
     }
 
     /// Builds the `ValidatorFactory`.
+    /// Creates a new constraint mapping which can be used to programmatically configure the constraints.
+    ConstraintMapping createConstraintMapping()
+    {
+        return new ConstraintMapping();
+    }
+
+    /// Adds the specified `ConstraintMapping` instance to the configuration.
+    HibernateValidatorConfiguration addMapping(ConstraintMapping mapping)
+    {
+        mappings ~= mapping;
+        return this;
+    }
+
+    /// Builds the factory: the descriptors, the interpolator and the validators the added mappings bind.
     ValidatorFactory buildValidatorFactory()
     {
-        return new ValidatorFactoryImpl(table is null ? DescriptorTable.withBuiltins() : table,
+        auto factory = new ValidatorFactoryImpl(table is null ? DescriptorTable.withBuiltins() : table,
                 interpolator is null ? getDefaultMessageInterpolator() : interpolator);
+        foreach (mapping; mappings)
+            foreach (validator; mapping.validators)
+                factory.bind(validator);
+        return factory;
     }
 }
 

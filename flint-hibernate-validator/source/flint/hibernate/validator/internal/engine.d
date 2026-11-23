@@ -21,9 +21,10 @@ import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : Descriptor, DescriptorTable, MergedAnnotation, PropertyDescriptor, TypeKind;
 import flint.engine.aot.name : typeNameOf;
 import flint.hibernate.validator.internal.constraintvalidators : BuiltinConstraint, PatternCache,
-    attributeText, isBuiltin, isValid, read;
-import flint.jakarta.validation : ConstraintViolation, ElementKind, MessageInterpolator, Path,
-    Valid, ValidationException, Validator, ValidatorFactory;
+    attributeText, isBuiltin, isValid, javaConstraintName, javaTypeName, read;
+import flint.hibernate.validator.internal.custom : ConstraintValidatorContextImpl, CustomValidator;
+import flint.jakarta.validation : Constraint, ConstraintViolation, ElementKind, MessageInterpolator,
+    Path, UnexpectedTypeException, Valid, ValidationException, Validator, ValidatorFactory;
 import flint.jakarta.validation.metadata : ConstraintDescriptor;
 import flint.java.util : RawCollection, RawMap;
 
@@ -358,6 +359,7 @@ final class ValidatorFactoryImpl : ValidatorFactory
     private DescriptorTable descriptors;
     private MessageInterpolator interpolator;
     private PatternCache patterns;
+    private CustomValidator[][string] custom;
 
     ///
     this(DescriptorTable descriptors, MessageInterpolator interpolator)
@@ -365,6 +367,12 @@ final class ValidatorFactoryImpl : ValidatorFactory
         this.descriptors = descriptors;
         this.interpolator = interpolator;
         patterns = new PatternCache();
+    }
+
+    /// Bind a user-defined constraint validator (from a `ConstraintMapping`).
+    void bind(CustomValidator validator)
+    {
+        custom[validator.annotationType] ~= validator;
     }
 
     /// A validator; validators share the factory's state and are thread-safe.
@@ -568,15 +576,64 @@ private struct Run
     {
         foreach (ref a; annotations)
         {
-            if (!isBuiltin(a.type))
-                continue;
-            auto constraint = read(a.type, a.value);
-            if (isValid(constraint, value, factory.patterns, at.toString(), described(value)))
-                continue;
-            auto descriptor = new ConstraintDescriptorImpl(constraint);
-            const message = factory.interpolator.interpolate(constraint.message,
+            if (isBuiltin(a.type))
+            {
+                auto constraint = read(a.type, a.value);
+                if (!isValid(constraint, value, factory.patterns, at.toString(), described(value)))
+                    report(leaf, value, at, constraint, [constraint.message]);
+            }
+            else if (auto bound = a.type in factory.custom)
+                checkCustom(leaf, value, a, *bound, at);
+            else
+                requireBinding(a.type, value, at);
+        }
+    }
+
+    // SimpleConstraintTree: run the bound validator that accepts the value's type, then report the default and the
+    // built templates.
+    void checkCustom(Any leaf, ref Any value, ref const MergedAnnotation a, CustomValidator[] bound, PathImpl at)
+    {
+        CustomValidator chosen;
+        foreach (candidate; bound)
+        {
+            if (value.isNull() || candidate.accepts(value))
+            {
+                chosen = candidate;
+                break;
+            }
+        }
+        if (chosen.run is null)
+            throw unexpectedType(a.type, value, at);
+        auto constraint = chosen.read(a.value);
+        auto context = new ConstraintValidatorContextImpl(constraint.message);
+        if (!chosen.run(constraint.annotation, value, context))
+            report(leaf, value, at, constraint, context.violationTemplates());
+    }
+
+    // An annotation whose descriptor carries @Constraint but has no bound validator: Hibernate would instantiate
+    // `validatedBy`, which Flint never does from a class name.
+    void requireBinding(string annotationType, ref Any value, PathImpl at)
+    {
+        auto d = factory.descriptors is null ? null : factory.descriptors.find(annotationType);
+        if (d !is null && findAnnotation(d.annotations, typeNameOf!Constraint))
+            throw unexpectedType(annotationType, value, at);
+    }
+
+    UnexpectedTypeException unexpectedType(string annotationType, ref Any value, PathImpl at)
+    {
+        const constraint = javaConstraintName(annotationType), type = javaTypeName(value.typeName());
+        return new UnexpectedTypeException("HV000030: No validator could be found for constraint '"
+                ~ constraint ~ "' validating type '" ~ type ~ "'. Check configuration for '" ~ at.toString() ~ "'");
+    }
+
+    void report(Any leaf, ref Any value, PathImpl at, BuiltinConstraint constraint, string[] templates)
+    {
+        auto descriptor = new ConstraintDescriptorImpl(constraint);
+        foreach (messageTemplate; templates)
+        {
+            const message = factory.interpolator.interpolate(messageTemplate,
                     new MessageInterpolatorContext(descriptor, value));
-            violations ~= new ConstraintViolationImpl(constraint.message, message, rootType, root,
+            violations ~= new ConstraintViolationImpl(messageTemplate, message, rootType, root,
                     leaf, value, at, descriptor);
         }
     }

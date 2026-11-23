@@ -11,7 +11,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Payload;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import jakarta.validation.Valid;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -22,6 +30,86 @@ public class GoldenValidation {
         @NotBlank public String name;
         @NotNull public String type;
         public Pet(String name, String type) { this.name = name; this.type = type; }
+    }
+
+    // spring-petclinic-rest's PetAgeValidation and PetAgeValidator, as written there.
+    @Target({ ElementType.FIELD })
+    @Retention(RetentionPolicy.RUNTIME)
+    @Constraint(validatedBy = PetAgeValidator.class)
+    public @interface PetAgeValidation {
+        String message() default "Birth date must not be in the future or older than 50 years";
+        Class<?>[] groups() default {};
+        Class<? extends Payload>[] payload() default {};
+    }
+
+    public static class PetAgeValidator implements ConstraintValidator<PetAgeValidation, LocalDate> {
+        @Override
+        public boolean isValid(LocalDate birthDate, ConstraintValidatorContext context) {
+            if (birthDate == null) {
+                return true;
+            }
+            LocalDate today = LocalDate.now();
+            if (birthDate.isAfter(today)) {
+                context.disableDefaultConstraintViolation();
+                context.buildConstraintViolationWithTemplate("Birth date cannot be in the future").addConstraintViolation();
+                return false;
+            }
+            if (birthDate.isBefore(today.minusYears(50))) {
+                context.disableDefaultConstraintViolation();
+                context.buildConstraintViolationWithTemplate("Birth date cannot be older than 50 years")
+                    .addConstraintViolation();
+                return false;
+            }
+            return true;
+        }
+    }
+
+    // A custom constraint that keeps its default violation and adds one with an EL template.
+    @Target({ ElementType.FIELD })
+    @Retention(RetentionPolicy.RUNTIME)
+    @Constraint(validatedBy = EvenValidator.class)
+    public @interface Even {
+        String message() default "must be even, not ${validatedValue}";
+        int divisor() default 2;
+        Class<?>[] groups() default {};
+        Class<? extends Payload>[] payload() default {};
+    }
+
+    public static class EvenValidator implements ConstraintValidator<Even, Integer> {
+        private int divisor;
+        @Override
+        public void initialize(Even even) { divisor = even.divisor(); }
+        @Override
+        public boolean isValid(Integer value, ConstraintValidatorContext context) {
+            if (value == null || value % divisor == 0) {
+                return true;
+            }
+            context.buildConstraintViolationWithTemplate("{divisor} does not divide it").addConstraintViolation();
+            return false;
+        }
+    }
+
+    // The @Pattern expressions spring-petclinic-rest's DTOs declare, on non-ASCII input.
+    public static class Petclinic {
+        @Pattern(regexp = "^[\\p{L}]+([ '-][\\p{L}]+){0,2}$") public String spanish = "Jos\u00e9 Mar\u00eda";
+        @Pattern(regexp = "^[\\p{L}]+([ '-][\\p{L}]+){0,2}$") public String chinese = "\u674e";
+        @Pattern(regexp = "^[\\p{L}]+([ '-][\\p{L}]+){0,2}$") public String supplementary = "\ud835\udc9cda";
+        @Pattern(regexp = "^[\\p{L}]+([ '-][\\p{L}]+){0,2}$") public String greekDigit = "\u0395\u03bb\u03ad\u03bd\u03b7 2";
+        @Pattern(regexp = "^[\\p{L}]+([ '-][\\p{L}]+){0,2}$") public String combining = "Rene\u0301e";
+        @Pattern(regexp = "^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$") public String fourParts = "Van Der Berg Smith";
+        @Pattern(regexp = "[\\s\\S]*\\S[\\s\\S]*") public String blank = " \t ";
+        @Pattern(regexp = "[\\s\\S]*\\S[\\s\\S]*") public String nbsp = "\u00a0";
+        @Pattern(regexp = "^[\\p{L}][\\p{L}\\s\\-']{0,79}$") public String petType = "\u00dcnicorn's-pet";
+        @Pattern(regexp = "^[\\p{L}][\\p{L}\\s\\-']{0,79}$") public String digitFirst = "9cats";
+        @Pattern(regexp = "^[\\p{L}][\\p{L}\\s\\-&/]{0,79}$") public String specialty = "dentistry & surgery/x";
+        @Pattern(regexp = "^ROLE_[A-Z][A-Z0-9_]{1,74}$") public String role = "OWNER_ADMIN";
+        @Pattern(regexp = "\\P{L}+") public String notLetters = "12\u00e9";
+        @PetAgeValidation public LocalDate future = LocalDate.of(2999, 1, 1);
+        @PetAgeValidation public LocalDate ancient = LocalDate.of(1900, 1, 1);
+        @PetAgeValidation public LocalDate fine = LocalDate.of(2020, 2, 2);
+        @PetAgeValidation public LocalDate unset = null;
+        @Even public Integer odd = 7;
+        @Even(divisor = 5) public Integer five = 10;
     }
 
     public static class Owner {
@@ -79,6 +167,10 @@ public class GoldenValidation {
         Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
         List<String> lines = new ArrayList<>();
         for (ConstraintViolation<Owner> v : validator.validate(new Owner())) {
+            lines.add(v.getPropertyPath() + "\t" + v.getMessage() + "\t" + v.getMessageTemplate() + "\t"
+                    + text(v.getInvalidValue()));
+        }
+        for (ConstraintViolation<Petclinic> v : validator.validate(new Petclinic())) {
             lines.add(v.getPropertyPath() + "\t" + v.getMessage() + "\t" + v.getMessageTemplate() + "\t"
                     + text(v.getInvalidValue()));
         }

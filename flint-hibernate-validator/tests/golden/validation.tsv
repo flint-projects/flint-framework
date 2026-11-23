@@ -2,33 +2,44 @@ active	must be true	{jakarta.validation.constraints.AssertTrue.message}	false
 age	must be greater than or equal to 1	{jakarta.validation.constraints.Min.message}	0
 aliases	must not be empty	{jakarta.validation.constraints.NotEmpty.message}	[]
 amount	numeric value out of bounds (<3 digits>.<2 digits> expected)	{jakarta.validation.constraints.Digits.message}	1234.567
+ancient	Birth date cannot be older than 50 years	Birth date cannot be older than 50 years	1900-01-01
 balance	must be greater than or equal to 0	{jakarta.validation.constraints.PositiveOrZero.message}	-0.5
 birthDate	must be a past date	{jakarta.validation.constraints.Past.message}	3000-01-01
+blank	must match "[\s\S]*\S[\s\S]*"	{jakarta.validation.constraints.Pattern.message}	 	 
 blankName	must not be blank	{jakarta.validation.constraints.NotBlank.message}	 	
 city	size must be between 2 and 30	{jakarta.validation.constraints.Size.message}	A
 closing	must be a future date	{jakarta.validation.constraints.Future.message}	00:00
 code	'ab' must have at least 3 characters	'${validatedValue}' must have at least {min} characters	ab
+combining	must match "^[\p{L}]+([ '-][\p{L}]+){0,2}$"	{jakarta.validation.constraints.Pattern.message}	Renée
 created	must be a date in the past or in the present	{jakarta.validation.constraints.PastOrPresent.message}	3000-01-01T00:00
 debt	must be less than or equal to 0	{jakarta.validation.constraints.NegativeOrZero.message}	5
 deleted	must be false	{jakarta.validation.constraints.AssertFalse.message}	true
+digitFirst	must match "^[\p{L}][\p{L}\s\-']{0,79}$"	{jakarta.validation.constraints.Pattern.message}	9cats
 due	must be a date in the present or in the future	{jakarta.validation.constraints.FutureOrPresent.message}	2000-01-01T00:00+02:00
 email	must be a well-formed email address	{jakarta.validation.constraints.Email.message}	not-an-email
 escaped	literal {min} and {min}	literal \{min\} and {min}	null
 expiry	must be a future date	{jakarta.validation.constraints.Future.message}	2000-01-01T00:00:00Z
 firstName	must not be blank	{jakarta.validation.constraints.NotBlank.message}	
+fourParts	must match "^[\p{L}]+([ '-][\p{L}]+){0,2}\.?$"	{jakarta.validation.constraints.Pattern.message}	Van Der Berg Smith
+future	Birth date cannot be in the future	Birth date cannot be in the future	2999-01-01
+greekDigit	must match "^[\p{L}]+([ '-][\p{L}]+){0,2}$"	{jakarta.validation.constraints.Pattern.message}	Ελένη 2
 id	must be greater than 0	{jakarta.validation.constraints.Positive.message}	-3
 lastName	must not be null	{jakarta.validation.constraints.NotNull.message}	null
 limits	size must be between 0 and 1	{jakarta.validation.constraints.Size.message}	{a=1, b=2}
 maxAge	must be less than or equal to 120	{jakarta.validation.constraints.Max.message}	150
 maybePet.name	must not be blank	{jakarta.validation.constraints.NotBlank.message}	
 nicknames	size must be between 0 and 2	{jakarta.validation.constraints.Size.message}	[a, b, c]
+notLetters	must match "\P{L}+"	{jakarta.validation.constraints.Pattern.message}	12é
 nothing	must be null	{jakarta.validation.constraints.Null.message}	x
+odd	2 does not divide it	{divisor} does not divide it	7
+odd	must be even, not 7	must be even, not ${validatedValue}	7
 petArray[0].type	must not be null	{jakarta.validation.constraints.NotNull.message}	null
 petsByName[tom].type	must not be null	{jakarta.validation.constraints.NotNull.message}	null
 pets[0].name	must not be blank	{jakarta.validation.constraints.NotBlank.message}	  
 pets[0].type	must not be null	{jakarta.validation.constraints.NotNull.message}	null
 price	must be greater than 0	{jakarta.validation.constraints.DecimalMin.message}	0.0
 rating	must be less than or equal to 99.5	{jakarta.validation.constraints.DecimalMax.message}	100.0
+role	must match "^ROLE_[A-Z][A-Z0-9_]{1,74}$"	{jakarta.validation.constraints.Pattern.message}	OWNER_ADMIN
 scores	size must be between 4 and 2147483647	{jakarta.validation.constraints.Size.message}	[1, 2, 3]
 tags	must not be empty	{jakarta.validation.constraints.NotEmpty.message}	[]
 telephone	must match "\d{1,10}"	{jakarta.validation.constraints.Pattern.message}	60855510239999
