@@ -1,0 +1,8 @@
+name "probe-jakarta-validation"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-jakarta-validation"
+dflags "-preview=dip1000"
+dependency "flint:jakarta-validation" path="../../.."

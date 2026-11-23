@@ -1,0 +1,8 @@
+name "probe-beans"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-beans"
+dflags "-preview=dip1000"
+dependency "flint:beans" path="../../.."

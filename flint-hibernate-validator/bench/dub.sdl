@@ -1,0 +1,8 @@
+name "probe-hibernate-validator"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-hibernate-validator"
+dflags "-preview=dip1000"
+dependency "flint:hibernate-validator" path="../../.."
