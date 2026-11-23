@@ -290,6 +290,13 @@ final class ServletEngine : RequestHost
     {
         auto servletRequest = capture(request, context);
         auto servletResponse = new ServletEngineResponse(transport);
+        if (!withinContext(servletRequest.getRequestURI()))
+        {
+            // Tomcat's Mapper finds no context for the URI: the host's ErrorReportValve answers 404.
+            hostErrorReport(servletResponse, 404, "Not Found");
+            servletResponse.complete();
+            return;
+        }
         Exception failure;
         try
             new Chain(this, DispatcherType.REQUEST).doFilter(servletRequest, servletResponse);
@@ -300,6 +307,36 @@ final class ServletEngine : RequestHost
         else if (servletResponse.isError())
             status(servletRequest, servletResponse);
         servletResponse.complete();
+    }
+
+    /// Whether `uri` is inside this engine's one context (Tomcat maps `/ctx` itself, and `/ctx/...`).
+    private bool withinContext(string uri) const pure nothrow @nogc
+    {
+        const path = options.contextPath;
+        if (path.length == 0)
+            return true;
+        if (uri.length < path.length || uri[0 .. path.length] != path)
+            return false;
+        return uri.length == path.length || uri[path.length] == '/';
+    }
+
+    /// Tomcat's `ErrorReportValve` as Spring Boot configures it (no report, no server info), for a request no
+    /// context serves: an HTML page naming the status, in English.
+    private static void hostErrorReport(ServletEngineResponse response, int code, string reason)
+    {
+        import flint.java.util : Locale;
+
+        response.setStatus(code);
+        response.setContentType("text/html");
+        response.setCharacterEncoding("utf-8");
+        response.setLocale(Locale.forLanguageTag("en"));
+        const title = "HTTP Status " ~ decimal(code) ~ " \u2013 " ~ reason;
+        const page = `<!doctype html><html lang="en"><head><title>` ~ title ~ `</title><style type="text/css">`
+            ~ "body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} "
+            ~ "h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} "
+            ~ "a {color:black;} .line {height:1px;background-color:#525D76;border:none;}</style></head><body><h1>"
+            ~ title ~ "</h1></body></html>";
+        response.getOutputStream().write(cast(const(ubyte)[]) page);
     }
 
     /// Copy the request out of the arena: two GC allocations however many fields it has.

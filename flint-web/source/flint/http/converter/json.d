@@ -42,6 +42,16 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
         this.mapper = mapper;
     }
 
+    /// `getMediaTypesForProblemDetail`: a `ProblemDetail` is written as `application/problem+json` (RFC 9457).
+    override MediaType[] getSupportedMediaTypes(string typeName)
+    {
+        if (typeName == "flint.http.ProblemDetail")
+            return [MediaType.APPLICATION_PROBLEM_JSON];
+        return super.getSupportedMediaTypes(typeName);
+    }
+
+    alias getSupportedMediaTypes = AbstractHttpMessageConverter.getSupportedMediaTypes;
+
     /// The mapper.
     ObjectMapper getMapper() pure nothrow @nogc
     {

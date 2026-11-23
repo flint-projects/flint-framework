@@ -141,10 +141,11 @@ private struct Fixture
     Probe probe;
     ushort port;
 
-    void open()
+    void open(string contextPath = "")
     {
         ServletEngineOptions options;
         options.address = "127.0.0.1";
+        options.contextPath = contextPath;
         options.port = 0;
         engine = new ServletEngine(options);
         probe = new Probe;
@@ -378,14 +379,43 @@ unittest
     assert(reply.content == `{"status":405,"path":"/greeting","message":"Method 'POST' is not supported.",`
             ~ `"exception":null,"at":"/error"}`, reply.content);
 
-    // An uncaught exception is a 500 forwarded with the exception's type.
-    reply = exchange(socket, pending, "GET /throw HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert(reply.head[0 .. 15] == "HTTP/1.1 500 \r\n", reply.head);
-    assert(reply.content == `{"status":500,"path":"/throw","message":"boom",`
-            ~ `"exception":"flint.java.lang.IllegalStateException","at":"/error"}`, reply.content);
-
     // The connection is still in step after the error dispatches.
     reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":1,"content":"Hello, World!"}`, reply.content);
+
+    // An uncaught exception is a 500 forwarded with the exception's type. As in Tomcat
+    // (Http11Processor.statusDropsConnection), a 500 closes the connection with "Connection: close".
+    reply = exchange(socket, pending, "GET /throw HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.head[0 .. 15] == "HTTP/1.1 500 \r\n", reply.head);
+    assert(find(reply.head, "\r\nConnection: close\r\n") > 0, reply.head);
+    assert(reply.content == `{"status":500,"path":"/throw","message":"boom",`
+            ~ `"exception":"flint.java.lang.IllegalStateException","at":"/error"}`, reply.content);
+    ubyte[1] rest;
+    assert(socket.receive(rest[]) == 0, "the connection stays open after a 500");
+}
+
+@("a request outside the context path gets Tomcat's host-level 404 page; inside it, the servlet")
+unittest
+{
+    Fixture fixture;
+    fixture.open("/app");
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    char[] pending;
+
+    auto reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 404 \r\nContent-Type: text/html;charset=utf-8\r\n"
+            ~ "Content-Language: en\r\nContent-Length: 431\r\n\r\n", reply.head);
+    assert(reply.content[0 .. 67] == "<!doctype html><html lang=\"en\"><head><title>HTTP Status 404 \u2013 Not",
+            reply.content);
+    reply = exchange(socket, pending, "GET /application/greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.head[0 .. 15] == "HTTP/1.1 404 \r\n", reply.head);
+    assert(find(reply.content, "HTTP Status 404") > 0, reply.content);
+
+    reply = exchange(socket, pending, "GET /app/greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
     assert(reply.content == `{"id":1,"content":"Hello, World!"}`, reply.content);
 }
 

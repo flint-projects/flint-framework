@@ -569,6 +569,41 @@ version (FlintJacksonMapperRegistrations)
     }
 }
 
+// The JSON half of Spring's problemDetail* tests below: without the XML converter, every request ends in
+// application/problem+json (AbstractJacksonHttpMessageConverter.getMediaTypesForProblemDetail).
+@("Flint: a ProblemDetail is written as application/problem+json whatever JSON the request accepts")
+unittest
+{
+    foreach (accept; [
+        null, MediaType.APPLICATION_JSON_VALUE,
+        MediaType.APPLICATION_JSON_VALUE ~ "," ~ MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+        MediaType.APPLICATION_PDF_VALUE
+    ])
+    {
+        auto f = setup();
+        if (accept !is null)
+            f.servletRequest.addHeader("Accept", accept);
+        f.servletRequest.setRequestURI("/path");
+        auto processor = new RequestResponseBodyMethodProcessor([
+            cast(HttpMessageConverter) newJsonConverter()
+        ]);
+        auto returnType = methodParameter!handleAndReturnPlainProblemDetail(-1);
+        processor.handleReturnValue(Any.of(ProblemDetail.forStatus(HttpStatus.BAD_REQUEST.value())),
+                returnType, f.container, f.request);
+
+        assert(f.servletResponse.getStatus() == HttpStatus.BAD_REQUEST.value());
+        assert(f.servletResponse.getContentType() == MediaType.APPLICATION_PROBLEM_JSON_VALUE,
+                f.servletResponse.getContentType());
+        const content = f.servletResponse.getContentAsString();
+        assert(content.canFind(`"title":"Bad Request"`), content);
+    }
+}
+
+private ProblemDetail handleAndReturnPlainProblemDetail()
+{
+    return null;
+}
+
 // flint.http has no JacksonXmlHttpMessageConverter (nor XML problem details).
 version (FlintJacksonXml)
 {

@@ -1023,10 +1023,23 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         else
             head.framing = connection.parser.versionMinor == 1 ? FiberFraming.chunked : FiberFraming.close;
         head.persistence.keep = connection.parser.keepAlive && !connection.parser.upgradeRequested
-            && !draining() && head.framing != FiberFraming.close;
+            && !draining() && head.framing != FiberFraming.close && !statusDropsConnection(status);
         head.persistence.requested = requestedKeepAlive(connection);
         head.persistence.timeoutSeconds = limits.idleTimeoutNanos / 1_000_000_000L;
         return head;
+    }
+
+    // Tomcat's Http11Processor.statusDropsConnection: after these statuses the connection closes, with
+    // "Connection: close" on the response.
+    private static bool statusDropsConnection(ushort status) pure nothrow @nogc
+    {
+        switch (status)
+        {
+        case 400, 408, 411, 413, 414, 500, 501, 503:
+            return true;
+        default:
+            return false;
+        }
     }
 
     private bool requestedKeepAlive(scope Connection* connection) scope nothrow @nogc

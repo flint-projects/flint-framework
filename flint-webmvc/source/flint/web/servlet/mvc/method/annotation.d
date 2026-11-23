@@ -45,6 +45,7 @@ import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodAr
     HandlerMethodReturnValueHandler,
     HandlerMethodReturnValueHandlerComposite, InvocableHandlerMethod, ModelAndViewContainer;
 import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView, View;
+import flint.web.servlet.resource : ResourceHttpRequestHandler;
 import flint.web.servlet.handler : AbstractHandlerExceptionResolver;
 import flint.web.cors : CorsConfiguration;
 import flint.web.servlet.mvc.method : RequestMappingInfo, RequestMappingInfoHandlerMapping;
@@ -595,6 +596,10 @@ class RequestResponseBodyMethodProcessor : AbstractMessageConverterMethodProcess
     {
         mavContainer.setRequestHandled(true);
         auto outputMessage = createOutputMessage(webRequest);
+        // A returned ProblemDetail sets the response status (error response interceptors and error views are
+        // not ported).
+        if (!returnValue.isNull() && returnValue.holds!ProblemDetail)
+            outputMessage.setStatusCode(HttpStatusCode.valueOf(returnValue.get!ProblemDetail.getStatus()));
         writeWithMessageConverters(returnValue, returnType, webRequest, outputMessage);
         // Spring 7: no flush here, so the container sets Content-Length when the response completes.
         outputMessage.close();
@@ -1081,7 +1086,10 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
 
     protected override bool shouldApplyTo(HttpServletRequest request, Object handler)
     {
-        return handler is null || cast(HandlerMethod) handler !is null;
+        // AbstractHandlerMethodExceptionResolver, plus Spring 6.1's default for ResourceHttpRequestHandler: global
+        // (@ControllerAdvice) handlers apply to it, so NoResourceFoundException reaches the application's advice.
+        return handler is null || cast(HandlerMethod) handler !is null
+            || (cast(ResourceHttpRequestHandler) handler !is null && adviceBeans.length != 0);
     }
 
     protected override ModelAndView doResolveException(HttpServletRequest request,

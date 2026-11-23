@@ -522,6 +522,24 @@ unittest
     assertExceptionHandledAsBody(f, mav, "DefaultTestExceptionResolver: IllegalStateException");
 }
 
+// ExceptionHandlerExceptionResolver.shouldApplyTo's default for ResourceHttpRequestHandler (as for the
+// HandlerFunction above): global handlers apply to it, so a NoResourceFoundException reaches the advice.
+@("Flint: global exception handlers apply to ResourceHttpRequestHandler, and only global ones")
+unittest
+{
+    import flint.web.servlet.resource : ResourceHttpRequestHandler;
+
+    auto f = setup();
+    afterPropertiesSet(f);
+    auto handler = new ResourceHttpRequestHandler();
+    assert(f.resolver.resolveException(f.request, f.response, handler, new IllegalStateException()) is null);
+
+    f = setup();
+    loadConfiguration!MyControllerAdviceConfig(f);
+    ModelAndView mav = f.resolver.resolveException(f.request, f.response, handler, new IllegalStateException());
+    assertExceptionHandledAsBody(f, mav, "DefaultTestExceptionResolver: IllegalStateException");
+}
+
 // The resolver has no setMappedHandlerClasses or setMappedHandlerPredicate: it applies only to HandlerMethod
 // handlers (or none).
 version (FlintExceptionResolverMappedHandlers)
