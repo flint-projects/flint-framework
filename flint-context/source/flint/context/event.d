@@ -242,7 +242,10 @@ class ApplicationListenerMethodAdapter : GenericApplicationListener
             argument = payload.getPayload();
         else
             argument = Any.of(event);
-        spec.invoke(beanSupplier(), argument);
+        auto bean = beanSupplier();
+        if (bean is null)
+            return; // the listener bean's factory returned null: nothing to call, as in Spring
+        spec.invoke(bean, argument);
     }
 
     /// The `@Order` of the method.

@@ -206,4 +206,22 @@ class AnnotationConfigApplicationContext : GenericApplicationContext
         static foreach (T; Classes)
             registerBean!T();
     }
+
+    /// The name `AnnotationBeanNameGenerator` gives a bean registered without one: the simple class name with its
+    /// first letter lowered, unless the first two letters are capitals (`URLService`).
+    protected override string generateBeanName(string typeName)
+    {
+        import flint.engine.aot.name : simpleTypeName;
+
+        const simple = simpleTypeName(typeName);
+        if (simple.length == 0 || (simple.length >= 2 && isUpper(simple[0]) && isUpper(simple[1])))
+            return simple;
+        immutable char first = isUpper(simple[0]) ? cast(char)(simple[0] + 32) : simple[0];
+        return first ~ simple[1 .. $];
+    }
+
+    private static bool isUpper(char c) pure nothrow @nogc
+    {
+        return c >= 'A' && c <= 'Z';
+    }
 }

@@ -134,7 +134,19 @@ interface ListableBeanFactory : BeanFactory
     {
         Map!(string, T) result = new LinkedHashMap!(string, T)();
         foreach (name; getBeanNamesForTypeErased(typeNameOf!T, includeNonSingletons, allowEagerInit))
-            result.put(name, cast(T) getBeanErased(name, typeNameOf!T, null));
+        {
+            Object bean;
+            try
+                bean = getBeanErased(name, typeNameOf!T, null);
+            catch (BeanCurrentlyInCreationException e)
+            {
+                if (e.getBeanName() == name)
+                    continue; // ignoring a match to the bean currently being created, as Spring does
+                throw e;
+            }
+            if (bean !is null) // a null-supplied bean is left out
+                result.put(name, cast(T) bean);
+        }
         return result;
     }
 
@@ -266,7 +278,8 @@ private final class BeanObjectProvider(T) : ObjectProvider!T
             return [getObject()];
         T[] result;
         foreach (name; listable.getBeanNamesForTypeErased(typeNameOf!T))
-            result ~= cast(T) listable.getBeanErased(name, typeNameOf!T, null);
+            if (auto bean = listable.getBeanErased(name, typeNameOf!T, null))
+                result ~= cast(T) bean;
         return result;
     }
 }
@@ -461,6 +474,12 @@ class BeanCurrentlyInCreationException : BeanCreationException
     {
         super(beanName, "Requested bean is currently in creation: "
                 ~ "Is there an unresolvable circular reference or an asynchronous initialization dependency?", null);
+    }
+
+    /// `Error creating bean with name 'beanName': msg`.
+    this(string beanName, string msg)
+    {
+        super(beanName, msg, null);
     }
 }
 

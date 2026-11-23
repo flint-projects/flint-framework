@@ -114,6 +114,27 @@ interface GenericApplicationListener
     void dispatchEvent(Object event);
     /// The listener's order (`Ordered.LOWEST_PRECEDENCE` by default).
     int getListenerOrder();
+
+    /// A listener for events of type `E`, calling `consumer` (Java's `GenericApplicationListener.forEventType`).
+    static GenericApplicationListener forEventType(E)(void delegate(E) @safe consumer)
+    {
+        return new ConsumerListener!E(consumer);
+    }
+}
+
+private final class ConsumerListener(E) : ApplicationListener!E
+{
+    private void delegate(E) @safe consumer;
+
+    this(void delegate(E) @safe consumer) pure nothrow @nogc
+    {
+        this.consumer = consumer;
+    }
+
+    override void onApplicationEvent(E event)
+    {
+        consumer(event);
+    }
 }
 
 /++

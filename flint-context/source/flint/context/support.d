@@ -39,10 +39,9 @@ import flint.beans.factory : BeanFactory, ListableBeanFactory;
 import flint.beans.factory.config : BeanDefinition, BeanFactoryPostProcessor, BeanPostProcessor,
     ConfigurableListableBeanFactory;
 import flint.beans.factory.support : BeanDefinitionRegistry, DefaultListableBeanFactory, RootBeanDefinition;
-import flint.context : ApplicationContext, ApplicationContextAware, ApplicationEvent,
-    ApplicationEventPublisher, ApplicationEventPublisherAware,
-    ConfigurableApplicationContext,
-    EnvironmentAware, GenericApplicationListener,
+import flint.context : ApplicationContext, ApplicationContextAware, ApplicationContextException,
+    ApplicationEvent, ApplicationEventPublisher, ApplicationEventPublisherAware,
+    ConfigurableApplicationContext, EnvironmentAware, GenericApplicationListener,
     Lifecycle, LifecycleProcessor, Phased, ResourceLoaderAware, SmartLifecycle;
 import flint.context.event : ApplicationEventMulticaster, ApplicationListenerMethodAdapter, ContextClosedEvent,
     ContextRefreshedEvent, ContextStartedEvent, ContextStoppedEvent, SimpleApplicationEventMulticaster;
@@ -60,7 +59,7 @@ import flint.engine.aot.name : canonicalTypeName, typeNameOf;
 import flint.engine.aot.query : DerivedQuery;
 import flint.engine.aot.registry : AotRegistry, RegistryPopulator, checkContractVersion, installedRegistry;
 import flint.java.lang : IllegalStateException, Runnable, valueOf;
-import flint.java.util : stableSort;
+import flint.java.util : LinkedHashMap, Map, stableSort;
 import flint.util : Assert, StringUtils, StringValueResolver;
 
 @safe:
@@ -180,6 +179,7 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
     private ConfigurableEnvironment environment;
     private BeanFactoryPostProcessor[] beanFactoryPostProcessors;
     private GenericApplicationListener[] applicationListeners;
+    private GenericApplicationListener[] earlyApplicationListeners; // the listeners registered before refresh
     private ApplicationEvent[] earlyEvents;
     private bool collectingEarlyEvents;
     private ApplicationEventMulticaster multicaster;
@@ -286,14 +286,15 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
 
     // ---- Events
 
-    /// Publish `event` to the listeners (queued until the multicaster exists), and to the parent context.
+    /// Publish `event` to the listeners (queued during refresh until the multicaster exists; dropped before refresh
+    /// and after close, as in Spring), and to the parent context.
     void publishEventErased(ApplicationEvent event)
     {
         Assert.notNull(event, "Event must not be null");
         if (collectingEarlyEvents)
             earlyEvents ~= event;
-        else
-            getApplicationEventMulticaster().multicastEvent(event);
+        else if (multicaster !is null)
+            multicaster.multicastEvent(event);
         if (parent !is null)
             parent.publishEventErased(event);
     }
@@ -350,6 +351,15 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
         }
         catch (Exception e)
         {
+            // Stop already started Lifecycle beans, then destroy the created singletons.
+            if (lifecycleProcessor !is null && lifecycleProcessor.isRunning())
+            {
+                try
+                    lifecycleProcessor.stop();
+                catch (Exception)
+                {
+                }
+            }
             destroyBeans();
             cancelRefresh(e);
             throw e;
@@ -366,6 +376,10 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
         active = true;
         initPropertySources();
         getConfigurableEnvironment().validateRequiredProperties();
+        if (earlyApplicationListeners is null)
+            earlyApplicationListeners = applicationListeners.dup;
+        else
+            applicationListeners = earlyApplicationListeners.dup;
         collectingEarlyEvents = true;
     }
 
@@ -570,6 +584,11 @@ abstract class AbstractApplicationContext : DefaultResourceLoader, ConfigurableA
         destroyBeans();
         closeBeanFactory();
         onClose();
+        // Reset local application listeners to the pre-refresh state, and drop the per-refresh delegates.
+        if (earlyApplicationListeners !is null)
+            applicationListeners = earlyApplicationListeners.dup;
+        multicaster = null;
+        lifecycleProcessor = null;
         active = false;
     }
 
@@ -790,18 +809,24 @@ class ApplicationListenerDetector : BeanPostProcessor
         this.applicationContext = applicationContext;
     }
 
-    /// Register `bean` when it is a listener.
+    /// Register `bean` when it is a singleton listener (a listener of another scope cannot reliably receive events).
     override Object postProcessAfterInitialization(Object bean, string beanName)
     {
         if (auto listener = cast(GenericApplicationListener) bean)
-            applicationContext.addApplicationListener(listener);
+        {
+            auto factory = applicationContext.getBeanFactory();
+            if (!factory.containsBeanDefinition(beanName) || factory.getBeanDefinition(beanName).isSingleton())
+                applicationContext.addApplicationListener(listener);
+        }
         return bean;
     }
 }
 
 /++
-The default `LifecycleProcessor`: starts `SmartLifecycle` beans with auto-startup on refresh in ascending phase
-order, and stops every running `Lifecycle` bean on close in descending phase order.
+The default `LifecycleProcessor`, as Spring's: on refresh it starts the auto-startup `SmartLifecycle` beans in
+ascending phase groups, each after the beans it depends on; on stop and close it stops every running `Lifecycle`
+bean in descending phase groups, each after the beans that depend on it. A plain `Lifecycle` bean is in phase 0.
+Stop callbacks run synchronously in the stopping fiber unless the bean hands them off.
 +/
 class DefaultLifecycleProcessor : LifecycleProcessor
 {
@@ -814,7 +839,7 @@ class DefaultLifecycleProcessor : LifecycleProcessor
         this.beanFactory = beanFactory;
     }
 
-    /// Start every lifecycle bean.
+    /// Start every lifecycle bean. A failing bean propagates `ApplicationContextException`.
     void start()
     {
         startBeans(false);
@@ -828,10 +853,16 @@ class DefaultLifecycleProcessor : LifecycleProcessor
         running = false;
     }
 
-    /// Start auto-startup `SmartLifecycle` beans.
+    /// Start the auto-startup `SmartLifecycle` beans; when one fails, stop those already started and rethrow.
     void onRefresh()
     {
-        startBeans(true);
+        try
+            startBeans(true);
+        catch (ApplicationContextException e)
+        {
+            stopBeans();
+            throw e;
+        }
         running = true;
     }
 
@@ -848,25 +879,25 @@ class DefaultLifecycleProcessor : LifecycleProcessor
         return running;
     }
 
-    private Lifecycle[] lifecycleBeans()
+    /// The `Lifecycle` beans by name: the existing singletons, and the `SmartLifecycle` beans (created if needed).
+    protected Map!(string, Lifecycle) getLifecycleBeans()
     {
-        Lifecycle[] result;
-        foreach (name; beanFactory.getBeanNamesForTypeErased(typeNameOf!Lifecycle))
-            if (auto lifecycle = cast(Lifecycle) beanFactory.getBean(name))
-                result ~= lifecycle;
-        foreach (name; beanFactory.getBeanNamesForTypeErased(typeNameOf!SmartLifecycle))
+        Map!(string, Lifecycle) beans = new LinkedHashMap!(string, Lifecycle)();
+        auto configurable = cast(ConfigurableListableBeanFactory) beanFactory;
+        foreach (name; beanFactory.getBeanNamesForTypeErased(typeNameOf!Lifecycle, false, false))
         {
-            auto lifecycle = cast(Lifecycle) beanFactory.getBean(name);
-            bool seen;
-            foreach (existing; result)
-                seen |= existing is lifecycle;
-            if (!seen && lifecycle !is null)
-                result ~= lifecycle;
+            const existing = configurable is null || configurable.containsSingleton(name);
+            if (!existing && !beanFactory.isTypeMatchErased(name, typeNameOf!SmartLifecycle))
+                continue;
+            if (auto lifecycle = cast(Lifecycle) beanFactory.getBean(name))
+                if (cast(Object) lifecycle !is this)
+                    beans.put(name, lifecycle);
         }
-        return result;
+        return beans;
     }
 
-    private static int phaseOf(Lifecycle bean)
+    /// The phase of `bean`: its `Phased.getPhase()`, else 0.
+    protected int getPhase(Lifecycle bean)
     {
         auto phased = cast(Phased) bean;
         return phased is null ? 0 : phased.getPhase();
@@ -874,36 +905,95 @@ class DefaultLifecycleProcessor : LifecycleProcessor
 
     private void startBeans(bool autoStartupOnly)
     {
-        auto beans = lifecycleBeans();
-        stableSort(beans, (Lifecycle a, Lifecycle b) {
-            const x = phaseOf(a), y = phaseOf(b);
-            return x < y ? -1 : (x > y ? 1 : 0);
-        });
-        foreach (bean; beans)
+        auto lifecycleBeans = getLifecycleBeans();
+        foreach (phase; phasesOf(lifecycleBeans, true, autoStartupOnly))
+            foreach (name; lifecycleBeans.keySet().toArray())
+                if (lifecycleBeans.containsKey(name) && getPhase(lifecycleBeans.get(name)) == phase
+                        && (!autoStartupOnly || isAutoStartupCandidate(lifecycleBeans.get(name))))
+                    doStart(lifecycleBeans, name, autoStartupOnly);
+    }
+
+    private int[] phasesOf(Map!(string, Lifecycle) lifecycleBeans, bool ascending, bool autoStartupOnly)
+    {
+        int[] phases;
+        foreach (bean; lifecycleBeans.values().toArray())
         {
-            auto smart = cast(SmartLifecycle) bean;
-            if (autoStartupOnly && (smart is null || !smart.isAutoStartup()))
+            if (autoStartupOnly && !isAutoStartupCandidate(bean))
                 continue;
-            if (!bean.isRunning())
-                bean.start();
+            const phase = getPhase(bean);
+            bool seen;
+            foreach (existing; phases)
+                seen |= existing == phase;
+            if (!seen)
+                phases ~= phase;
         }
+        stableSort(phases, (int a, int b) => ascending ? comparePhases(a, b) : comparePhases(b, a));
+        return phases;
+    }
+
+    private static int comparePhases(int a, int b) pure nothrow @nogc
+    {
+        return a < b ? -1 : (a > b ? 1 : 0);
+    }
+
+    private static bool isAutoStartupCandidate(Lifecycle bean)
+    {
+        auto smart = cast(SmartLifecycle) bean;
+        return smart !is null && smart.isAutoStartup();
+    }
+
+    private void doStart(Map!(string, Lifecycle) lifecycleBeans, string beanName, bool autoStartupOnly)
+    {
+        auto bean = lifecycleBeans.remove(beanName);
+        if (bean is null)
+            return;
+        foreach (dependency; dependenciesOf(beanName, false))
+            doStart(lifecycleBeans, dependency, autoStartupOnly);
+        auto smart = cast(SmartLifecycle) bean;
+        if (bean.isRunning() || (autoStartupOnly && smart !is null && !smart.isAutoStartup()))
+            return;
+        try
+            bean.start();
+        catch (Exception e)
+            throw new ApplicationContextException("Failed to start bean '" ~ beanName ~ "'", e);
+    }
+
+    private string[] dependenciesOf(string beanName, bool dependents)
+    {
+        auto configurable = cast(ConfigurableListableBeanFactory) beanFactory;
+        if (configurable is null)
+            return null;
+        return dependents ? configurable.getDependentBeans(beanName) : configurable.getDependenciesForBean(beanName);
     }
 
     private void stopBeans()
     {
-        auto beans = lifecycleBeans();
-        stableSort(beans, (Lifecycle a, Lifecycle b) {
-            const x = phaseOf(a), y = phaseOf(b);
-            return x > y ? -1 : (x < y ? 1 : 0);
-        });
-        foreach (bean; beans)
+        auto lifecycleBeans = getLifecycleBeans();
+        foreach (phase; phasesOf(lifecycleBeans, false, false))
+            foreach (name; lifecycleBeans.keySet().toArray())
+                if (lifecycleBeans.containsKey(name) && getPhase(lifecycleBeans.get(name)) == phase)
+                    doStop(lifecycleBeans, name);
+    }
+
+    private void doStop(Map!(string, Lifecycle) lifecycleBeans, string beanName)
+    {
+        auto bean = lifecycleBeans.remove(beanName);
+        if (bean is null)
+            return;
+        foreach (dependent; dependenciesOf(beanName, true))
+            doStop(lifecycleBeans, dependent);
+        try
         {
             if (!bean.isRunning())
-                continue;
+                return;
             if (auto smart = cast(SmartLifecycle) bean)
                 smart.stop(new NoOpRunnable);
             else
                 bean.stop();
+        }
+        catch (Exception)
+        {
+            // Spring logs a failure to stop and goes on with the other beans.
         }
     }
 }
@@ -940,6 +1030,28 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
     this()
     {
         this(new DefaultListableBeanFactory);
+    }
+
+    /// A context with a new factory and `parent`.
+    this(ApplicationContext parent)
+    {
+        this();
+        assignParent(parent);
+    }
+
+    /// Set the parent context, and make its factory the parent of this context's factory.
+    override void setParent(ApplicationContext parent)
+    {
+        assignParent(parent);
+    }
+
+    private void assignParent(ApplicationContext parent)
+    {
+        super.setParent(parent);
+        if (auto configurable = cast(ConfigurableApplicationContext) parent)
+            beanFactory.setParentBeanFactory(configurable.getBeanFactory());
+        else
+            beanFactory.setParentBeanFactory(parent);
     }
 
     /// A context over `beanFactory`.
@@ -1068,24 +1180,45 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
 
     // ---- Programmatic registration
 
-    /// Register a bean of type `T` created by `supplier` (Java's `registerBean(Class, Supplier)`).
-    void registerBean(T)(string beanName, T delegate() @safe supplier)
+    /++
+    Register a bean of type `T` named `beanName`, created by `supplier`, after applying `customizers` to its
+    definition (Java's `registerBean(String, Class, Supplier, BeanDefinitionCustomizer...)`; the customizers are
+    delegates, rule R9).
+    +/
+    void registerBean(T)(string beanName, T delegate() @safe supplier,
+            void delegate(BeanDefinition) @safe[] customizers...)
     {
         auto definition = new RootBeanDefinition(definitionFor!T(beanName));
         definition.setInstanceSupplier(() => cast(Object) supplier());
+        foreach (customizer; customizers)
+            customizer(definition);
         registerBeanDefinition(beanName, definition);
     }
 
-    /// Register a bean of type `T` named after its class (decapitalized), created with `new T()`.
+    /// Register a bean of type `T` created by `supplier`, named by `generateBeanName` (Java's
+    /// `registerBean(Class, Supplier, BeanDefinitionCustomizer...)`).
+    void registerBean(T)(T delegate() @safe supplier, void delegate(BeanDefinition) @safe[] customizers...)
+    {
+        registerBean!T(generateBeanName(typeNameOf!T), supplier, customizers);
+    }
+
+    /// Register a bean of type `T` created with `new T()`, named by `generateBeanName` (Java's
+    /// `registerBean(Class)`).
     void registerBean(T)()
     {
-        registerBean!T(defaultBeanName!T(), () => new T());
+        registerBean!T(generateBeanName(typeNameOf!T), () => new T());
     }
 
     /// Register a bean of type `T` named `beanName`, created with `new T()`.
     void registerBean(T)(string beanName)
     {
         registerBean!T(beanName, () => new T());
+    }
+
+    /// The name of a bean registered without one: its class name, as `GenericApplicationContext` names it.
+    protected string generateBeanName(string typeName)
+    {
+        return typeName;
     }
 
     private static AotBeanDefinition definitionFor(T)(string beanName)
@@ -1106,16 +1239,6 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
             record.types ~= typeNameOf!I;
         record.source = "registerBean " ~ typeNameOf!T;
         return record;
-    }
-
-    private static string defaultBeanName(T)()
-    {
-        import flint.engine.aot.name : simpleTypeName;
-
-        const simple = simpleTypeName(typeNameOf!T);
-        if (simple.length >= 2 && simple[0] >= 'A' && simple[0] <= 'Z' && simple[1] >= 'A' && simple[1] <= 'Z')
-            return simple;
-        return [cast(char)(simple[0] >= 'A' && simple[0] <= 'Z' ? simple[0] + 32 : simple[0])] ~ simple[1 .. $];
     }
 
     // ---- BeanDefinitionRegistry

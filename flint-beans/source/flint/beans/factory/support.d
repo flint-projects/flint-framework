@@ -86,6 +86,23 @@ class BeanDefinitionOverrideException : BeanDefinitionStoreException
         super(beanDefinition.getResourceDescription(), beanName, "Cannot register bean definition [" ~ describe(
                 beanDefinition) ~ "] for bean '" ~ beanName ~ "' since there is already [" ~ describe(
                 existingDefinition) ~ "] bound.");
+        this.beanDefinition = beanDefinition;
+        this.existingDefinition = existingDefinition;
+    }
+
+    private BeanDefinition beanDefinition;
+    private BeanDefinition existingDefinition;
+
+    /// The newly registered definition.
+    BeanDefinition getBeanDefinition() pure nothrow @nogc
+    {
+        return beanDefinition;
+    }
+
+    /// The existing definition for the same name.
+    BeanDefinition getExistingDefinition() pure nothrow @nogc
+    {
+        return existingDefinition;
     }
 
     private static string describe(BeanDefinition definition)
@@ -103,6 +120,7 @@ class RootBeanDefinition : AttributeAccessorSupport, BeanDefinition
     private AotBeanDefinition record;
     private string scopeName;
     private bool autowireCandidate = true;
+    private bool defaultCandidate = true;
     private bool abstract_;
     private int role;
     private string description;
@@ -145,8 +163,9 @@ class RootBeanDefinition : AttributeAccessorSupport, BeanDefinition
         return record;
     }
 
-    /// Replace the creation callbacks with a delegate-backed factory (registerBean with a supplier).
-    package(flint) final void setInstanceSupplier(Object delegate() @safe supplier) pure nothrow @nogc
+    /// Create the bean with `supplier` instead of the generated factory (Spring's `setInstanceSupplier`; a null
+    /// result is a null bean).
+    final void setInstanceSupplier(Object delegate() @safe supplier) pure nothrow @nogc
     {
         instanceSupplier = supplier;
     }
@@ -237,6 +256,19 @@ class RootBeanDefinition : AttributeAccessorSupport, BeanDefinition
     bool isAutowireCandidate()
     {
         return autowireCandidate;
+    }
+
+    /// Set whether the bean is a candidate for injection by type when no qualifier names it (Spring's
+    /// `AbstractBeanDefinition.setDefaultCandidate`).
+    final void setDefaultCandidate(bool defaultCandidate) pure nothrow @nogc
+    {
+        this.defaultCandidate = defaultCandidate;
+    }
+
+    /// Whether the bean is a default candidate.
+    final bool isDefaultCandidate() const pure nothrow @nogc
+    {
+        return defaultCandidate;
     }
 
     /// Set primary.
@@ -380,9 +412,14 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     private RootBeanDefinition[string] definitions;
     private string[] definitionNames;
     private Object[string] singletons;
-    private Object[string] targets;
+    private Object[string] rawInstances; // what the factory created: destruction callbacks receive it
+    private DisposableBean[string] disposableBeans;
+    private Object[string] earlySingletons;
+    private bool[string] earlyReferenced;
     private string[] singletonOrder;
     private bool[string] inCreation;
+    private string[] creating; // the beans being created, innermost last
+    private bool allowCircularReferences = true;
     private string[][string] dependents;
     private string[][string] dependencies;
     private BeanPostProcessor[] postProcessors;
@@ -425,6 +462,19 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     bool isAllowBeanDefinitionOverriding() const pure nothrow @nogc
     {
         return allowOverriding;
+    }
+
+    /// Whether a singleton may be handed to the beans its generated `initialize` resolves before it is fully
+    /// initialized, resolving circular references between injected fields (Spring's default true).
+    void setAllowCircularReferences(bool allowCircularReferences) pure nothrow @nogc
+    {
+        this.allowCircularReferences = allowCircularReferences;
+    }
+
+    /// Whether circular references are allowed.
+    bool isAllowCircularReferences() const pure nothrow @nogc
+    {
+        return allowCircularReferences;
     }
 
     /// Make `autowiredValue` injectable as `dependencyType` without being a bean (Spring's
@@ -535,6 +585,12 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         return isAlias(beanName) || containsBeanDefinition(beanName) || containsSingleton(beanName);
     }
 
+    /// Alias overriding follows definition overriding, as in Spring.
+    protected override bool allowAliasOverriding()
+    {
+        return allowOverriding;
+    }
+
     /// Register an alias, checking it does not shadow a definition.
     override void registerAlias(string name, string alias_)
     {
@@ -591,6 +647,13 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     int getSingletonCount()
     {
         return cast(int) singletonOrder.length;
+    }
+
+    /// Destroy `bean` together with the singleton `beanName` (Spring's `registerDisposableBean`): manually
+    /// registered singletons are otherwise not destroyed.
+    void registerDisposableBean(string beanName, DisposableBean bean)
+    {
+        disposableBeans[beanName] = bean;
     }
 
     // -----------------------------------------------------------------------------------------------------------
@@ -728,8 +791,16 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     Object getBeanErased(string name, string requiredType, Any[])
     {
         if (name is null)
-            return resolveByType(requiredType, null, true);
+        {
+            Assert.notNull(requiredType, "Required type must not be null");
+            auto resolved = resolveNamedBean(requiredType);
+            if (!resolved.found)
+                throw NoSuchBeanDefinitionException.forType(requiredType);
+            return resolved.bean;
+        }
         auto bean = doGetBean(name);
+        if (isNullBean(bean))
+            return null;
         if (requiredType !is null && !isInstance(name, bean, requiredType))
             throw new BeanNotOfRequiredTypeException(name, requiredType, canonicalTypeName(typeid(bean).name));
         return bean;
@@ -737,9 +808,52 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
 
     private bool isInstance(string name, Object bean, string requiredType)
     {
-        if (isTypeMatchErased(name, requiredType))
-            return true;
-        return canonicalTypeName(typeid(bean).name) == requiredType;
+        return isInstanceOfType(bean, requiredType) || isTypeMatchErased(name, requiredType);
+    }
+
+    /// What `resolveNamedBean` found.
+    private static struct NamedBean
+    {
+        Object bean;
+        bool found;
+    }
+
+    /// Spring's `resolveNamedBean` behind `getBean(Class)`: the single bean of `type` here, else in the parent.
+    /// A null-supplied bean is not found, so the parent is asked next, as in Spring.
+    private NamedBean resolveNamedBean(string type)
+    {
+        auto names = getBeanNamesForTypeErased(type);
+        if (names.length > 1)
+        {
+            string[] autowireCandidates;
+            foreach (name; names)
+                if ((name in definitions) is null || definitions[name].isAutowireCandidate())
+                    autowireCandidates ~= name;
+            if (autowireCandidates.length)
+                names = autowireCandidates;
+        }
+        if (names.length > 1)
+        {
+            auto chosen = determinePrimaryCandidate(names, type);
+            if (chosen is null)
+                chosen = determineDefaultCandidate(names);
+            if (chosen is null)
+                throw new NoUniqueBeanDefinitionException(type, names);
+            names = [chosen];
+        }
+        if (names.length == 1)
+        {
+            auto bean = doGetBean(names[0]);
+            if (!isNullBean(bean))
+                return NamedBean(bean, true);
+        }
+        if (auto listable = cast(DefaultListableBeanFactory) parent)
+            return listable.resolveNamedBean(type);
+        if (parent !is null)
+            return NamedBean(parent.getBeanErased(null, type, null), true);
+        if (auto dependency = type in resolvableDependencies)
+            return NamedBean(*dependency, true);
+        return NamedBean.init;
     }
 
     /// Whether a definition or singleton named `name` exists (here or in the parent).
@@ -770,6 +884,9 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     bool isTypeMatchErased(string name, string typeName)
     {
         const beanName = canonicalName(name);
+        auto singleton = beanName in singletons;
+        if (singleton !is null && !isNullBean(*singleton) && isInstanceOfType(*singleton, typeName))
+            return true;
         if (auto definition = beanName in definitions)
         {
             foreach (type; definition.getTypes())
@@ -777,21 +894,22 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
                     return true;
             return definition.getBeanClassName() == typeName;
         }
-        if (auto singleton = beanName in singletons)
-            return canonicalTypeName(typeid(*singleton).name) == typeName;
+        if (singleton !is null)
+            return false;
         if (parent !is null)
             return parent.isTypeMatchErased(name, typeName);
         throw new NoSuchBeanDefinitionException(name);
     }
 
-    /// The bean's type name, or null.
+    /// The bean's type name: the singleton instance's class when there is one, else the definition's; or null.
     string getTypeName(string name)
     {
         const beanName = canonicalName(name);
+        auto singleton = beanName in singletons;
+        if (singleton !is null && !isNullBean(*singleton))
+            return canonicalTypeName(typeid(*singleton).name);
         if (auto definition = beanName in definitions)
             return definition.getBeanClassName();
-        if (auto singleton = beanName in singletons)
-            return canonicalTypeName(typeid(*singleton).name);
         return parent is null ? null : parent.getTypeName(name);
     }
 
@@ -824,7 +942,7 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
                 result ~= name;
         }
         foreach (name; singletonOrder)
-            if ((name in definitions) is null && canonicalTypeName(typeid(singletons[name]).name) == typeName)
+            if ((name in definitions) is null && isInstanceOfType(singletons[name], typeName))
                 result ~= name;
         return result;
     }
@@ -883,12 +1001,18 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     // -----------------------------------------------------------------------------------------------------------
     // Creation
 
-    /// The bean `name`, created on demand.
+    /// The bean `name`, created on demand. A bean obtained while another is being created is recorded as its
+    /// dependency, so it is destroyed after it (Spring's `currentlyCreatedBean` and autowired-bean tracking).
     protected Object doGetBean(string name)
     {
         const beanName = canonicalName(name);
         if (auto singleton = beanName in singletons)
-            return *singleton;
+            return dependedOn(beanName, *singleton);
+        if (auto early = beanName in earlySingletons)
+        {
+            earlyReferenced[beanName] = true;
+            return dependedOn(beanName, *early);
+        }
         auto definition = beanName in definitions;
         if (definition is null)
         {
@@ -898,6 +1022,29 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         }
         if (definition.isAbstract())
             throw new BeanCreationException(beanName, "Bean definition is abstract", null);
+        createDependsOn(beanName, *definition);
+        if (definition.isPrototype())
+            return dependedOn(beanName, createBean(beanName, *definition));
+        if (!definition.isSingleton())
+            throw new IllegalStateException("No Scope registered for scope name '" ~ definition.getScope() ~ "'");
+        if (destroying)
+            throw new BeanCreationException(beanName, "Singleton bean creation not allowed while singletons of "
+                    ~ "this factory are in destruction (Do not request a bean from a BeanFactory in a destroy "
+                    ~ "method implementation!)", null);
+        auto bean = createBean(beanName, *definition);
+        addSingleton(beanName, bean);
+        return dependedOn(beanName, bean);
+    }
+
+    private Object dependedOn(string beanName, Object bean)
+    {
+        if (creating.length && creating[$ - 1] != beanName)
+            registerDependentBean(beanName, creating[$ - 1]);
+        return bean;
+    }
+
+    private void createDependsOn(string beanName, RootBeanDefinition definition)
+    {
         foreach (dependsOn; definition.getDependsOn())
         {
             if (isDependent(beanName, dependsOn))
@@ -906,56 +1053,120 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             registerDependentBean(dependsOn, beanName);
             doGetBean(dependsOn);
         }
-        if (definition.isPrototype())
-            return createBean(beanName, *definition);
-        if (destroying)
-            throw new BeanCreationException(beanName, "Singleton bean creation not allowed while singletons of "
-                    ~ "this factory are in destruction (Do not request a bean from a BeanFactory in a destroy "
-                    ~ "method implementation!)", null);
-        auto bean = createBean(beanName, *definition);
-        addSingleton(beanName, bean);
-        return bean;
     }
 
-    private bool isDependent(string beanName, string dependentBeanName)
+    /// Whether `dependentBeanName` depends on `beanName`, directly or transitively.
+    protected bool isDependent(string beanName, string dependentBeanName)
     {
-        foreach (dependent; dependents.get(beanName, null))
-            if (dependent == dependentBeanName || isDependent(dependent, dependentBeanName))
+        bool[string] alreadySeen;
+        return isDependentUnseen(beanName, dependentBeanName, alreadySeen);
+    }
+
+    private bool isDependentUnseen(string beanName, string dependentBeanName, ref bool[string] alreadySeen)
+    {
+        if (beanName in alreadySeen)
+            return false;
+        auto direct = canonicalName(beanName) in dependents;
+        if (direct is null)
+            return false;
+        foreach (dependent; *direct)
+            if (dependent == dependentBeanName)
+                return true;
+        alreadySeen[beanName] = true;
+        foreach (transitive; *direct)
+            if (isDependentUnseen(transitive, dependentBeanName, alreadySeen))
                 return true;
         return false;
     }
 
-    /// Create, initialize and post-process the bean `beanName` from `definition`.
+    /// Create, initialize and post-process the bean `beanName` from `definition`. A singleton is exposed to the
+    /// beans its `initialize` resolves before it completes, unless circular references are disallowed.
     protected Object createBean(string beanName, RootBeanDefinition definition)
     {
         if (beanName in inCreation)
             throw new BeanCurrentlyInCreationException(beanName);
         inCreation[beanName] = true;
+        creating ~= beanName;
         scope (exit)
+        {
             inCreation.remove(beanName);
+            creating = creating[0 .. $ - 1];
+            earlySingletons.remove(beanName);
+            earlyReferenced.remove(beanName);
+        }
+        auto bean = instantiate(beanName, definition);
+        if (isNullBean(bean))
+            return bean;
+        const exposeEarly = allowCircularReferences && definition.isSingleton();
+        if (exposeEarly)
+            earlySingletons[beanName] = bean;
+        Object exposed;
         try
-            return initializeBean(beanName, instantiate(beanName, definition), definition);
-        catch (BeansException e)
-            throw e;
+            exposed = initializeBean(beanName, bean, definition);
+        catch (BeanCreationException e)
+        {
+            if (e.getBeanName() == beanName)
+                throw e;
+            throw new BeanCreationException(definition.getResourceDescription(), beanName, e.msg, e);
+        }
         catch (Exception e)
-            throw new BeanCreationException(definition.getResourceDescription(), beanName,
-                    "Initialization of bean failed: " ~ e.msg, e);
+            throw new BeanCreationException(definition.getResourceDescription(), beanName, e.msg, e);
+        if (exposeEarly && (beanName in earlyReferenced) !is null && exposed !is bean)
+            rejectRawInjection(beanName);
+        if (definition.isSingleton())
+            rawInstances[beanName] = bean;
+        return exposed;
+    }
+
+    private void rejectRawInjection(string beanName)
+    {
+        auto dependentBeans = getDependentBeans(beanName);
+        if (dependentBeans.length == 0)
+            return;
+        throw new BeanCurrentlyInCreationException(beanName,
+                "Bean with name '" ~ beanName ~ "' has been injected into other beans [" ~ joinComma(
+                    dependentBeans) ~ "] in its raw version as "
+                ~ "part of a circular reference, but has eventually been wrapped. This means that said other beans do "
+                ~ "not use the final version of the bean. This is often the result of over-eager type matching - "
+                ~ "consider using 'getBeanNamesForType' with the 'allowEagerInit' flag turned off, for example.");
     }
 
     private Object instantiate(string beanName, RootBeanDefinition definition)
     {
         Object bean;
         if (definition.instanceSupplier !is null)
-            bean = definition.instanceSupplier();
+        {
+            try
+                bean = definition.instanceSupplier();
+            catch (BeanCreationException e)
+            {
+                if (e.getBeanName() == beanName)
+                    throw e;
+                throw new BeanCreationException(beanName, "Instantiation of supplied bean failed", e);
+            }
+            catch (Exception e)
+                throw new BeanCreationException(beanName, "Instantiation of supplied bean failed", e);
+        }
         else if (definition.getAotDefinition().create !is null)
-            bean = definition.getAotDefinition().create(adapter);
+            bean = createFromRecord(beanName, definition);
         else
             throw new BeanCreationException(definition.getResourceDescription(), beanName,
                     "No instance supplier or generated factory", null);
-        if (bean is null)
-            throw new BeanCreationException(definition.getResourceDescription(), beanName,
-                    "Factory returned null", null);
-        return bean;
+        return bean is null ? new NullBean : bean;
+    }
+
+    private Object createFromRecord(string beanName, RootBeanDefinition definition)
+    {
+        try
+            return definition.getAotDefinition().create(adapter);
+        catch (BeanCreationException e)
+        {
+            if (e.getBeanName() == beanName)
+                throw e;
+            throw new BeanCreationException(definition.getResourceDescription(), beanName, e.msg, e);
+        }
+        catch (Exception e)
+            throw new BeanCreationException(definition.getResourceDescription(), beanName, e.msg, e);
     }
 
     private Object initializeBean(string beanName, Object bean, RootBeanDefinition definition)
@@ -964,13 +1175,14 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             aware.setBeanName(beanName);
         if (auto aware = cast(BeanFactoryAware) bean)
             aware.setBeanFactory(this);
+        // A post-processor returning null ends its chain; initialization goes on, as in Spring.
         Object current = bean;
         foreach (processor; postProcessors)
         {
             if (auto processed = processor.postProcessBeforeInitialization(current, beanName))
                 current = processed;
             else
-                return current;
+                break;
         }
         auto record = definition.getAotDefinition();
         if (record.initialize !is null)
@@ -982,10 +1194,8 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             if (auto processed = processor.postProcessAfterInitialization(current, beanName))
                 current = processed;
             else
-                return current;
+                break;
         }
-        if (record.proxy !is null && definition.isSingleton())
-            targets[beanName] = current; // destroy callbacks receive the target, not the proxy (AOT contract 5.2)
         if (record.proxy !is null)
             current = record.proxy(current, adapter);
         return current;
@@ -1017,14 +1227,16 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
                         ~ "Dependency annotations: {@flint.beans.factory.annotation.Qualifier(\"" ~ qualifier ~ "\")}");
             return null;
         }
-        if (candidates.length == 1)
-            return doGetBean(candidates[0]);
-        const chosen = determineAutowireCandidate(candidates, qualifier);
+        string chosen = candidates[0];
+        if (candidates.length > 1)
+            chosen = determineAutowireCandidate(candidates, type, qualifier);
         if (chosen is null)
             throw new NoUniqueBeanDefinitionException(type, candidates);
-        return doGetBean(chosen);
+        auto bean = doGetBean(chosen);
+        return isNullBean(bean) ? null : bean;
     }
 
+    /// The autowire candidates for `type`: a non-default candidate qualifies only when `qualifier` names it.
     private string[] candidateNames(string type, string qualifier)
     {
         string[] result;
@@ -1033,7 +1245,8 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             auto definition = name in definitions;
             if (definition !is null && !definition.isAutowireCandidate())
                 continue;
-            if (qualifier is null || matchesQualifier(name, qualifier))
+            if (qualifier is null ? (definition is null
+                    || definition.isDefaultCandidate()) : matchesQualifier(name, qualifier))
                 result ~= name;
         }
         return result;
@@ -1053,9 +1266,23 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         return false;
     }
 
-    /// Among several candidates: the single primary one, else the single non-fallback one, else the one named
-    /// like the qualifier; null when none is unique.
-    protected string determineAutowireCandidate(string[] candidates, string qualifier)
+    /// Among several candidates for `type`: the primary (or unique non-fallback) one, else the one named like the
+    /// qualifier, else the unique default candidate; null when none is unique.
+    protected string determineAutowireCandidate(string[] candidates, string type, string qualifier)
+    {
+        auto primary = determinePrimaryCandidate(candidates, type);
+        if (primary !is null)
+            return primary;
+        if (qualifier !is null)
+            foreach (name; candidates)
+                if (name == qualifier)
+                    return name;
+        return determineDefaultCandidate(candidates);
+    }
+
+    /// The single primary candidate, else the single non-fallback candidate; null when neither is unique. Throws
+    /// `NoUniqueBeanDefinitionException` for several primary candidates.
+    protected string determinePrimaryCandidate(string[] candidates, string type)
     {
         string primary;
         foreach (name; candidates)
@@ -1064,26 +1291,38 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             if (definition is null || !definition.isPrimary())
                 continue;
             if (primary !is null)
-                throw new NoUniqueBeanDefinitionException(definition.getBeanClassName(), candidates,
+                throw new NoUniqueBeanDefinitionException(type, candidates,
                         "more than one 'primary' bean found among candidates: " ~ joinBrackets(candidates));
             primary = name;
         }
         if (primary !is null)
             return primary;
-        string[] regular;
+        string regular;
         foreach (name; candidates)
         {
             auto definition = name in definitions;
-            if (definition is null || !definition.isFallback())
-                regular ~= name;
+            if (definition !is null && definition.isFallback())
+                continue;
+            if (regular !is null)
+                return null;
+            regular = name;
         }
-        if (regular.length == 1)
-            return regular[0];
-        if (qualifier !is null)
-            foreach (name; candidates)
-                if (name == qualifier)
-                    return name;
-        return null;
+        return regular;
+    }
+
+    private string determineDefaultCandidate(string[] candidates)
+    {
+        string result;
+        foreach (name; candidates)
+        {
+            auto definition = name in definitions;
+            if (definition !is null && !definition.isDefaultCandidate())
+                continue;
+            if (result !is null)
+                return null;
+            result = name;
+        }
+        return result;
     }
 
     private static string joinBrackets(string[] names)
@@ -1103,6 +1342,8 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         foreach (name; names)
         {
             auto bean = doGetBean(name);
+            if (isNullBean(bean))
+                continue;
             beans ~= bean;
             orders ~= orderOf(name, bean);
         }
@@ -1187,17 +1428,15 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         dependencies = null;
     }
 
-    /// Destroy one singleton: its dependents first, then post-processors, then its own callbacks.
+    /// Destroy one singleton: its dependents first, then post-processors, then its own callbacks. Only beans the
+    /// factory created, or registered with `registerDisposableBean`, receive callbacks; the callbacks receive the
+    /// instance the factory created, not a post-processed or proxied replacement. Failures are swallowed, as
+    /// Spring's `DisposableBeanAdapter` logs and continues.
     protected void destroySingleton(string beanName)
     {
-        auto found = beanName in singletons;
-        if (found is null)
+        if ((beanName in singletons) is null)
             return;
-        auto bean = *found;
-        if (auto target = beanName in targets)
-            bean = *target;
         singletons.remove(beanName);
-        targets.remove(beanName);
         string[] kept;
         foreach (name; singletonOrder)
             if (name != beanName)
@@ -1205,6 +1444,30 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         singletonOrder = kept;
         foreach (dependent; dependents.get(beanName, null))
             destroySingleton(dependent);
+        if (auto raw = beanName in rawInstances)
+        {
+            auto bean = *raw;
+            rawInstances.remove(beanName);
+            try
+                invokeDestroyCallbacks(beanName, bean);
+            catch (Exception)
+            {
+            }
+        }
+        else if (auto disposable = beanName in disposableBeans)
+        {
+            auto bean = *disposable;
+            disposableBeans.remove(beanName);
+            try
+                bean.destroy();
+            catch (Exception)
+            {
+            }
+        }
+    }
+
+    private void invokeDestroyCallbacks(string beanName, Object bean)
+    {
         foreach (processor; postProcessors)
             if (auto destruction = cast(DestructionAwareBeanPostProcessor) processor)
                 if (destruction.requiresDestruction(bean))
@@ -1216,6 +1479,35 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         else if (auto disposable = cast(DisposableBean) bean)
             disposable.destroy();
     }
+}
+
+/// Spring's `NullBean`: what a factory that returned null leaves in the singleton cache.
+private final class NullBean
+{
+}
+
+private bool isNullBean(Object bean) pure nothrow @nogc
+{
+    return cast(NullBean) bean !is null;
+}
+
+/// Whether `object`'s class is `typeName` or derives from or implements it (by canonical names).
+private bool isInstanceOfType(Object object, string typeName)
+{
+    if (object is null || isNullBean(object))
+        return false;
+    for (auto info = typeid(object); info !is null; info = info.base)
+        if (canonicalTypeName(info.name) == typeName || implementsInterface(info, typeName))
+            return true;
+    return false;
+}
+
+private bool implementsInterface(const TypeInfo_Class info, string typeName)
+{
+    foreach (iface; info.interfaces)
+        if (canonicalTypeName(iface.classinfo.name) == typeName || implementsInterface(iface.classinfo, typeName))
+            return true;
+    return false;
 }
 
 /// The contract's `BeanFactory` over a `DefaultListableBeanFactory`, for generated code.
