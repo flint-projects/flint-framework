@@ -1532,17 +1532,17 @@ struct HttpHeaders
         store.contentTypeParsed = mediaType;
     }
 
-    /// The `Content-Type`, or `null`.
-    MediaType* getContentType() const pure
+    /// The `Content-Type`, or `null`. Read-only (Spring's `MediaType` is immutable): while the header holds the
+    /// text `setContentType` wrote, this points at the parsed value it kept, so asking allocates nothing.
+    const(MediaType)* getContentType() const pure
     {
         const value = getFirst(CONTENT_TYPE);
         if (value.length == 0)
             return null;
-        auto result = new MediaType;
         if (value is store.contentTypeText)
-            *result = store.contentTypeParsed;
-        else
-            *result = MediaType.parseMediaType(value);
+            return &store.contentTypeParsed;
+        auto result = new MediaType;
+        *result = MediaType.parseMediaType(value);
         return result;
     }
 
