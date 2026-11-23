@@ -60,14 +60,37 @@ struct ServletEngineOptions
     string globalErrorPage = "/error";
     /// `server.shutdown`.
     ShutdownMode shutdown = ShutdownMode.graceful;
-    /// Reactor threads serving requests.
-    uint cores = 1;
+    /// Reactor threads serving requests. 0, the default, serves on every CPU the process may run on, up to the
+    /// engine's 16, as Tomcat's request thread pool spans the CPUs.
+    uint cores = 0;
     /// Idle keep-alive time; Tomcat's default keep-alive timeout is its 60 s connection timeout.
     long keepAliveTimeoutNanos = 60_000_000_000L;
     /// Largest request body (the engine caps it at 1 MiB).
     size_t maxBodyBytes = 1_048_576;
     /// Connections each reactor thread holds.
     uint maxConnectionsPerCore = 4096;
+}
+
+/// The reactor threads for `cores`: `cores` itself, or for 0 the CPUs this process may run on (on Linux, its
+/// affinity mask), at most the engine's 16.
+private uint reactorThreads(uint cores) nothrow @nogc
+{
+    import std.parallelism : totalCPUs;
+
+    enum engineLimit = 16; // flint.engine.web's ceiling on reactor workers
+    if (cores != 0)
+        return cores;
+    const count = totalCPUs;
+    return count == 0 ? 1 : count > engineLimit ? engineLimit : count;
+}
+
+@("ServletEngineOptions.cores 0 serves on every available CPU, at most 16")
+unittest
+{
+    assert(ServletEngineOptions.init.cores == 0);
+    const all = reactorThreads(0);
+    assert(all >= 1 && all <= 16);
+    assert(reactorThreads(3) == 3);
 }
 
 /// A servlet container on Flint's HTTP engine.
@@ -162,7 +185,7 @@ final class ServletEngine : RequestHost
         ServerOptions serverOptions;
         serverOptions.address = options.address;
         serverOptions.port = options.port;
-        serverOptions.cores = options.cores;
+        serverOptions.cores = reactorThreads(options.cores);
         serverOptions.http2 = false;
         serverOptions.idleTimeoutNanos = options.keepAliveTimeoutNanos;
         serverOptions.maxBodyBytes = options.maxBodyBytes;
