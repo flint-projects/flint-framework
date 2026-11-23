@@ -35,7 +35,7 @@ proxies: the callback must not close it.
 +/
 module flint.jdbc.core;
 
-import flint.dao : DataAccessException, InvalidDataAccessApiUsageException;
+import flint.dao : DataAccessException, InvalidDataAccessApiUsageException, TypeMismatchDataAccessException;
 import flint.dao.support : DataAccessUtils;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.objects : objectToString;
@@ -43,6 +43,7 @@ import flint.java.lang : IllegalArgumentException, IllegalStateException;
 import flint.java.sql : BatchUpdateException, Connection, PreparedStatement, ResultSet,
     ResultSetMetaData, SQLException, SQLWarning, Statement, Types;
 import flint.java.util : ArrayList, LinkedHashMap, List, Map;
+import std.typecons : Nullable;
 import flint.javax.sql : DataSource;
 import flint.jdbc : IncorrectResultSetColumnCountException, SQLWarningException, UncategorizedSQLException;
 import flint.jdbc.datasource : DataSourceUtils;
@@ -271,8 +272,15 @@ Any[] argumentArray(Args...)(Args args)
     return values;
 }
 
-/// The erased form of a `ResultSetExtractor`: a delegate that reads a whole `ResultSet`.
-alias ResultSetReader = void delegate(ResultSet) @safe;
+/++
+The erased form of a `ResultSetExtractor`: a delegate that reads a whole `ResultSet`. It is a struct, not a bare
+delegate, so that it never overloads with a per-row `void delegate(ResultSet)` callback (R9).
++/
+struct ResultSetReader
+{
+    /// Read the whole `ResultSet`.
+    void delegate(ResultSet) @safe read;
+}
 
 private enum bool isCallbackArgument(T) = is(T : RowCallbackHandler) || is(T == void delegate(ResultSet) @safe);
 
@@ -280,47 +288,74 @@ private enum bool isCallbackArgument(T) = is(T : RowCallbackHandler) || is(T == 
 // Parameter values
 
 /++
-Object to represent an SQL parameter value, including parameter meta-data such as the SQL type and the scale for
-numeric values. Designed for use with `JdbcTemplate`'s operations that take an array of argument values: each such
-argument value may be a `SqlParameterValue`, indicating the SQL type (and optionally the scale) instead of letting
-the template guess a default type.
+Object to represent an SQL parameter definition. Parameters may be anonymous, in which case `name` is null. However,
+all parameters must define an SQL type according to `flint.java.sql.Types`.
 +/
-class SqlParameterValue
+class SqlParameter
 {
+    private string name;
     private int sqlType;
     private string typeName;
-    private int scale = -1;
-    private bool hasScale;
-    private Any value;
+    private Nullable!int scale;
 
-    /// Create a new `SqlParameterValue`, supplying the SQL type.
-    this(int sqlType, Any value)
+    /// Create a new anonymous `SqlParameter`, supplying the SQL type.
+    this(int sqlType)
     {
         this.sqlType = sqlType;
-        this.value = value;
     }
 
-    /// Create a new `SqlParameterValue`, supplying the SQL type and the type name.
-    this(int sqlType, string typeName, Any value)
+    /// Create a new anonymous `SqlParameter`, supplying the SQL type and the type name.
+    this(int sqlType, string typeName)
     {
         this.sqlType = sqlType;
         this.typeName = typeName;
-        this.value = value;
     }
 
-    /// Create a new `SqlParameterValue`, supplying the SQL type and the scale.
-    this(int sqlType, int scale, Any value)
+    /// Create a new anonymous `SqlParameter`, supplying the SQL type and the scale.
+    this(int sqlType, int scale)
     {
         this.sqlType = sqlType;
         this.scale = scale;
-        hasScale = true;
-        this.value = value;
     }
 
-    /// Return the value object that this parameter value holds.
-    Any getValue()
+    /// Create a new `SqlParameter`, supplying name and SQL type.
+    this(string name, int sqlType)
     {
-        return value;
+        this.name = name;
+        this.sqlType = sqlType;
+    }
+
+    /// Create a new `SqlParameter`, supplying name, SQL type and type name.
+    this(string name, int sqlType, string typeName)
+    {
+        this.name = name;
+        this.sqlType = sqlType;
+        this.typeName = typeName;
+    }
+
+    /// Create a new `SqlParameter`, supplying name, SQL type and scale.
+    this(string name, int sqlType, int scale)
+    {
+        this.name = name;
+        this.sqlType = sqlType;
+        this.scale = scale;
+    }
+
+    /// Copy constructor.
+    this(SqlParameter otherParam)
+    {
+        if (otherParam is null)
+            throw new IllegalArgumentException("SqlParameter object must not be null");
+        name = otherParam.name;
+        sqlType = otherParam.sqlType;
+        typeName = otherParam.typeName;
+        scale = otherParam.scale;
+    }
+
+    /// Return the name of the parameter, or null if anonymous.
+    string getName()
+    {
+        return name;
     }
 
     /// Return the SQL type of the parameter.
@@ -335,11 +370,88 @@ class SqlParameterValue
         return typeName;
     }
 
-    /// Return the scale of the parameter, if any; -1 when none was given.
-    int getScale()
+    /// Return the scale of the parameter, if any (R5).
+    Nullable!int getScale()
     {
-        return hasScale ? scale : -1;
+        return scale;
     }
+
+    /// Return whether this parameter holds input values that should be set before execution even if they are null.
+    bool isInputValueProvided()
+    {
+        return true;
+    }
+
+    /// Return whether this parameter is an implicit return parameter used during the results processing of
+    /// `CallableStatement.getMoreResults`/`getUpdateCount`.
+    bool isResultsParameter()
+    {
+        return false;
+    }
+
+    /// Convert a list of JDBC types, as defined in `flint.java.sql.Types`, to a list of `SqlParameter` objects as
+    /// used in this package.
+    static List!SqlParameter sqlTypesToAnonymousParameterList(int[] types...)
+    {
+        auto result = new ArrayList!SqlParameter;
+        foreach (type; types)
+            result.add(new SqlParameter(type));
+        return result;
+    }
+}
+
+/++
+Object to represent an SQL parameter value, including parameter meta-data such as the SQL type and the scale for
+numeric values. Designed for use with `JdbcTemplate`'s operations that take an array of argument values: each such
+argument value may be a `SqlParameterValue`, indicating the SQL type (and optionally the scale) instead of letting
+the template guess a default type.
++/
+class SqlParameterValue : SqlParameter
+{
+    private Any value;
+
+    /// Create a new `SqlParameterValue`, supplying the SQL type.
+    this(int sqlType, Any value)
+    {
+        super(sqlType);
+        this.value = value;
+    }
+
+    /// Create a new `SqlParameterValue`, supplying the SQL type and the type name.
+    this(int sqlType, string typeName, Any value)
+    {
+        super(sqlType, typeName);
+        this.value = value;
+    }
+
+    /// Create a new `SqlParameterValue`, supplying the SQL type and the scale.
+    this(int sqlType, int scale, Any value)
+    {
+        super(sqlType, scale);
+        this.value = value;
+    }
+
+    /// Create a new `SqlParameterValue` based on the given `SqlParameter` declaration.
+    this(SqlParameter declaredParam, Any value)
+    {
+        super(declaredParam);
+        this.value = value;
+    }
+
+    /// Return the value object that this parameter value holds.
+    Any getValue()
+    {
+        return value;
+    }
+}
+
+/// The `SqlParameterValue` an `Any` holds, or null.
+package(flint.jdbc) SqlParameterValue parameterValueOf(Any value)
+{
+    if (value.isNull)
+        return null;
+    auto object = value.asObject();
+    return object is null ? null : cast(SqlParameterValue) object;
 }
 
 /++
@@ -378,7 +490,7 @@ abstract class StatementCreatorUtils
     }
 
     /// Set the value for a parameter, taking its SQL type and scale from the given `SqlParameterValue`.
-    static void setParameterValue(PreparedStatement ps, int paramIndex, SqlParameterValue param, Any inValue)
+    static void setParameterValue(PreparedStatement ps, int paramIndex, SqlParameter param, Any inValue)
     {
         setParameterValueInternal(ps, paramIndex, param.getSqlType(), param.getTypeName(), inValue);
     }
@@ -434,8 +546,12 @@ abstract class StatementCreatorUtils
             ps.setString(paramIndex, inValue.holds!string ? inValue.get!string : inValue.toString());
             return;
         }
-        // TYPE_UNKNOWN or another type: the value's own type decides, as setObject does on the JVM.
-        ps.setObject(paramIndex, inValue);
+        if (sqlType == SqlTypeValue.TYPE_UNKNOWN && inValue.holds!string)
+            ps.setString(paramIndex, inValue.get!string);
+        else if (sqlType == SqlTypeValue.TYPE_UNKNOWN) // The value's own type decides, as setObject does on the JVM.
+            ps.setObject(paramIndex, inValue);
+        else
+            ps.setObject(paramIndex, inValue, sqlType);
     }
 
     /// Clean up all resources held by parameter values which were passed to an execute method. This is for example
@@ -732,10 +848,10 @@ interface JdbcOperations
     void execute(string sql, scope void delegate(PreparedStatement) @safe action);
 
     /// Execute a static query, reading its `ResultSet` with the given delegate.
-    void query(string sql, scope void delegate(ResultSet) @safe extractor);
+    void query(string sql, ResultSetReader extractor);
 
     /// Query using a prepared statement, reading the `ResultSet` with the given delegate.
-    void query(PreparedStatementCreator psc, PreparedStatementSetter pss, scope ResultSetReader extractor);
+    void query(PreparedStatementCreator psc, PreparedStatementSetter pss, ResultSetReader extractor);
 
     // Non-generic operations.
 
@@ -859,7 +975,7 @@ interface JdbcOperations
     T query(T)(string sql, ResultSetExtractor!T rse)
     {
         T result;
-        query(sql, (ResultSet rs) { result = rse.extractData(rs); });
+        query(sql, ResultSetReader((ResultSet rs) { result = rse.extractData(rs); }));
         return result;
     }
 
@@ -867,7 +983,7 @@ interface JdbcOperations
     T query(T)(PreparedStatementCreator psc, ResultSetExtractor!T rse)
     {
         T result;
-        query(psc, null, (ResultSet rs) { result = rse.extractData(rs); });
+        query(psc, null, ResultSetReader((ResultSet rs) { result = rse.extractData(rs); }));
         return result;
     }
 
@@ -876,9 +992,9 @@ interface JdbcOperations
     T query(T)(string sql, PreparedStatementSetter pss, ResultSetExtractor!T rse)
     {
         T result;
-        query(simplePreparedStatementCreator(sql), pss, (ResultSet rs) {
-            result = rse.extractData(rs);
-        });
+        query(simplePreparedStatementCreator(sql), pss, ResultSetReader((ResultSet rs) {
+                result = rse.extractData(rs);
+            }));
         return result;
     }
 
@@ -1064,7 +1180,7 @@ private final class ChunkSetter(T) : BatchPreparedStatementSetter
 
 /// The row limit of a `JdbcTemplate`'s generic queries: its `maxRows`, which Spring passes to
 /// `RowMapperResultSetExtractor` in case the driver ignores `Statement.setMaxRows`; -1 for other implementations.
-private int rowLimit(JdbcOperations operations)
+package(flint.jdbc) int rowLimit(JdbcOperations operations)
 {
     auto template_ = cast(JdbcTemplate) operations;
     return template_ !is null ? template_.getMaxRows() : -1;
@@ -1310,7 +1426,7 @@ class JdbcTemplate : JdbcAccessor, JdbcOperations
         executeStatement((Statement stmt) { stmt.execute(sql); }, sql, "StatementCallback");
     }
 
-    override void query(string sql, scope void delegate(ResultSet) @safe extractor)
+    override void query(string sql, ResultSetReader extractor)
     {
         if (sql is null)
             throw new IllegalArgumentException("SQL must not be null");
@@ -1321,13 +1437,13 @@ class JdbcTemplate : JdbcAccessor, JdbcOperations
             scope (exit)
                 JdbcUtils.closeResultSet(rs);
             rs = stmt.executeQuery(sql);
-            extractor(rs);
+            extractor.read(rs);
         }, sql, "StatementCallback");
     }
 
     override void query(string sql, RowCallbackHandler rch)
     {
-        query(sql, (ResultSet rs) { processRows(rs, rch); });
+        query(sql, ResultSetReader((ResultSet rs) { processRows(rs, rch); }));
     }
 
     private void processRows(ResultSet rs, RowCallbackHandler rch)
@@ -1449,8 +1565,7 @@ class JdbcTemplate : JdbcAccessor, JdbcOperations
         execute(simplePreparedStatementCreator(sql), action);
     }
 
-    override void query(PreparedStatementCreator psc, PreparedStatementSetter pss,
-            scope void delegate(ResultSet) @safe extractor)
+    override void query(PreparedStatementCreator psc, PreparedStatementSetter pss, ResultSetReader extractor)
     {
         logger.debug_("Executing prepared SQL query");
         execute(psc, (PreparedStatement ps) {
@@ -1464,18 +1579,20 @@ class JdbcTemplate : JdbcAccessor, JdbcOperations
             if (pss !is null)
                 pss.setValues(ps);
             rs = ps.executeQuery();
-            extractor(rs);
+            extractor.read(rs);
         });
     }
 
     override void query(PreparedStatementCreator psc, RowCallbackHandler rch)
     {
-        query(psc, null, (ResultSet rs) { processRows(rs, rch); });
+        query(psc, null, ResultSetReader((ResultSet rs) { processRows(rs, rch); }));
     }
 
     override void query(string sql, PreparedStatementSetter pss, RowCallbackHandler rch)
     {
-        query(simplePreparedStatementCreator(sql), pss, (ResultSet rs) { processRows(rs, rch); });
+        query(simplePreparedStatementCreator(sql), pss, ResultSetReader((ResultSet rs) {
+                processRows(rs, rch);
+            }));
     }
 
     override void query(string sql, Any[] args, int[] argTypes, RowCallbackHandler rch)
@@ -1820,4 +1937,543 @@ private string decimal(long value)
     import flint.engine.aot.text : decimal;
 
     return decimal(value);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// PreparedStatementCreatorFactory
+
+/++
+Helper class that efficiently creates multiple `PreparedStatementCreator` objects with different parameters based on
+an SQL statement and a single set of parameter declarations.
++/
+class PreparedStatementCreatorFactory
+{
+    private string sql;
+    private SqlParameter[] declaredParameters;
+    private bool hasDeclaredParameters;
+    private int resultSetType = ResultSet.TYPE_FORWARD_ONLY;
+    private bool updatableResults;
+    private bool returnGeneratedKeys;
+    private string[] generatedKeysColumnNames;
+
+    /// Create a new factory. Will need to add parameters via `addParameter` or have no parameters.
+    this(string sql)
+    {
+        this.sql = sql;
+    }
+
+    /// Create a new factory with the given SQL and JDBC types.
+    this(string sql, int[] types...)
+    {
+        this.sql = sql;
+        declaredParameters = SqlParameter.sqlTypesToAnonymousParameterList(types).toArray();
+        hasDeclaredParameters = true;
+    }
+
+    /// Create a new factory with the given SQL and parameters.
+    this(string sql, List!SqlParameter declaredParameters)
+    {
+        this.sql = sql;
+        this.declaredParameters = declaredParameters.toArray();
+        hasDeclaredParameters = true;
+    }
+
+    /// Return the SQL statement to execute.
+    final string getSql()
+    {
+        return sql;
+    }
+
+    /// Add a new declared parameter. Order of parameter addition is significant.
+    void addParameter(SqlParameter param)
+    {
+        declaredParameters ~= param;
+        hasDeclaredParameters = true;
+    }
+
+    /// Set whether to use prepared statements that return a specific type of `ResultSet`.
+    void setResultSetType(int resultSetType)
+    {
+        this.resultSetType = resultSetType;
+    }
+
+    /// Set whether to use prepared statements capable of returning updatable `ResultSet`s.
+    void setUpdatableResults(bool updatableResults)
+    {
+        this.updatableResults = updatableResults;
+    }
+
+    /// Set whether prepared statements should be capable of returning auto-generated keys.
+    void setReturnGeneratedKeys(bool returnGeneratedKeys)
+    {
+        this.returnGeneratedKeys = returnGeneratedKeys;
+    }
+
+    /// Set the column names of the auto-generated keys.
+    void setGeneratedKeysColumnNames(string[] names...)
+    {
+        generatedKeysColumnNames = names.dup;
+    }
+
+    /// Return a new `PreparedStatementSetter` for the given parameters.
+    PreparedStatementSetter newPreparedStatementSetter(List!Any params)
+    {
+        return new PreparedStatementCreatorImpl(sql, params is null ? null : params.toArray());
+    }
+
+    /// Return a new `PreparedStatementSetter` for the given parameters.
+    PreparedStatementSetter newPreparedStatementSetter(Any[] params)
+    {
+        return new PreparedStatementCreatorImpl(sql, params);
+    }
+
+    /// Return a new `PreparedStatementCreator` for the given parameters.
+    PreparedStatementCreator newPreparedStatementCreator(List!Any params)
+    {
+        return new PreparedStatementCreatorImpl(sql, params is null ? null : params.toArray());
+    }
+
+    /// Return a new `PreparedStatementCreator` for the given parameters.
+    PreparedStatementCreator newPreparedStatementCreator(Any[] params)
+    {
+        return new PreparedStatementCreatorImpl(sql, params);
+    }
+
+    /// Return a new `PreparedStatementCreator` for the given parameters, with the actual SQL to use.
+    PreparedStatementCreator newPreparedStatementCreator(string sqlToUse, Any[] params)
+    {
+        return new PreparedStatementCreatorImpl(sqlToUse, params);
+    }
+
+    /// `PreparedStatementCreator` implementation returned by this class.
+    private final class PreparedStatementCreatorImpl : PreparedStatementCreator,
+        PreparedStatementSetter, SqlProvider, ParameterDisposer
+    {
+        private string actualSql;
+        private Any[] parameters;
+
+        this(string actualSql, Any[] parameters)
+        {
+            this.actualSql = actualSql;
+            this.parameters = parameters;
+            if (hasDeclaredParameters && parameters.length != declaredParameters.length)
+                checkDistinctNames();
+        }
+
+        /// Account for named parameters being used multiple times.
+        private void checkDistinctNames()
+        {
+            bool[string] names;
+            foreach (i, param; parameters)
+            {
+                auto value = parameterValueOf(param);
+                names[value !is null && value.getName() !is null ? value.getName() : "Parameter #" ~ decimal(
+                            cast(long) i)] = true;
+            }
+            if (names.length != declaredParameters.length)
+                throw new InvalidDataAccessApiUsageException("SQL [" ~ sql ~ "]: given " ~ decimal(
+                        cast(long) names.length) ~ " parameters but expected " ~ decimal(
+                        cast(long) declaredParameters.length));
+        }
+
+        override PreparedStatement createPreparedStatement(Connection con)
+        {
+            PreparedStatement ps;
+            if (generatedKeysColumnNames.length)
+                ps = con.prepareStatement(actualSql, generatedKeysColumnNames);
+            else if (returnGeneratedKeys)
+                ps = con.prepareStatement(actualSql, Statement.RETURN_GENERATED_KEYS);
+            else
+                ps = con.prepareStatement(actualSql);
+            setValues(ps);
+            return ps;
+        }
+
+        override void setValues(PreparedStatement ps)
+        {
+            // Set arguments: does nothing if there are no parameters.
+            int sqlColIndx = 1;
+            foreach (i, param; parameters)
+            {
+                Any value = param;
+                SqlParameter declaredParameter;
+                // SqlParameterValue overrides declared parameter meta-data, in particular for independence from the
+                // declared parameter position in case of named parameters.
+                if (auto parameterValue = parameterValueOf(param))
+                {
+                    value = parameterValue.getValue();
+                    declaredParameter = parameterValue;
+                }
+                else if (hasDeclaredParameters)
+                {
+                    if (declaredParameters.length <= i)
+                        throw new InvalidDataAccessApiUsageException(
+                                "SQL [" ~ sql ~ "]: unable to access parameter number " ~ decimal(cast(
+                                long) i + 1) ~ " given only " ~ decimal(
+                                cast(long) declaredParameters.length) ~ " parameters");
+                    declaredParameter = declaredParameters[i];
+                }
+                if (declaredParameter is null)
+                    StatementCreatorUtils.setParameterValue(ps, sqlColIndx++, SqlTypeValue.TYPE_UNKNOWN, value);
+                else if (value.holds!(Any[]) && declaredParameter.getSqlType() != Types.ARRAY)
+                {
+                    // An IN-list value: one placeholder per element (and per value of an element row).
+                    foreach (entry; value.get!(Any[]))
+                    {
+                        if (entry.holds!(Any[]))
+                        {
+                            foreach (argValue; entry.get!(Any[]))
+                                StatementCreatorUtils.setParameterValue(ps, sqlColIndx++, declaredParameter, argValue);
+                        }
+                        else
+                            StatementCreatorUtils.setParameterValue(ps, sqlColIndx++, declaredParameter, entry);
+                    }
+                }
+                else
+                    StatementCreatorUtils.setParameterValue(ps, sqlColIndx++, declaredParameter, value);
+            }
+        }
+
+        override string getSql()
+        {
+            return sql;
+        }
+
+        override void cleanupParameters()
+        {
+            StatementCreatorUtils.cleanupParameters(parameters);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// BeanPropertyRowMapper and DataClassRowMapper
+
+/++
+`RowMapper` implementation that converts a row into a new instance of the specified mapped target class `T`. The
+mapped target class must be a top-level class or a static nested class, and it must have a default or no-arg
+constructor. Column values are mapped based on matching the column name (as obtained from result set meta-data) to
+public setters in the target class for the corresponding properties: the property name in lower case, or its
+underscored form (`first_name` for `firstName`).
+
+`T`'s properties and constructor come from its Flint AOT descriptor (R4); the mapping itself is the non-template
+`BeanPropertyRowMapping`, so one copy of the code serves every `T`.
++/
+class BeanPropertyRowMapper(T) : RowMapper!T
+{
+    /// The erased engine.
+    protected BeanPropertyRowMapping mapping;
+
+    /// Create a new `BeanPropertyRowMapper` for `T`, described by `descriptorOf!T`.
+    this()
+    {
+        import flint.engine.aot.descriptor : descriptorOf;
+
+        this(descriptorOf!T());
+    }
+
+    /// Create a new `BeanPropertyRowMapper` for `T`, described by `descriptor`: the descriptor Flint AOT generated
+    /// for `T`, which also records its constructors.
+    this(const(imported!"flint.engine.aot.descriptor".Descriptor) descriptor)
+    {
+        mapping = new BeanPropertyRowMapping(descriptor, false);
+    }
+
+    /// Create a new `BeanPropertyRowMapper`, checking that all properties are populated when `checkFullyPopulated`.
+    this(bool checkFullyPopulated)
+    {
+        this();
+        mapping.setCheckFullyPopulated(checkFullyPopulated);
+    }
+
+    /// Set whether we're strictly validating that all bean properties have been mapped from corresponding database
+    /// columns.
+    void setCheckFullyPopulated(bool checkFullyPopulated)
+    {
+        mapping.setCheckFullyPopulated(checkFullyPopulated);
+    }
+
+    /// Return whether we're strictly validating that all bean properties have been mapped from corresponding
+    /// database columns.
+    bool isCheckFullyPopulated()
+    {
+        return mapping.isCheckFullyPopulated();
+    }
+
+    /// Set whether a null value from the database should be ignored for a property of a primitive type (it keeps
+    /// its default) rather than causing an exception.
+    void setPrimitivesDefaultedForNullValue(bool primitivesDefaultedForNullValue)
+    {
+        mapping.setPrimitivesDefaultedForNullValue(primitivesDefaultedForNullValue);
+    }
+
+    /// Return whether a null value from the database is ignored for a property of a primitive type.
+    bool isPrimitivesDefaultedForNullValue()
+    {
+        return mapping.isPrimitivesDefaultedForNullValue();
+    }
+
+    /// Extract the values for all columns in the current row, using the descriptor's properties.
+    override T mapRow(ResultSet rs, int rowNumber)
+    {
+        auto instance = mapping.mapRow(rs, rowNumber);
+        return instance.get!T;
+    }
+
+    /// Static factory method to create a new `BeanPropertyRowMapper` (R4).
+    static BeanPropertyRowMapper!T newInstance()
+    {
+        return new BeanPropertyRowMapper!T;
+    }
+}
+
+/++
+`RowMapper` implementation that converts a row into a new instance of the specified mapped target class `T`. It
+supports records and other data classes through their constructor parameters, and remaining bean properties through
+setters, as `BeanPropertyRowMapper` does.
++/
+class DataClassRowMapper(T) : BeanPropertyRowMapper!T
+{
+    /// Create a new `DataClassRowMapper` for `T`, described by `descriptorOf!T`. That descriptor records only a
+    /// default constructor; one Flint AOT generated also records the canonical constructor, with its parameter names.
+    this()
+    {
+        super();
+        mapping.useConstructor();
+    }
+
+    /// Create a new `DataClassRowMapper` for `T`, described by `descriptor`.
+    this(const(imported!"flint.engine.aot.descriptor".Descriptor) descriptor)
+    {
+        super(descriptor);
+        mapping.useConstructor();
+    }
+
+    /// Static factory method to create a new `DataClassRowMapper` (R4).
+    static DataClassRowMapper!T newInstance()
+    {
+        return new DataClassRowMapper!T;
+    }
+}
+
+/// The erased engine of `BeanPropertyRowMapper` and `DataClassRowMapper`: maps a row through a type's descriptor.
+final class BeanPropertyRowMapping
+{
+    import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, PropertyDescriptor;
+
+    private const(Descriptor) descriptor;
+    private bool checkFullyPopulated;
+    private bool primitivesDefaultedForNullValue;
+    private const(PropertyDescriptor)*[string] mappedProperties;
+    private bool[string] mappedPropertyNames;
+    private const(ConstructorDescriptor)* mappedConstructor;
+    private size_t[string] underscoredParameterIndexes;
+    private size_t[string] lowerCaseParameterIndexes;
+
+    /// Map rows to instances of the type `descriptor` describes.
+    this(const(Descriptor) descriptor, bool checkFullyPopulated)
+    {
+        this.descriptor = descriptor;
+        this.checkFullyPopulated = checkFullyPopulated;
+        foreach (ref property; descriptor.properties)
+        {
+            if (property.set is null)
+                continue;
+            mappedProperties[lowerCaseName(property.name)] = &property;
+            mappedProperties[JdbcUtils.convertPropertyNameToUnderscoreName(property.name)] = &property;
+            mappedPropertyNames[property.name] = true;
+        }
+    }
+
+    /// Map through the preferred constructor too: `DataClassRowMapper`.
+    void useConstructor()
+    {
+        if (descriptor.constructors.length == 0)
+            throw new InvalidDataAccessApiUsageException("No constructor available for " ~ descriptor.name);
+        mappedConstructor = &descriptor.constructors[0];
+        foreach (i, parameter; mappedConstructor.parameters)
+        {
+            suppressProperty(parameter.name);
+            const underscored = JdbcUtils.convertPropertyNameToUnderscoreName(parameter.name);
+            if (underscored !in underscoredParameterIndexes)
+                underscoredParameterIndexes[underscored] = i;
+            const lowerCase = lowerCaseName(parameter.name);
+            if (lowerCase !in lowerCaseParameterIndexes)
+                lowerCaseParameterIndexes[lowerCase] = i;
+        }
+    }
+
+    private void suppressProperty(string propertyName)
+    {
+        mappedProperties.remove(lowerCaseName(propertyName));
+        mappedProperties.remove(JdbcUtils.convertPropertyNameToUnderscoreName(propertyName));
+        mappedPropertyNames.remove(propertyName);
+    }
+
+    void setCheckFullyPopulated(bool checkFullyPopulated) ///
+    {
+        this.checkFullyPopulated = checkFullyPopulated;
+    }
+
+    /// Whether every mapped property must be populated.
+    bool isCheckFullyPopulated()
+    {
+        return checkFullyPopulated;
+    }
+
+    void setPrimitivesDefaultedForNullValue(bool primitivesDefaultedForNullValue) ///
+    {
+        this.primitivesDefaultedForNullValue = primitivesDefaultedForNullValue;
+    }
+
+    /// Whether a null value leaves a primitive property at its default.
+    bool isPrimitivesDefaultedForNullValue()
+    {
+        return primitivesDefaultedForNullValue;
+    }
+
+    private bool hasMappedProperties()
+    {
+        return mappedProperties.length > 0 || (checkFullyPopulated && mappedPropertyNames.length > 0);
+    }
+
+    /// Map the current row to a new instance, held by the returned `Any`.
+    Any mapRow(ResultSet rs, int)
+    {
+        auto mappedObject = constructMappedInstance(rs);
+        if (!hasMappedProperties()) // Nothing left to populate via setters (for example, a record mapped through its constructor)
+            return mappedObject;
+        auto rsmd = rs.getMetaData();
+        const columnCount = rsmd.getColumnCount();
+        bool[string] populatedProperties;
+        foreach (index; 1 .. columnCount + 1)
+        {
+            const column = JdbcUtils.lookupColumnName(rsmd, index);
+            auto property = mappedProperties.get(lowerCaseName(withoutSpaces(column)), null);
+            if (property is null)
+                continue;
+            auto value = columnValue(rs, index, property.type);
+            if (value.isNull && isPrimitive(property.type))
+            {
+                if (!primitivesDefaultedForNullValue)
+                    throw new TypeMismatchDataAccessException("Failed to convert null to required type '"
+                            ~ property.type ~ "' for property '" ~ property.name ~ "'");
+            }
+            else
+                property.set(mappedObject, value);
+            populatedProperties[property.name] = true;
+        }
+        if (checkFullyPopulated && populatedProperties.length != mappedPropertyNames.length)
+            throw new InvalidDataAccessApiUsageException("Given ResultSet does not contain all properties "
+                    ~ "necessary to populate object of class " ~ descriptor.name);
+        return mappedObject;
+    }
+
+    private Any constructMappedInstance(ResultSet rs)
+    {
+        if (mappedConstructor is null || mappedConstructor.parameters.length == 0)
+        {
+            if (mappedConstructor !is null && mappedConstructor.invoke !is null)
+                return mappedConstructor.invoke([]);
+            if (descriptor.create is null)
+                throw new InvalidDataAccessApiUsageException(
+                        "Mapped class " ~ descriptor.name ~ " has no default constructor");
+            return descriptor.create();
+        }
+        auto parameters = mappedConstructor.parameters;
+        auto columnIndexes = findColumnIndexes(rs, parameters);
+        auto args = new Any[parameters.length];
+        foreach (i, parameter; parameters)
+            args[i] = columnValue(rs, columnIndexes[i], parameter.type);
+        return mappedConstructor.invoke(args);
+    }
+
+    private int[] findColumnIndexes(T)(ResultSet rs, const(T)[] parameters)
+    {
+        auto underscoredMatches = new int[parameters.length];
+        auto directMatches = new int[parameters.length];
+        auto rsmd = rs.getMetaData();
+        foreach (index; 1 .. rsmd.getColumnCount() + 1)
+        {
+            const column = lowerCaseName(JdbcUtils.lookupColumnName(rsmd, index));
+            if (auto param = column in underscoredParameterIndexes)
+                if (underscoredMatches[*param] == 0)
+                    underscoredMatches[*param] = index;
+            if (auto param = column in lowerCaseParameterIndexes)
+                if (directMatches[*param] == 0)
+                    directMatches[*param] = index;
+        }
+        foreach (i, parameter; parameters)
+            if (underscoredMatches[i] == 0)
+                underscoredMatches[i] = directMatches[i] != 0 ? directMatches[i] : findColumn(rs, parameter.name);
+        return underscoredMatches;
+    }
+
+    private static int findColumn(ResultSet rs, string name)
+    {
+        try
+            // Try common underscored name match first
+            return rs.findColumn(JdbcUtils.convertPropertyNameToUnderscoreName(name));
+        catch (SQLException) // Try direct name match (typically with camelCase) instead
+            return rs.findColumn(lowerCaseName(name));
+    }
+
+    /// Java's `JdbcUtils.getResultSetValue(rs, index, requiredType)`, by the D type's name.
+    private static Any columnValue(ResultSet rs, int index, string typeName)
+    {
+        auto value = rs.getObject(index);
+        if (value.isNull)
+            return value;
+        switch (typeName)
+        {
+        case "string":
+            return Any.of(rs.getString(index));
+        case "bool":
+            return Any.of(rs.getBoolean(index));
+        case "byte":
+            return Any.of(rs.getByte(index));
+        case "short":
+            return Any.of(rs.getShort(index));
+        case "int":
+            return Any.of(rs.getInt(index));
+        case "long":
+            return Any.of(rs.getLong(index));
+        case "float":
+            return Any.of(rs.getFloat(index));
+        case "double":
+            return Any.of(rs.getDouble(index));
+        default:
+            return value;
+        }
+    }
+
+    private static bool isPrimitive(string typeName)
+    {
+        switch (typeName)
+        {
+        case "bool", "byte", "ubyte", "short", "ushort", "int", "uint", "long", "ulong", "float",
+                "double", "char":
+                return true;
+        default:
+            return false;
+        }
+    }
+
+    private static string lowerCaseName(string name)
+    {
+        auto result = name.dup;
+        foreach (ref c; result)
+            if (c >= 'A' && c <= 'Z')
+                c += 32;
+        return result.idup;
+    }
+
+    private static string withoutSpaces(string name)
+    {
+        string result;
+        foreach (c; name)
+            if (c != ' ')
+                result ~= c;
+        return result;
+    }
 }
