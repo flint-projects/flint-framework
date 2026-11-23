@@ -160,25 +160,35 @@ int flint_uring_wait(void *ring, unsigned timeout_ms, uint64_t *token_out, int *
     if (ring == NULL || token_out == NULL || result_out == NULL)
         return -EINVAL;
     struct flint_uring *owner = ring;
-    int status = io_uring_submit(&owner->ring);
-    if (status == -EINTR)
-        return 0;
-    if (status < 0 && status != -EAGAIN && status != -EBUSY)
-        return status;
-    struct io_uring_cqe *cqe;
+    struct io_uring_cqe *cqe = NULL;
+    int status;
     if (timeout_ms == 0) {
+        /* A poll: submit what is queued (no syscall when nothing is) and take a completion if one is there. */
+        status = io_uring_submit(&owner->ring);
+        if (status == -EINTR)
+            return 0;
+        if (status < 0 && status != -EAGAIN && status != -EBUSY)
+            return status;
         status = io_uring_peek_cqe(&owner->ring, &cqe);
     } else {
+        /* Submit the queued operations and wait for the first completion in one io_uring_enter (IORING_FEAT_EXT_ARG,
+           required at open), where io_uring_submit then io_uring_wait_cqe_timeout took two. */
         struct __kernel_timespec timeout = {
             .tv_sec = timeout_ms / 1000,
             .tv_nsec = (timeout_ms % 1000) * 1000000L,
         };
-        status = io_uring_wait_cqe_timeout(&owner->ring, &cqe, &timeout);
+        status = io_uring_submit_and_wait_timeout(&owner->ring, &cqe, 1, &timeout, NULL);
+        if (status == -EAGAIN || status == -EBUSY)
+            /* The kernel took no more submissions now: reap what has completed instead. */
+            status = io_uring_peek_cqe(&owner->ring, &cqe);
     }
     if (status == -EAGAIN || status == -ETIME || status == -EINTR)
         return 0;
     if (status < 0)
         return status;
+    /* A successful submit_and_wait returns the submitted count and may leave cqe unset. */
+    if (cqe == NULL && io_uring_peek_cqe(&owner->ring, &cqe) != 0)
+        return 0;
     if (owner->pending == 0)
         abort();
     *token_out = io_uring_cqe_get_data64(cqe);
