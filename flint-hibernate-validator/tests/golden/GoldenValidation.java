@@ -6,6 +6,7 @@
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
 import jakarta.validation.ConstraintViolation;
@@ -45,6 +46,14 @@ public class GoldenValidation {
         @Size(min = 3, message = "'${validatedValue}' must have at least {min} characters") public String code = "ab";
         @NotNull(message = "literal \\{min\\} and {min}") public String escaped = null;
         @Size(min = 1, max = 5) public String ok = "fine";
+        @Past public LocalDate birthDate = LocalDate.of(3000, 1, 1);
+        @Future public Instant expiry = Instant.parse("2000-01-01T00:00:00Z");
+        @PastOrPresent public LocalDateTime created = LocalDateTime.of(3000, 1, 1, 0, 0);
+        @FutureOrPresent public OffsetDateTime due = OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(2));
+        @Future public LocalTime closing = LocalTime.MIN;
+        @Past public ZonedDateTime okPast = ZonedDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
+        @Future public LocalDate okFuture = LocalDate.of(3000, 1, 1);
+        @PastOrPresent public Instant okNow = Instant.parse("2020-01-01T00:00:00Z");
         @Valid public List<Pet> pets = new ArrayList<>(List.of(new Pet("  ", null), new Pet("Leo", "cat")));
     }
 

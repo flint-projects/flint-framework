@@ -8,6 +8,8 @@ import flint.engine.aot.descriptor : DescriptorTable, descriptorOf;
 import flint.hibernate.validator : HibernateValidatorConfiguration;
 import flint.jakarta.validation : ConstraintViolation, Valid, Validation, Validator;
 import flint.jakarta.validation.constraints;
+import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset,
+    ZonedDateTime;
 import flint.java.util : ArrayList, List;
 
 @safe:
@@ -54,6 +56,14 @@ private final class Owner
     @NotNull(message : `literal \{min\} and {min}`) string escaped;
     @Size(min : 1, max:
             5) string ok = "fine";
+    @Past LocalDate birthDate = LocalDate.of(3000, 1, 1);
+    @Future Instant expiry = Instant.parse("2000-01-01T00:00:00Z");
+    @PastOrPresent LocalDateTime created = LocalDateTime.of(3000, 1, 1, 0, 0);
+    @FutureOrPresent OffsetDateTime due = OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(2));
+    @Future LocalTime closing = LocalTime.MIN;
+    @Past ZonedDateTime okPast = ZonedDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
+    @Future LocalDate okFuture = LocalDate.of(3000, 1, 1);
+    @PastOrPresent Instant okNow = Instant.parse("2020-01-01T00:00:00Z");
     @Valid List!Pet pets;
 
     this()
@@ -85,6 +95,10 @@ private string valueOf(Any value)
         return value.get!bool() ? "true" : "false";
     if (value.holds!long())
         return value.toString();
+    static foreach (T; imported!"std.meta".AliasSeq!(Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime,
+            ZonedDateTime))
+        if (value.holds!T())
+            return value.get!T().toString();
     return javaDoubleString(value.get!double());
 }
 
@@ -138,4 +152,29 @@ unittest
     assert(violations.length == 0);
     violations = validator().validateValue("golden_test.Owner", "age", Any.of(-1));
     assert(violations.length == 1 && violations[0].getPropertyPath().toString() == "age");
+}
+
+private final class Wrong
+{
+    @Past Duration elapsed;
+}
+
+@("HV000030 for @Past on a java.time type Hibernate has no validator for")
+unittest
+{
+    import flint.jakarta.validation : UnexpectedTypeException;
+
+    auto table = DescriptorTable.withBuiltins();
+    table.add(descriptorOf!Wrong());
+    auto configuration = cast(HibernateValidatorConfiguration) Validation.byDefaultProvider();
+    auto v = configuration.descriptors(table).buildValidatorFactory().getValidator();
+    try
+    {
+        v.validate(new Wrong());
+        assert(false);
+    }
+    catch (UnexpectedTypeException e)
+        assert(e.msg == "HV000030: No validator could be found for constraint "
+                ~ "'jakarta.validation.constraints.Past' validating type 'java.time.Duration'. "
+                ~ "Check configuration for 'elapsed'");
 }

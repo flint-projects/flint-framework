@@ -4,7 +4,8 @@
  * bv/{NotNullValidator,NullValidator,AssertTrueValidator,AssertFalseValidator,NotBlankValidator,
  * PatternValidator,EmailValidator,DigitsValidatorForNumber,DigitsValidatorForCharSequence}.java,
  * bv/notempty/*, bv/size/*, bv/number/bound/*, bv/number/bound/decimal/*, bv/number/sign/*,
- * AbstractEmailValidator.java and internal/util/DomainNameUtil.java
+ * AbstractEmailValidator.java, internal/util/DomainNameUtil.java and bv/time/{past,pastorpresent,
+ * future,futureorpresent}/*
  *
  * SPDX-License-Identifier: Apache-2.0
  * Copyright Red Hat Inc. and Hibernate Authors
@@ -13,7 +14,8 @@
  * per (constraint, type) pair; values arrive boxed in Any. Character counts are
  * UTF-16 units, as CharSequence.length() is (rulebook R14); whitespace is
  * Character.isWhitespace's. The e-mail grammar is Hibernate's regular expressions
- * written as code. @Past/@Future and friends wait for flint.java.time.
+ * written as code. @Past/@Future and friends cover the flint.java.time types with the
+ * default ClockProvider (the system clock, UTC) and a zero temporal tolerance.
  */
 
 /// The built-in constraints: which ones exist, their attributes, and their validity checks.
@@ -26,6 +28,7 @@ import flint.jakarta.validation : UnexpectedTypeException;
 import flint.jakarta.validation.constraints : AssertFalse, AssertTrue, DecimalMax, DecimalMin,
     Digits, Email, Future, FutureOrPresent, Max, Min, Negative, NegativeOrZero, NotBlank, NotEmpty,
     NotNull, Null, Past, PastOrPresent, Pattern, Positive, PositiveOrZero, Size;
+import flint.java.time : Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZonedDateTime;
 import flint.java.util : RawCollection, RawMap;
 import flint.validate.patterns : RuntimePattern, compileRuntimePattern;
 
@@ -251,7 +254,7 @@ private bool checkNumber(ref const BuiltinConstraint c, string simple, ref Any v
     if (value.isNull())
         return true;
     if (simple == "Past" || simple == "PastOrPresent" || simple == "Future" || simple == "FutureOrPresent")
-        return unexpected(c, value, propertyPath);
+        return checkTemporal(c, simple, value, propertyPath);
     const read = readNumber(value);
     const integral = read.integral;
     const number = read.number;
@@ -264,6 +267,46 @@ private bool checkNumber(ref const BuiltinConstraint c, string simple, ref Any v
     if (simple == "Min" || simple == "Max" || simple == "DecimalMin" || simple == "DecimalMax")
         return checkBound(c, simple, integral, whole, number);
     return checkSign(simple, number);
+}
+
+private bool checkTemporal(ref const BuiltinConstraint c, string simple, ref Any value, string propertyPath)
+{
+    const order = compareWithNow(value);
+    if (order == int.min)
+        return unexpected(c, value, propertyPath);
+    switch (simple)
+    {
+    case "Past":
+        return order < 0;
+    case "PastOrPresent":
+        return order <= 0;
+    case "Future":
+        return order > 0;
+    default:
+        return order >= 0;
+    }
+}
+
+// The value's order relative to the current date or time of its kind; int.min for a type with no validator.
+private int compareWithNow(ref Any value)
+{
+    switch (value.typeName())
+    {
+    case typeNameOf!Instant:
+        return value.get!Instant().compareTo(Instant.now());
+    case typeNameOf!LocalDate:
+        return value.get!LocalDate().compareTo(LocalDate.now());
+    case typeNameOf!LocalDateTime:
+        return value.get!LocalDateTime().compareTo(LocalDateTime.now());
+    case typeNameOf!LocalTime:
+        return value.get!LocalTime().compareTo(LocalTime.now());
+    case typeNameOf!OffsetDateTime:
+        return value.get!OffsetDateTime().toInstant().compareTo(Instant.now());
+    case typeNameOf!ZonedDateTime:
+        return value.get!ZonedDateTime().toInstant().compareTo(Instant.now());
+    default:
+        return int.min;
+    }
 }
 
 private bool checkBound(ref const BuiltinConstraint c, string simple, bool integral, long whole, double number)
@@ -693,8 +736,15 @@ string javaTypeName(string type) pure nothrow
     case "char", "wchar", "dchar":
         return "java.lang.Character";
     default:
-        return type;
+        return javaLibraryName(type);
     }
+}
+
+// flint.java.time.Duration is java.time.Duration; other names are kept.
+private string javaLibraryName(string type) pure nothrow @nogc
+{
+    enum prefix = "flint.java.";
+    return type.length > prefix.length && type[0 .. prefix.length] == prefix ? type["flint.".length .. $] : type;
 }
 
 @("Character.isWhitespace and String.isBlank")

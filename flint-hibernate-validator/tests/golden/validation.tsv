@@ -2,13 +2,18 @@ active	must be true	{jakarta.validation.constraints.AssertTrue.message}	false
 age	must be greater than or equal to 1	{jakarta.validation.constraints.Min.message}	0
 amount	numeric value out of bounds (<3 digits>.<2 digits> expected)	{jakarta.validation.constraints.Digits.message}	1234.567
 balance	must be greater than or equal to 0	{jakarta.validation.constraints.PositiveOrZero.message}	-0.5
+birthDate	must be a past date	{jakarta.validation.constraints.Past.message}	3000-01-01
 blankName	must not be blank	{jakarta.validation.constraints.NotBlank.message}	 	
 city	size must be between 2 and 30	{jakarta.validation.constraints.Size.message}	A
+closing	must be a future date	{jakarta.validation.constraints.Future.message}	00:00
 code	'ab' must have at least 3 characters	'${validatedValue}' must have at least {min} characters	ab
+created	must be a date in the past or in the present	{jakarta.validation.constraints.PastOrPresent.message}	3000-01-01T00:00
 debt	must be less than or equal to 0	{jakarta.validation.constraints.NegativeOrZero.message}	5
 deleted	must be false	{jakarta.validation.constraints.AssertFalse.message}	true
+due	must be a date in the present or in the future	{jakarta.validation.constraints.FutureOrPresent.message}	2000-01-01T00:00+02:00
 email	must be a well-formed email address	{jakarta.validation.constraints.Email.message}	not-an-email
 escaped	literal {min} and {min}	literal \{min\} and {min}	null
+expiry	must be a future date	{jakarta.validation.constraints.Future.message}	2000-01-01T00:00:00Z
 firstName	must not be blank	{jakarta.validation.constraints.NotBlank.message}	
 id	must be greater than 0	{jakarta.validation.constraints.Positive.message}	-3
 lastName	must not be null	{jakarta.validation.constraints.NotNull.message}	null
