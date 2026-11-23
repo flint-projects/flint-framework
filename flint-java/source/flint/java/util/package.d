@@ -2184,7 +2184,7 @@ class Properties : LinkedHashMap!(string, string)
 
     private static string unicodeEscape(string text, ref size_t i)
     {
-        import std.utf : encode;
+        import flint.engine.aot.text : utf8;
 
         dchar value = 0;
         foreach (j; 1 .. 5)
@@ -2204,9 +2204,8 @@ class Properties : LinkedHashMap!(string, string)
             value = value * 16 + digit;
         }
         i += 4;
-        char[4] buffer;
-        const n = encode(buffer, value);
-        return buffer[0 .. n].idup;
+        const encoded = utf8(value);
+        return encoded is null ? "\uFFFD" : encoded; // a lone surrogate has no UTF-8 form
     }
 }
 

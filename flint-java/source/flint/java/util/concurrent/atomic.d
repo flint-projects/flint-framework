@@ -82,9 +82,9 @@ final class AtomicLong
     /// The decimal value.
     override string toString() const
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        return atomicLoad(value).to!string;
+        return decimal(atomicLoad(value));
     }
 }
 

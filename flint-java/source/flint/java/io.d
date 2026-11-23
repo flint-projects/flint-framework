@@ -185,11 +185,10 @@ abstract class Writer
     /// Write one character.
     void write(dchar c)
     {
-        import std.utf : encode;
+        import flint.engine.aot.text : utf8;
 
-        char[4] buffer;
-        const n = encode(buffer, c);
-        write(buffer[0 .. n]);
+        const text = utf8(c);
+        write(text is null ? "\uFFFD" : text); // a surrogate or out-of-range code point is the replacement character
     }
 
     /// Write `text`; this writer.

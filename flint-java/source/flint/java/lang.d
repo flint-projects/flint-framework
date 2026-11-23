@@ -412,8 +412,6 @@ bool javaEquals(T)(T a, T b)
 /// Java's `String.valueOf`: `"null"` for null, decimal numbers, `true`/`false`, and `toString()` otherwise.
 string valueOf(T)(T value)
 {
-    import std.conv : to;
-
     static if (is(T == class) || is(T == interface))
         return objectToString(cast(Object) value);
     else static if (is(T : const(char)[]))
@@ -427,7 +425,36 @@ string valueOf(T)(T value)
     else static if (is(T == struct) && is(typeof(value.toString()) : string))
         return value.toString(); // not std.conv, whose struct path instantiates all of std.format
     else
+        return scalarValueOf(value);
+}
+
+// `valueOf` for the remaining scalars, through flint.engine.aot.text rather than std.conv (ADR-030 section 5).
+private string scalarValueOf(T)(T value)
+{
+    import flint.engine.aot.text : decimal, enumName, utf8;
+
+    static if (is(T Base == enum) && __traits(isIntegral, Base))
+        return enumName(value);
+    else static if (is(immutable T == immutable char))
+    {
+        string unit = [value]; // the code unit as it is, as std.conv appends it
+        return unit;
+    }
+    else static if (is(immutable T == immutable wchar) || is(immutable T == immutable dchar))
+    {
+        const text = utf8(value);
+        return text is null ? "\uFFFD" : text;
+    }
+    else static if (__traits(isIntegral, T) && __traits(isUnsigned, T))
+        return decimal(cast(ulong) value);
+    else static if (__traits(isIntegral, T))
+        return decimal(cast(long) value);
+    else
+    {
+        import std.conv : to;
+
         return value.to!string;
+    }
 }
 
 /// Java's `Double.toString` (JDK 19 and later): the shortest round-trip digits in the JDK's layout, from
@@ -606,7 +633,7 @@ struct Double
     /// Throws `NumberFormatException`.
     static double parseDouble(string s)
     {
-        import std.conv : ConvException, to;
+        import flint.engine.aot.text : tryParseDouble;
 
         size_t start, end = s.length;
         while (start < end && s[start] <= ' ')
@@ -618,10 +645,10 @@ struct Double
             text = text[0 .. $ - 1];
         if (text.length == 0)
             throw new NumberFormatException(s.length ? "For input string: \"" ~ s ~ "\"" : "empty String");
-        try
-            return text.to!double;
-        catch (ConvException)
+        const parsed = tryParseDouble(text);
+        if (!parsed.ok)
             throw NumberFormatException.forInputString(s);
+        return parsed.value;
     }
 
     /// Java's `Double.toString`.

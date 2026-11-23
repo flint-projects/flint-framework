@@ -159,6 +159,37 @@ unittest
 
 unittest
 {
+    // String.valueOf's scalars and Double.parseDouble go through flint.engine.aot.text; they print and parse as
+    // std.conv did.
+    import std.conv : to;
+
+    enum Colour
+    {
+        red,
+        green
+    }
+
+    const long big = long.min;
+    assert(valueOf(-7) == (-7).to!string && valueOf(big) == big.to!string);
+    assert(valueOf(ulong.max) == ulong.max.to!string && valueOf(cast(ubyte) 200) == "200");
+    assert(valueOf(Colour.green) == "green" && valueOf(cast(Colour) 5) == "cast(Colour)5");
+    assert(valueOf('x') == "x" && valueOf(cast(char) 0xFF) == [cast(char) 0xFF] && valueOf('\u00E9') == "\u00E9");
+    assert(valueOf(cast(wchar) 0x436) == "\u0436" && valueOf(cast(dchar) 0xD800) == "\uFFFD");
+    assert(Double.parseDouble("-0x1p3") == -8 && Double.parseDouble("1_000.5") == 1000.5);
+    assert(Double.parseDouble("2f") == 2);
+    foreach (bad; ["1e", "+inf", "0x", "1..2", "_1"])
+    {
+        bool threw;
+        try
+            Double.parseDouble(bad);
+        catch (NumberFormatException e)
+            threw = e.getMessage() == "For input string: \"" ~ bad ~ "\"";
+        assert(threw, bad);
+    }
+}
+
+unittest
+{
     // R5: Optional.
     auto present = Optional!string.of("x");
     auto absent = Optional!string.empty();

@@ -267,9 +267,9 @@ struct Fields
     // Java's `Parsed.toString`: the unresolved fields, the chronology, the zone and what was resolved.
     private string describeParsed() const
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        auto text = "{" ~ (hasOffset_ ? "OffsetSeconds=" ~ offsetSeconds_.to!string : "") ~ "},ISO";
+        auto text = "{" ~ (hasOffset_ ? "OffsetSeconds=" ~ decimal(offsetSeconds_) : "") ~ "},ISO";
         if (zoneId_.length)
             text ~= "," ~ zoneId_;
         const date = hasDate(), time = hasTime();
@@ -285,7 +285,7 @@ struct Fields
     /// Resolves the date fields into a `LocalDate`; throws `DateTimeParseException` when they are missing or invalid.
     LocalDate toLocalDate(string text, string type = "LocalDate") const
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         long year;
         if (has(Field.year))
@@ -313,9 +313,11 @@ struct Fields
             else
                 throw unresolved(text, type);
             if (has(Field.dayOfWeek) && date.getDayOfWeek() + 1 != values_[Field.dayOfWeek])
-                throw new DateTimeException("Conflict found: Field DayOfWeek " ~ (date.getDayOfWeek() + 1)
-                        .to!string ~ " differs from DayOfWeek "
-                        ~ values_[Field.dayOfWeek].to!string ~ " derived from " ~ date.toString());
+            {
+                const derived = decimal(date.getDayOfWeek() + 1), parsed = decimal(values_[Field.dayOfWeek]);
+                throw new DateTimeException("Conflict found: Field DayOfWeek " ~ derived
+                        ~ " differs from DayOfWeek " ~ parsed ~ " derived from " ~ date.toString());
+            }
             return date;
         }
         catch (DateTimeParseException e)
@@ -613,8 +615,6 @@ private string describeElements(scope const(Element)[] elements) pure
 
 private string describeElement(const Element e) pure
 {
-    import std.array : replace;
-
     if (e.op == Op.number || e.op == Op.fraction)
         return describeNumber(e);
     if (e.op >= Op.optionalStart)
@@ -624,7 +624,7 @@ private string describeElement(const Element e) pure
     case Op.reducedYear:
         return "ReducedValue(" ~ fieldNames[e.field] ~ ",2,2,2000-01-01)";
     case Op.literal:
-        return e.text == "'" ? "''" : "'" ~ e.text.replace("'", "''") ~ "'";
+        return e.text == "'" ? "''" : "'" ~ doubledQuotes(e.text) ~ "'";
     case Op.text:
         return "Text(" ~ fieldNames[e.field] ~ (e.text == "full" ? ")" : ",SHORT)");
     case Op.offset:
@@ -634,11 +634,31 @@ private string describeElement(const Element e) pure
     }
 }
 
+// `text` with each `'` doubled, as `DateTimeFormatterBuilder`'s literal printer writes it.
+private string doubledQuotes(string text) pure nothrow
+{
+    string doubled;
+    foreach (c; text)
+    {
+        if (c == '\'')
+            doubled ~= "''";
+        else
+            doubled ~= c;
+    }
+    return doubled;
+}
+
+// The ASCII upper case of `c`; any other character as it is.
+private char asciiUpper(char c) pure nothrow @nogc
+{
+    return c >= 'a' && c <= 'z' ? cast(char)(c - ('a' - 'A')) : c;
+}
+
 private string describeNumber(const Element e) pure
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
-    const min = (cast(int) e.minWidth).to!string, max = (cast(int) e.maxWidth).to!string;
+    const min = decimal(cast(int) e.minWidth), max = decimal(cast(int) e.maxWidth);
     if (e.op == Op.fraction)
         return "Fraction(NanoOfSecond," ~ min ~ "," ~ max ~ (e.lenient ? ",DecimalPoint)" : ")");
     if (e.minWidth == 1 && e.maxWidth == 19 && e.sign == SignStyle.NORMAL)
@@ -650,16 +670,16 @@ private string describeNumber(const Element e) pure
 
 private string indexText(int index) pure nothrow
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
-    return index.to!string;
+    return decimal(index);
 }
 
 private string padded(long value, int width) pure nothrow
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
-    auto digits = value.to!string;
+    auto digits = decimal(value);
     while (digits.length < width)
         digits = "0" ~ digits;
     return digits;
@@ -759,7 +779,7 @@ private struct Printer
 
     bool printNumber(const Element e)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         if (!fields.has(e.field))
             return false;
@@ -767,8 +787,11 @@ private struct Printer
         const magnitude = value < 0 ? -value : value;
         auto digits = padded(magnitude, e.minWidth);
         if (digits.length > e.maxWidth)
-            throw new DateTimeException("Field " ~ fieldNames[e.field] ~ " cannot be printed as the value "
-                    ~ value.to!string ~ " exceeds the maximum print width of " ~ (cast(int) e.maxWidth).to!string);
+        {
+            const shown = decimal(value), width = decimal(cast(int) e.maxWidth);
+            throw new DateTimeException("Field " ~ fieldNames[e.field]
+                    ~ " cannot be printed as the value " ~ shown ~ " exceeds the maximum print width of " ~ width);
+        }
         final switch (e.sign)
         {
         case SignStyle.EXCEEDS_PAD:
@@ -786,9 +809,11 @@ private struct Printer
             break;
         case SignStyle.NOT_NEGATIVE:
             if (value < 0)
-                throw new DateTimeException("Field " ~ fieldNames[e.field]
-                        ~ " cannot be printed as the value " ~ value.to!string
-                        ~ " cannot be negative according to the SignStyle");
+            {
+                const field = fieldNames[e.field], shown = decimal(value);
+                throw new DateTimeException("Field " ~ field ~ " cannot be printed as the value "
+                        ~ shown ~ " cannot be negative according to the SignStyle");
+            }
             break;
         case SignStyle.NEVER:
             break;
@@ -1394,20 +1419,18 @@ private Element zoneLetter(char c, int count)
 /// Parses a duration in the ISO-8601 form `PnDTnHnMn.nS`, as `Duration.parse` specifies.
 Duration parseDuration(string text)
 {
-    import std.ascii : toUpper;
-
     size_t pos;
     bool negate;
     if (pos < text.length && (text[pos] == '+' || text[pos] == '-'))
         negate = text[pos++] == '-';
-    if (pos >= text.length || toUpper(text[pos]) != 'P')
+    if (pos >= text.length || asciiUpper(text[pos]) != 'P')
         throw durationError(text);
     ++pos;
     long seconds, nanos;
     bool any, inTime;
     while (pos < text.length)
     {
-        if (toUpper(text[pos]) == 'T')
+        if (asciiUpper(text[pos]) == 'T')
         {
             if (inTime)
                 throw durationError(text);
@@ -1460,8 +1483,6 @@ private long durationFraction(string text, ref size_t pos)
 // One `[-]n[.n]X` component; advances `pos` past its unit letter.
 private DurationPart durationPart(string text, ref size_t pos, bool inTime)
 {
-    import std.ascii : toUpper;
-
     const start = pos;
     const negative = pos < text.length && text[pos] == '-';
     if (pos < text.length && (text[pos] == '-' || text[pos] == '+'))
@@ -1476,7 +1497,7 @@ private DurationPart durationPart(string text, ref size_t pos, bool inTime)
     const fractionNanos = durationFraction(text, pos);
     if (digits == 0 || pos >= text.length)
         throw durationError(text);
-    const unit = toUpper(text[pos++]);
+    const unit = asciiUpper(text[pos++]);
     const sign = negative ? -1 : 1;
     const seconds = unitSeconds(unit, inTime);
     if (seconds == 0 || (fractionNanos != 0 && unit != 'S'))

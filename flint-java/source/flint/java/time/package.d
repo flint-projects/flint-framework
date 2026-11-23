@@ -76,9 +76,9 @@ private long floorMod(long a, long b) pure nothrow @nogc
 
 private string pad(long value, int width) pure nothrow
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
-    auto text = (value < 0 ? -value : value).to!string;
+    auto text = decimal(value < 0 ? -value : value);
     while (text.length < width)
         text = "0" ~ text;
     return value < 0 ? "-" ~ text : text;
@@ -94,11 +94,13 @@ package(flint.java) string isoYear(long year) pure nothrow
 
 package(flint.java) void checkRange(string field, long value, long low, long high)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     if (value < low || value > high)
-        throw new DateTimeException("Invalid value for " ~ field ~ " (valid values " ~ low.to!string
-                ~ " - " ~ high.to!string ~ "): " ~ value.to!string);
+    {
+        const range = decimal(low) ~ " - " ~ decimal(high);
+        throw new DateTimeException("Invalid value for " ~ field ~ " (valid values " ~ range ~ "): " ~ decimal(value));
+    }
 }
 
 /// A day-of-week, such as 'Tuesday'.
@@ -197,16 +199,16 @@ struct LocalDate
     /// Obtains an instance from a year, month and day; throws `DateTimeException` for an invalid date.
     static LocalDate of(int year, int month, int dayOfMonth)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         checkRange("Year", year, -999_999_999, 999_999_999);
         checkRange("MonthOfYear", month, 1, 12);
         checkRange("DayOfMonth", dayOfMonth, 1, 31);
         if (dayOfMonth > monthLength(year, month))
         {
-            const leap = "Invalid date 'February 29' as '" ~ year.to!string ~ "' is not a leap year";
+            const leap = "Invalid date 'February 29' as '" ~ decimal(year) ~ "' is not a leap year";
             throw new DateTimeException(dayOfMonth == 29 ? leap
-                    : "Invalid date '" ~ monthName(month) ~ " " ~ dayOfMonth.to!string ~ "'");
+                    : "Invalid date '" ~ monthName(month) ~ " " ~ decimal(dayOfMonth) ~ "'");
         }
         return LocalDate(year, month, dayOfMonth);
     }
@@ -1025,23 +1027,27 @@ struct ZoneOffset
     /// Obtains an instance using an offset in hours, minutes and seconds, all with the same sign.
     static ZoneOffset ofHoursMinutesSeconds(int hours, int minutes, int seconds)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         if (hours < -18 || hours > 18)
         {
-            const value = hours.to!string;
+            const value = decimal(hours);
             throw new DateTimeException(
                     "Zone offset hours not in valid range: value " ~ value ~ " is not in the range -18 to 18");
         }
         checkOffsetSigns(hours, minutes, seconds);
         if (minutes < -59 || minutes > 59)
+        {
+            const value = decimal(minutes);
             throw new DateTimeException(
-                    "Zone offset minutes not in valid range: value " ~ minutes.to!string
-                    ~ " is not in the range -59 to 59");
+                    "Zone offset minutes not in valid range: value " ~ value ~ " is not in the range -59 to 59");
+        }
         if (seconds < -59 || seconds > 59)
+        {
+            const value = decimal(seconds);
             throw new DateTimeException(
-                    "Zone offset seconds not in valid range: value " ~ seconds.to!string
-                    ~ " is not in the range -59 to 59");
+                    "Zone offset seconds not in valid range: value " ~ value ~ " is not in the range -59 to 59");
+        }
         if ((hours == 18 || hours == -18) && (minutes | seconds) != 0)
             throw new DateTimeException("Zone offset not in valid range: -18:00 to +18:00");
         return ofTotalSeconds(hours * 3600 + minutes * 60 + seconds);
@@ -1254,10 +1260,9 @@ struct Instant
     /// Obtains the current instant from the system clock.
     static Instant now() nothrow
     {
-        import std.datetime.systime : Clock;
+        import flint.engine.aot.clock : currentTimeTicks;
 
-        enum long unixEpochInHnsecs = 621_355_968_000_000_000;
-        const hnsecs = Clock.currStdTime - unixEpochInHnsecs;
+        const hnsecs = currentTimeTicks(); // 100 ns ticks, std.datetime's resolution
         return Instant(floorDiv(hnsecs, 10_000_000), cast(int)(floorMod(hnsecs, 10_000_000) * 100));
     }
 
@@ -1900,7 +1905,7 @@ struct Duration
     /// The ISO-8601 seconds-based representation, such as `PT8H6M12.345S`, as `Duration.toString` specifies.
     string toString() const pure nothrow
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         if (isZero())
             return "PT0S";
@@ -1911,15 +1916,15 @@ struct Duration
         const secs = total % 60;
         string text = "PT";
         if (hours != 0)
-            text ~= hours.to!string ~ "H";
+            text ~= decimal(hours) ~ "H";
         if (minutes != 0)
-            text ~= minutes.to!string ~ "M";
+            text ~= decimal(minutes) ~ "M";
         if (secs == 0 && nanos_ == 0 && text.length > 2)
             return text;
         if (seconds_ < 0 && nanos_ > 0)
-            text ~= secs == 0 ? "-0" : secs.to!string;
+            text ~= secs == 0 ? "-0" : decimal(secs);
         else
-            text ~= secs.to!string;
+            text ~= decimal(secs);
         if (nanos_ > 0)
         {
             auto fraction = pad(seconds_ < 0 ? nanosPerSecond - nanos_ : nanos_, 9);
