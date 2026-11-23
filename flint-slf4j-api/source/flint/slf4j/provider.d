@@ -274,6 +274,14 @@ struct FlintLogAppender
 {
     private static shared ProcessSlot!EngineLogger engine;
 
+    /// Drain and close the `flint.log` logger, if one was opened. Runs at process exit, before druntime stops
+    /// threads, so the logger's consumer thread is never left running; later events are dropped.
+    static void shutdown()
+    {
+        if (auto target = engine.get())
+            target.close();
+    }
+
     /// Write `event` through the process's `flint.log` logger: the formatted message, the logger name, the
     /// event's key-value pairs (MDC entries arrive as `mdc.<key>`) and the throwable as Java prints it.
     static void append(LoggingEvent event)
@@ -320,6 +328,18 @@ private final class EngineLogger
             logger = created.value;
     }
 
+    void close()
+    {
+        synchronized (this)
+        {
+            if (!open)
+                return;
+            open = false;
+            logger.flush();
+            logger.close();
+        }
+    }
+
     void write(Level level, string message, scope const(Field)[] fields)
     {
         if (!open)
@@ -329,6 +349,12 @@ private final class EngineLogger
         ];
         logger.write(map[cast(int) level / 10], message, fields);
     }
+}
+
+// The flint.log consumer thread must stop before druntime terminates (it faults if it is still parked).
+shared static ~this()
+{
+    FlintLogAppender.shutdown();
 }
 
 // A fiber's MDC: copy-on-write, so events keep a stable snapshot.
