@@ -1,5 +1,5 @@
 module flint_demo.sys.exports;
-import core.lifetime : move;
+import core.lifetime : moveEmplace;
 import flint.arena : Status;
 import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
 import flint.engine.ui_signals : SignalGraph, SignalSlot, ObserverSlot, SignalId;
@@ -17,6 +17,7 @@ version (WebAssembly)
     private __gshared bool initialized;
 
     // SAFETY: Single-thread WASM instance; all borrowed storage is static and outlives graph and commands.
+    // `initialized` guards the one-time moveEmplace into the still-.init globals (both types disable opAssign).
     extern (C) export uint flint_init(uint sessionEpoch) nothrow @nogc @trusted
     {
         if (initialized)
@@ -24,11 +25,11 @@ version (WebAssembly)
         auto b = CommandBuffer.fromStorage(output[], sessionEpoch);
         if (!b.ok())
             return cast(uint) b.error.code;
-        commands = move(b.value);
+        moveEmplace(b.value, commands);
         auto g = SignalGraph.fromStorage(signals[], observers[], dirty[]);
         if (!g.ok())
             return cast(uint) g.error.code;
-        graph = move(g.value);
+        moveEmplace(g.value, graph);
         auto s = graph.create(0);
         if (!s.ok())
             return cast(uint) s.error.code;
