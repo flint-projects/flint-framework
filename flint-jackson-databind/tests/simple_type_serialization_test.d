@@ -575,23 +575,18 @@ unittest
     assert(json == `{"z":10}`, json);
 }
 
-// LIKELY BUG: an explicitly renamed property does not replace the implicit one of that name: Jackson writes
-// {"x":1,"y":2}; flint.jackson writes the inherited field too, as a duplicate key: {"x":1,"x":0,"y":2}.
-version (FlintJacksonRenamedPropertyConflicts)
-{
-    /**
+/**
  * Testing [JACKSON-226]: it is ok to have "field override",
  * as long as there are no intra-class conflicts.
  */
-    @("SimpleTypeSerializationTest.testOkDupFields")
-    unittest
-    {
-        auto bean = new OkDupFieldBean(1, 2);
-        auto json = writeAndMap(mapper(), bean);
-        assert(json.size() == 2);
-        assert(intOf(json.get("x")) == 1);
-        assert(intOf(json.get("y")) == 2);
-    }
+@("SimpleTypeSerializationTest.testOkDupFields")
+unittest
+{
+    auto bean = new OkDupFieldBean(1, 2);
+    auto json = writeAndMap(mapper(), bean);
+    assert(json.size() == 2);
+    assert(intOf(json.get("x")) == 1);
+    assert(intOf(json.get("y")) == 2);
 }
 
 // flint.jackson has no @JsonSerialize/@JsonDeserialize.
@@ -640,16 +635,11 @@ version (FlintJacksonCustomSerializers)
     }
 }
 
-// LIKELY BUG: an explicitly renamed property does not replace the implicit one of that name: Jackson writes
-// {"z":4}; flint.jackson writes both, as a duplicate key: {"z":3,"z":4}.
-version (FlintJacksonRenamedPropertyConflicts)
+@("SimpleTypeSerializationTest.testResolvedDuplicate")
+unittest
 {
-    @("SimpleTypeSerializationTest.testResolvedDuplicate")
-    unittest
-    {
-        const json = mapper().writeValueAsString(new DupFieldBean2());
-        assert(json == a2q("{'z':4}"), json);
-    }
+    const json = mapper().writeValueAsString(new DupFieldBean2());
+    assert(json == a2q("{'z':4}"), json);
 }
 
 // Test methods, auto-detect configuration

@@ -186,6 +186,7 @@ struct POJOPropertiesCollector
         addCreator(bean);
         removeIgnored(bean);
         rename(bean);
+        mergeSameNames(bean);
         sort(bean);
         BeanPropertyDefinition[] regular;
         foreach (p; bean.properties)
@@ -415,6 +416,36 @@ struct POJOPropertiesCollector
         foreach (p; bean.properties)
             if (!p.explicitName)
                 p.name = translator(p.name);
+    }
+
+    // _renameProperties and POJOPropertyBuilder.trimByVisibility: accessors that end up with one external name
+    // form one property, and an explicitly named accessor hides the implicitly named ones; two explicitly named
+    // fields are ambiguous (getField's "Multiple fields representing property").
+    private static void mergeSameNames(BeanDescription bean)
+    {
+        BeanPropertyDefinition[] kept;
+        foreach (p; bean.properties)
+        {
+            size_t same = kept.length;
+            foreach (i, q; kept)
+                if (q.name == p.name)
+                    same = i;
+            if (same == kept.length)
+                kept ~= p;
+            else if (p.explicitName && kept[same].explicitName)
+                throw new InvalidDefinitionException("Multiple fields representing property \"" ~ p.name ~ "\": "
+                        ~ bean.descriptor.name ~ "#" ~ kept[same].internalName ~ " vs "
+                        ~ bean.descriptor.name ~ "#" ~ p.internalName, bean.descriptor.name);
+            else if (p.explicitName)
+            {
+                if (p.creatorIndex < 0)
+                    p.creatorIndex = kept[same].creatorIndex;
+                kept[same] = p;
+            }
+            else if (kept[same].creatorIndex < 0)
+                kept[same].creatorIndex = p.creatorIndex;
+        }
+        bean.properties = kept;
     }
 
     // _sortProperties: @JsonPropertyOrder names, then indexed properties, then creator properties in creator
