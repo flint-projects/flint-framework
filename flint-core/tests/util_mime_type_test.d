@@ -679,3 +679,17 @@ unittest
     assert(MimeTypeUtils.parseMimeType(text).toString() == text);
     assert(MimeTypeUtils.parseMimeType("TEXT/Plain").toString() == "text/plain");
 }
+
+unittest
+{
+    // Flint: toString is free where Spring's cached toStringValue would be: a compile-time constant keeps its
+    // text, and a canonical parse returns its own input.
+    static immutable constant = MimeType.literal("application", "json");
+    assert(constant.toString() == "application/json");
+    const input = "application/json";
+    assert(MimeTypeUtils.parseMimeType(input).toString() is input);
+    assert(MimeTypeUtils.parseMimeType("Application/JSON").toString() == "application/json");
+    assert(MimeTypeUtils.parseMimeType(" application/json").toString() == "application/json");
+    const withCharset = MimeType(MimeTypeUtils.parseMimeType(input), StandardCharsets.UTF_8);
+    assert(withCharset.toString() == "application/json;charset=UTF-8");
+}

@@ -5283,6 +5283,9 @@ struct MimeType
     private string mimeSubtype;
     private const(MimeTypeParameter)[] parameterList;
     private Charset resolvedCharset;
+    /// Spring's cached `toStringValue`, set only where it costs nothing: at compile time for constants, and as a
+    /// slice of the input when a parse is already canonical (`application/json`). Null otherwise.
+    private string text;
 
     /// `type/*`.
     this(string type) pure
@@ -5624,6 +5627,8 @@ struct MimeType
     /// `type/subtype;key=value...`, parameters in insertion order.
     string toString() const pure nothrow
     {
+        if (text !is null)
+            return text;
         return rendered(mimeType, mimeSubtype, parameterList); // one allocation, unique, so immutable
     }
 
@@ -5753,6 +5758,8 @@ struct MimeType
         MimeType result;
         result.mimeType = type;
         result.mimeSubtype = subtype;
+        if (__ctfe)
+            result.text = type ~ "/" ~ subtype;
         return result;
     }
 
@@ -6188,6 +6195,14 @@ private struct MimeTypeParser
         parameters ~= MimeTypeParameter(paramName, value);
     }
 
+    /// Whether the input is exactly `type/subtype`, so it can be the parsed type's text.
+    private bool isCanonical(string parsedType, string parsedSubtype) const pure nothrow @nogc
+    {
+        const t = parsedType.length;
+        return input.length == t + 1 + parsedSubtype.length && input[0 .. t] == parsedType
+            && input[t] == '/' && input[t + 1 .. $] == parsedSubtype;
+    }
+
     private InvalidMimeTypeException missingParameterValue() pure
     {
         return new InvalidMimeTypeException(input, "missing value for parameter '" ~ paramName ~ "'");
@@ -6198,7 +6213,11 @@ private struct MimeTypeParser
         if (type == MimeType.WILDCARD_TYPE && subtype != MimeType.WILDCARD_TYPE)
             throw new InvalidMimeTypeException(input, "wildcard type is legal only in '*/*' (all mime types)");
         try
+        {
             parsed = MimeType(type, subtype, parameters);
+            if (parameters.length == 0 && isCanonical(parsed.mimeType, parsed.mimeSubtype))
+                parsed.text = input;
+        }
         catch (UnsupportedCharsetException ex)
             throw new InvalidMimeTypeException(input, "unsupported charset '" ~ ex.getCharsetName() ~ "'");
         catch (IllegalArgumentException ex)

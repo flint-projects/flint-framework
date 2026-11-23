@@ -895,37 +895,168 @@ private DescriptorTable tableOf(T)()
     return table;
 }
 
-/// Read the property path `field` (`a.b.c`) of `target` through `descriptors`; `Any.init` when unknown.
+/// Read the property path `field` of `target` through `descriptors`, as Spring's `BeanWrapper` does: nested
+/// (`a.b.c`) and indexed (`roles[0].name`, `map[key]`, `matrix[0][1]`) segments; `Any.init` when unknown.
 private Any readProperty(Any target, string field, DescriptorTable descriptors)
 {
+    if (field.length == 0)
+        return Any.init;
     Any current = target;
     size_t start;
-    foreach (i; 0 .. field.length + 1)
+    while (start <= field.length)
     {
-        if (i < field.length && field[i] != '.')
-            continue;
-        if (current.isNull || descriptors is null)
+        const end = segmentEnd(field, start);
+        auto segment = field[start .. end];
+        size_t bracket = segment.length;
+        foreach (i, c; segment)
+            if (c == '[')
+            {
+                bracket = i;
+                break;
+            }
+        if (bracket > 0)
+            current = readNamed(current, segment[0 .. bracket], descriptors);
+        auto keys = segment[bracket .. $];
+        while (keys.length && !current.isNull)
+        {
+            size_t close;
+            while (close < keys.length && keys[close] != ']')
+                close++;
+            if (close == keys.length)
+                return Any.init;
+            current = readIndexed(current, unquoteKey(keys[1 .. close]), descriptors);
+            keys = keys[close + 1 .. $];
+        }
+        if (current.isNull)
             return Any.init;
-        auto descriptor = descriptors.find(current.typeName);
-        auto property = descriptor is null ? null : descriptor.property(field[start .. i]);
-        if (property is null || property.get is null)
-            return Any.init;
-        current = property.get(current);
-        start = i + 1;
+        start = end + 1;
     }
     return current;
 }
 
-/// The declared type name of the property path `field` of `target`, or null.
+/// The end of the path segment starting at `start`: the next `.` outside brackets, or the end.
+private size_t segmentEnd(string field, size_t start) pure nothrow @nogc
+{
+    bool inKey;
+    foreach (i; start .. field.length)
+    {
+        if (field[i] == '[')
+            inKey = true;
+        else if (field[i] == ']')
+            inKey = false;
+        else if (field[i] == '.' && !inKey)
+            return i;
+    }
+    return field.length;
+}
+
+/// A bracketed key without the quotes Spring allows (`map['key']`, `map["key"]`).
+private string unquoteKey(string key) pure nothrow @nogc
+{
+    if (key.length >= 2 && (key[0] == '\'' || key[0] == '"') && key[$ - 1] == key[0])
+        return key[1 .. $ - 1];
+    return key;
+}
+
+/// The property `name` of `owner`, read through its descriptor; `Any.init` when unknown.
+private Any readNamed(Any owner, string name, DescriptorTable descriptors)
+{
+    if (owner.isNull || descriptors is null)
+        return Any.init;
+    auto descriptor = descriptors.find(owner.typeName);
+    auto property = descriptor is null ? null : descriptor.property(name);
+    if (property is null || property.get is null)
+        return Any.init;
+    return property.get(owner);
+}
+
+/// Element `key` of `container`: a list or set position (iteration order, as Spring's `BeanWrapper` reads a set),
+/// a map key, or an array index through the array's descriptor; `Any.init` when absent.
+private Any readIndexed(Any container, string key, DescriptorTable descriptors)
+{
+    if (auto object = container.asObject())
+        return readJavaElement(object, key);
+    auto descriptor = descriptors is null ? null : descriptors.find(container.typeName);
+    return descriptor is null ? Any.init : readDescriptorElement(descriptor, container, key);
+}
+
+/// Element `key` of a `flint.java.util` collection (by position) or map (by key text).
+private Any readJavaElement(Object object, string key)
+{
+    import flint.java.util : RawCollection, RawMap;
+
+    if (auto collection = cast(RawCollection) object)
+    {
+        auto elements = collection.toAnyArray();
+        const index = parseIndex(key);
+        return index < elements.length ? elements[index] : Any.init;
+    }
+    if (auto map = cast(RawMap) object)
+        foreach (candidate; map.keysAsAny())
+            if (keyText(candidate) == key)
+                return map.getAny(candidate);
+    return Any.init;
+}
+
+/// Element `key` of a D array (by index) or associative array (by key text), through its descriptor's builders.
+private Any readDescriptorElement(const Descriptor descriptor, Any container, string key)
+{
+    if (descriptor.length !is null && descriptor.element !is null)
+    {
+        const index = parseIndex(key);
+        return index < descriptor.length(container) ? descriptor.element(container, index) : Any.init;
+    }
+    if (descriptor.toKeys !is null && descriptor.toValues !is null)
+        foreach (i, candidate; descriptor.toKeys(container))
+            if (keyText(candidate) == key)
+                return descriptor.toValues(container)[i];
+    return Any.init;
+}
+
+/// A non-negative decimal index, or `size_t.max` when `key` is not one.
+private size_t parseIndex(string key) pure nothrow @nogc
+{
+    if (key.length == 0 || key.length > 18)
+        return size_t.max;
+    size_t index;
+    foreach (c; key)
+    {
+        if (c < '0' || c > '9')
+            return size_t.max;
+        index = index * 10 + (c - '0');
+    }
+    return index;
+}
+
+/// A map key as it appears in a property path.
+private string keyText(Any key)
+{
+    return key.typeName == "string" ? key.get!string : key.toString();
+}
+
+/// The declared type name of the property path `field` of `target`, or null. An indexed last segment
+/// (`roles[0]`) gives the element's type.
 private string propertyType(Any target, string field, DescriptorTable descriptors)
 {
+    if (field.length && field[$ - 1] == ']')
+    {
+        auto element = readProperty(target, field, descriptors);
+        return element.isNull ? null : element.typeName;
+    }
     size_t dot = field.length;
+    size_t depth;
     foreach_reverse (i, c; field)
-        if (c == '.')
+    {
+        if (c == ']')
+            depth++;
+        else if (c == '[' && depth)
+            depth--;
+        else if (c == '.' && depth == 0)
         {
             dot = i;
             break;
         }
+    }
     auto owner = dot == field.length ? target : readProperty(target, field[0 .. dot], descriptors);
     if (owner.isNull || descriptors is null)
         return null;

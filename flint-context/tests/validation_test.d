@@ -699,3 +699,94 @@ unittest
     bean.destroy();
     assert(factory.closed);
 }
+
+/// petclinic-rest's `User` and `Role`: a set of roles, read by indexed paths such as `roles[0].name`.
+private final class PathRole
+{
+    private string name_;
+
+    this(string name)
+    {
+        name_ = name;
+    }
+
+    string getName()
+    {
+        return name_;
+    }
+}
+
+private final class PathUser
+{
+    import flint.java.util : ArrayList, HashMap, LinkedHashSet, List, Map, Set;
+
+    private Set!PathRole roles_;
+    private List!PathRole history_;
+    private Map!(string, PathRole) byKey_;
+    private PathRole[] array_;
+    private PathRole primary_;
+
+    this()
+    {
+        roles_ = new LinkedHashSet!PathRole;
+        roles_.add(new PathRole("OWNER_ADMIN"));
+        roles_.add(new PathRole("ROLE_VET"));
+        history_ = new ArrayList!PathRole;
+        history_.add(new PathRole("ROLE_OLD"));
+        byKey_ = new HashMap!(string, PathRole);
+        byKey_.put("main", new PathRole("ROLE_MAIN"));
+        array_ = [new PathRole("ROLE_ARRAY")];
+        primary_ = new PathRole("ROLE_PRIMARY");
+    }
+
+    Set!PathRole getRoles()
+    {
+        return roles_;
+    }
+
+    List!PathRole getHistory()
+    {
+        return history_;
+    }
+
+    Map!(string, PathRole) getByKey()
+    {
+        return byKey_;
+    }
+
+    PathRole[] getArray()
+    {
+        return array_;
+    }
+
+    PathRole getPrimary()
+    {
+        return primary_;
+    }
+}
+
+unittest
+{
+    // Indexed and nested property paths, as Spring's BeanWrapper reads them (petclinic-rest's
+    // "create user: role without the ROLE_ prefix" rejects roles[0].name).
+    auto table = new DescriptorTable;
+    table.add(descriptorOf!PathUser);
+    table.add(descriptorOf!PathRole);
+    table.add(descriptorOf!(PathRole[]));
+    auto result = new BeanPropertyBindingResult(Any.of(new PathUser), "user", table);
+    assert(result.getFieldValue("roles[0].name").get!string == "OWNER_ADMIN");
+    assert(result.getFieldValue("roles[1].name").get!string == "ROLE_VET");
+    assert(result.getFieldValue("history[0].name").get!string == "ROLE_OLD");
+    assert(result.getFieldValue("byKey[main].name").get!string == "ROLE_MAIN");
+    assert(result.getFieldValue("byKey['main'].name").get!string == "ROLE_MAIN");
+    assert(result.getFieldValue("array[0].name").get!string == "ROLE_ARRAY");
+    assert(result.getFieldValue("primary.name").get!string == "ROLE_PRIMARY");
+    // Out of range, unknown keys and malformed paths are null, as before.
+    assert(result.getFieldValue("roles[2].name").isNull && result.getFieldValue("roles[x].name").isNull);
+    assert(result.getFieldValue("byKey[other].name").isNull && result.getFieldValue("roles[0.name").isNull);
+    // The rejected value of an indexed field error is the element's value.
+    result.rejectValue("roles[0].name", "Pattern");
+    assert(result.getFieldError("roles[0].name").getRejectedValue().get!string == "OWNER_ADMIN");
+    assert(result.getFieldType("roles[0].name") == "string");
+    assert(result.getFieldType("roles[0]") == typeNameOf!PathRole);
+}
