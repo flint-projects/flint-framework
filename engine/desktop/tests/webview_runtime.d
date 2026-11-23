@@ -203,7 +203,8 @@ version (FlintSystemWebView)
         }
     }
 
-    @DesktopCommands private struct Probe
+    @DesktopCommands
+    private struct Probe
     {
         long adds;
         long clicks;

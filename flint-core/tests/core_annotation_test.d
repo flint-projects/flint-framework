@@ -12,12 +12,16 @@ private struct Component
     string value;
 }
 
-@Component private struct Service
+@Component
+private struct Service
 {
-    @AliasFor(null, classOf!Component) string value;
+    @AliasFor(null, classOf!Component)
+    string value;
 }
 
-@Service("ownerService") @Order(5) private final class OwnerService
+@Service("ownerService")
+@Order(5)
+private final class OwnerService
 {
 }
 

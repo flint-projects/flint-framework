@@ -28,12 +28,14 @@ import std.typecons : Nullable;
 
 private final class A
 {
-    @NotNull string b;
+    @NotNull
+    string b;
 }
 
 private final class Foo
 {
-    @Valid Collection!Bar bar;
+    @Valid
+    Collection!Bar bar;
 
     this()
     {
@@ -44,12 +46,14 @@ private final class Foo
 
 private final class Bar
 {
-    @NotNull string alwaysNull;
+    @NotNull
+    string alwaysNull;
 }
 
 private final class NotFollowingJavaBeanNotation
 {
-    @NotNull string m_foo;
+    @NotNull
+    string m_foo;
 
     string getFoo()
     {
@@ -76,9 +80,11 @@ private final class ClassLevelConstraintValidator : ConstraintValidator!(ClassLe
     }
 }
 
-@ClassLevelConstraint private final class WithClassLevelConstraint
+@ClassLevelConstraint
+private final class WithClassLevelConstraint
 {
-    @Min(1) Nullable!int someProperty;
+    @Min(1)
+    Nullable!int someProperty;
 }
 
 private Validator getValidator()
@@ -103,9 +109,12 @@ version (FlintValidationGroups)
 {
     private final class GroupA
     {
-        @NotNull string b;
-        @Valid C c;
-        @Valid D d;
+        @NotNull
+        string b;
+        @Valid
+        C c;
+        @Valid
+        D d;
     }
 
     private interface TestGroup
@@ -116,7 +125,9 @@ version (FlintValidationGroups)
     private final class C
     {
         @Pattern(regexp : "[0-9]+", groups:
-                [classOf!TestGroup]) @Length(min : 2) string id;
+                [classOf!TestGroup])
+        @Length(min : 2)
+        string id;
 
         this(string id)
         {
@@ -128,7 +139,8 @@ version (FlintValidationGroups)
     private class E
     {
         @Pattern(regexp : "[0-9]+", groups:
-                [classOf!TestGroup]) string e;
+                [classOf!TestGroup])
+        string e;
 
         this(string e)
         {
@@ -197,7 +209,8 @@ version (FlintBeanMetadata)
     {
         private bool b;
 
-        @AssertTrue bool hasB()
+        @AssertTrue
+        bool hasB()
         {
             return b;
         }
@@ -216,8 +229,10 @@ version (FlintInterfaceConstraints)
 {
     private interface F
     {
-        @CountValidationCalls string getFoo();
-        @CountValidationCalls string getBar();
+        @CountValidationCalls
+        string getFoo();
+        @CountValidationCalls
+        string getBar();
     }
 
     private class G : F
@@ -239,7 +254,8 @@ version (FlintInterfaceConstraints)
 
     private interface MyConstraints
     {
-        @NotNull string getProperty();
+        @NotNull
+        string getProperty();
     }
 
     /// HV-466
@@ -342,7 +358,8 @@ version (FlintNestedPropertyPaths)
 
     private final class X
     {
-        @Valid List!Z list;
+        @Valid
+        List!Z list;
 
         this()
         {
@@ -357,12 +374,14 @@ version (FlintNestedPropertyPaths)
 
     private final class Z
     {
-        @NotNull string foo;
+        @NotNull
+        string foo;
     }
 
     private final class I
     {
-        @Valid HashMap!(string, J) map;
+        @Valid
+        HashMap!(string, J) map;
 
         this()
         {
@@ -377,18 +396,22 @@ version (FlintNestedPropertyPaths)
 
     private final class J
     {
-        @NotNull string foo;
+        @NotNull
+        string foo;
     }
 
     private final class K
     {
-        @Valid L!string foo;
+        @Valid
+        L!string foo;
     }
 
     private final class L(T)
     {
-        @NotNull string bar;
-        @NotNull T genericProperty;
+        @NotNull
+        string bar;
+        @NotNull
+        T genericProperty;
     }
 
     private Validator nestedValidator()
@@ -448,12 +471,14 @@ version (FlintNestedPropertyPaths)
 private final class M
 {
     N foo;
-    @NotNull string bar;
+    @NotNull
+    string bar;
 }
 
 private final class N
 {
-    @NotNull string baz;
+    @NotNull
+    string baz;
 }
 
 /// HV-1002

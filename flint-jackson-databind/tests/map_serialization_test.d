@@ -24,7 +24,8 @@ import std.typecons : Nullable;
 // [databind#335]
 private final class MapOrderingBean
 {
-    @JsonPropertyOrder(alphabetic : true) LinkedHashMap!(string, Nullable!int) map;
+    @JsonPropertyOrder(alphabetic : true)
+    LinkedHashMap!(string, Nullable!int) map;
 
     this(string[] keys...)
     {
@@ -40,12 +41,14 @@ private final class Wat
 {
     private const string wat;
 
-    @JsonCreator this(string wat)
+    @JsonCreator
+    this(string wat)
     {
         this.wat = wat;
     }
 
-    @JsonValue string getWat() const
+    @JsonValue
+    string getWat() const
     {
         return wat;
     }
@@ -63,9 +66,11 @@ private final class WatMap : HashMap!(Wat, bool)
 // [databind#2871]
 private final class Inner2871
 {
-    @JsonKey string key;
+    @JsonKey
+    string key;
 
-    @JsonValue string value;
+    @JsonValue
+    string value;
 
     this(string key, string value)
     {
@@ -81,7 +86,9 @@ private final class Inner2871
 
 private final class Outer2871
 {
-    @JsonKey @JsonValue Inner2871 inner;
+    @JsonKey
+    @JsonValue
+    Inner2871 inner;
 
     this(Inner2871 inner)
     {
@@ -91,7 +98,8 @@ private final class Outer2871
 
 private final class NoKeyOuter
 {
-    @JsonValue Inner2871 inner;
+    @JsonValue
+    Inner2871 inner;
 
     this(Inner2871 inner)
     {
@@ -109,7 +117,9 @@ private final class OuterWithGetter6240
         this.inner = inner;
     }
 
-    @JsonKey @JsonValue Inner2871 getInner()
+    @JsonKey
+    @JsonValue
+    Inner2871 getInner()
     {
         return inner;
     }
@@ -120,7 +130,9 @@ private final class KeyOnlyGetter6240
 {
     string name = "value";
 
-    @JsonKey @JsonValue(false) string getId()
+    @JsonKey
+    @JsonValue(false)
+    string getId()
     {
         return "a";
     }
@@ -129,7 +141,9 @@ private final class KeyOnlyGetter6240
 // [databind#6240]
 private final class ValueOnlyGetter6240
 {
-    @JsonKey(false) @JsonValue string getId()
+    @JsonKey(false)
+    @JsonValue
+    string getId()
     {
         return "a";
     }
@@ -333,7 +347,8 @@ version (FlintJacksonGenericTypes)
     import flint.jackson.annotation : JsonTypeInfo, JsonTypeName;
 
     // for [databind#691]
-    @JsonTypeInfo(use : JsonTypeInfo.Id.NAME) @JsonTypeName("mymap")
+    @JsonTypeInfo(use : JsonTypeInfo.Id.NAME)
+    @JsonTypeName("mymap")
     private final class MapWithTypedValues : LinkedHashMap!(string, string)
     {
     }
@@ -430,7 +445,8 @@ version (FlintJacksonJsonValueMapKeys)
             value = v.toUpper();
         }
 
-        @JsonValue string asString()
+        @JsonValue
+        string asString()
         {
             return value;
         }
@@ -444,7 +460,8 @@ version (FlintJacksonJsonValueMapKeys)
     }
 
     // Java's @JsonValue method of AbcLC (D enums have no methods).
-    @JsonValue private string toLC(AbcLC value)
+    @JsonValue
+    private string toLC(AbcLC value)
     {
         import std.conv : to;
         import std.uni : toLower;
@@ -466,7 +483,8 @@ version (FlintJacksonJsonValueMapKeys)
     // [databind#2306]
     private final class JsonValue2306Key
     {
-        @JsonValue private string id;
+        @JsonValue
+        private string id;
 
         this(string id)
         {
@@ -599,7 +617,8 @@ version (FlintJacksonCustomSerializers)
 
     private final class KarlBean
     {
-        @JsonSerialize(keyUsing : classOf!KarlSerializer) Map!(string, Nullable!int) map;
+        @JsonSerialize(keyUsing : classOf!KarlSerializer)
+        Map!(string, Nullable!int) map;
 
         this()
         {
@@ -646,7 +665,8 @@ version (FlintJacksonCustomSerializers)
             this.value = value;
         }
 
-        @JsonValue T getValue()
+        @JsonValue
+        T getValue()
         {
             return value;
         }

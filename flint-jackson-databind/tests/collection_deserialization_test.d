@@ -62,7 +62,8 @@ private final class KeyListBean
 // [databind#3068]: Exception wrapping (or not)
 private final class MyContainerModel
 {
-    @JsonProperty("processor-id") string id = "123";
+    @JsonProperty("processor-id")
+    string id = "123";
 }
 
 private DescriptorTable table()

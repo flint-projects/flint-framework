@@ -18,8 +18,10 @@ import flint.jakarta.validation.constraints : Max, Min;
 
 private final class Boundary
 {
-    @Min(9_223_372_036_854_775_807L) long min;
-    @Max(9_223_372_036_854_775_806L) long max;
+    @Min(9_223_372_036_854_775_807L)
+    long min;
+    @Max(9_223_372_036_854_775_806L)
+    long max;
 }
 
 @("MinMaxValidatorBoundaryTest.testMinBoundaryValue")

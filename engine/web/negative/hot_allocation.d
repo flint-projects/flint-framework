@@ -9,7 +9,8 @@ import flint.engine.web : Get, RestController, Server, registerController;
 @RestController("")
 private struct Hot
 {
-    @Get("/") Result!size_t allocate()
+    @Get("/")
+    Result!size_t allocate()
     {
         auto bytes = new ubyte[16];
         return Result!size_t(bytes.length);

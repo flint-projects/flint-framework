@@ -18,7 +18,9 @@ private alias status = MockMvcResultMatchers.status;
 private alias header = MockMvcResultMatchers.header;
 
 /// A slice of spring-petclinic-rest's controllers: class-level `@CrossOrigin` and `@RequestMapping("api")`.
-@RestController @CrossOrigin(exposedHeaders : ["errors, content-type"]) @RequestMapping("api")
+@RestController
+@CrossOrigin(exposedHeaders : ["errors, content-type"])
+@RequestMapping("api")
 class PetclinicLikeController
 {
     ///
@@ -91,7 +93,8 @@ unittest
 {
     @RestController static class Plain
     {
-        @GetMapping("/plain") string plain() @safe
+        @GetMapping("/plain")
+        string plain() @safe
         {
             return "ok";
         }

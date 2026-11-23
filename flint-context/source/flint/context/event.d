@@ -48,9 +48,11 @@ Marks a method as a listener for application events. The event type is the metho
 struct EventListener
 {
     /// Alias for `classes`.
-    @AliasFor("classes") ClassRef[] value;
+    @AliasFor("classes")
+    ClassRef[] value;
     /// The event classes this listener handles.
-    @AliasFor("value") ClassRef[] classes;
+    @AliasFor("value")
+    ClassRef[] classes;
     /// A SpEL condition; empty for unconditional handling.
     string condition;
     /// Whether the listener is invoked by default.

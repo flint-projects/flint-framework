@@ -25,10 +25,12 @@ private string digits(long value) pure nothrow
 }
 
 /// The probe's controller.
-@RestController class PingController
+@RestController
+class PingController
 {
     /// `GET /ping`.
-    @GetMapping("/ping") string ping()
+    @GetMapping("/ping")
+    string ping()
     {
         return "pong";
     }

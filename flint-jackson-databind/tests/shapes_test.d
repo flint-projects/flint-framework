@@ -63,7 +63,8 @@ private final class Snaked
 {
     string firstName = "Ann";
     int zipCode = 53_703;
-    @JsonProperty("Explicit") string renamed = "kept";
+    @JsonProperty("Explicit")
+    string renamed = "kept";
 
     override string toString() const
     {
@@ -107,26 +108,33 @@ private final class StatusClass
 
 private struct Inner
 {
-    @JsonUnwrapped(prefix : "in_") Status status;
+    @JsonUnwrapped(prefix : "in_")
+    Status status;
     int level = 3;
 }
 
 /// Boot's HealthDescriptor shape: unwrapped values, a prefixed and suffixed one, a nested one and a null one.
 private final class Unwrapping
 {
-    @JsonUnwrapped Status status;
+    @JsonUnwrapped
+    Status status;
     int count = 2;
     @JsonUnwrapped(prefix : "x_", suffix:
-            "_y") Status other;
-    @JsonUnwrapped(prefix : "deep_") Inner inner;
-    @JsonUnwrapped StatusClass none;
+            "_y")
+    Status other;
+    @JsonUnwrapped(prefix : "deep_")
+    Inner inner;
+    @JsonUnwrapped
+    StatusClass none;
 }
 
 /// An ignored property and another renamed to the ignored one's name (Boot's getStatus/getStatusCode).
 private final class Renamed
 {
-    @JsonIgnore string status = "ignored";
-    @JsonProperty("status") string statusCode = "UP";
+    @JsonIgnore
+    string status = "ignored";
+    @JsonProperty("status")
+    string statusCode = "UP";
     string name = "n";
 }
 

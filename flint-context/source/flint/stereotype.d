@@ -40,29 +40,36 @@ struct Indexed
 }
 
 /// Indicates that a class is a component: a candidate for auto-detection.
-@Indexed struct Component
+@Indexed
+struct Component
 {
     /// The suggested bean name; empty for the default name.
     string value;
 }
 
 /// A component holding business logic: a specialization of `@Component`.
-@Component struct Service
+@Component
+struct Service
 {
     /// Alias for `Component.value`.
-    @AliasFor(null, classOf!Component) string value;
+    @AliasFor(null, classOf!Component)
+    string value;
 }
 
 /// A component encapsulating storage, retrieval and search: a specialization of `@Component`.
-@Component struct Repository
+@Component
+struct Repository
 {
     /// Alias for `Component.value`.
-    @AliasFor(null, classOf!Component) string value;
+    @AliasFor(null, classOf!Component)
+    string value;
 }
 
 /// A web controller: a specialization of `@Component`.
-@Component struct Controller
+@Component
+struct Controller
 {
     /// Alias for `Component.value`.
-    @AliasFor(null, classOf!Component) string value;
+    @AliasFor(null, classOf!Component)
+    string value;
 }

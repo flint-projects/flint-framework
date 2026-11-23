@@ -119,11 +119,14 @@ struct Mapping
 }
 
 /// `@RequestMapping`: maps web requests onto handler methods, on a class or a method.
-@Mapping struct RequestMapping
+@Mapping
+struct RequestMapping
 {
     string name; ///
-    @AliasFor("path") string[] value; ///
-    @AliasFor("value") string[] path; ///
+    @AliasFor("path")
+    string[] value; ///
+    @AliasFor("value")
+    string[] path; ///
     RequestMethod[] method; ///
     string[] params; ///
     string[] headers; ///
@@ -160,14 +163,22 @@ struct Mapping
 
 private mixin template ComposedMapping()
 {
-    @AliasFor(annotation : requestMappingRef) string name; ///
-    @AliasFor(annotation : requestMappingRef) string[] value; ///
-    @AliasFor(annotation : requestMappingRef) string[] path; ///
-    @AliasFor(annotation : requestMappingRef) string[] params; ///
-    @AliasFor(annotation : requestMappingRef) string[] headers; ///
-    @AliasFor(annotation : requestMappingRef) string[] consumes; ///
-    @AliasFor(annotation : requestMappingRef) string[] produces; ///
-    @AliasFor(annotation : requestMappingRef) string version_; ///
+    @AliasFor(annotation : requestMappingRef)
+    string name; ///
+    @AliasFor(annotation : requestMappingRef)
+    string[] value; ///
+    @AliasFor(annotation : requestMappingRef)
+    string[] path; ///
+    @AliasFor(annotation : requestMappingRef)
+    string[] params; ///
+    @AliasFor(annotation : requestMappingRef)
+    string[] headers; ///
+    @AliasFor(annotation : requestMappingRef)
+    string[] consumes; ///
+    @AliasFor(annotation : requestMappingRef)
+    string[] produces; ///
+    @AliasFor(annotation : requestMappingRef)
+    string version_; ///
 
     /// `@XxxMapping("/path")`.
     static typeof(this) opCall(string value) pure nothrow
@@ -196,39 +207,46 @@ private mixin template ComposedMapping()
 }
 
 /// `@GetMapping`: `@RequestMapping(method = GET)`.
-@RequestMapping(method : [RequestMethod.GET]) struct GetMapping
+@RequestMapping(method : [RequestMethod.GET])
+struct GetMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@PostMapping`: `@RequestMapping(method = POST)`.
-@RequestMapping(method : [RequestMethod.POST]) struct PostMapping
+@RequestMapping(method : [RequestMethod.POST])
+struct PostMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@PutMapping`: `@RequestMapping(method = PUT)`.
-@RequestMapping(method : [RequestMethod.PUT]) struct PutMapping
+@RequestMapping(method : [RequestMethod.PUT])
+struct PutMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@DeleteMapping`: `@RequestMapping(method = DELETE)`.
-@RequestMapping(method : [RequestMethod.DELETE]) struct DeleteMapping
+@RequestMapping(method : [RequestMethod.DELETE])
+struct DeleteMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@PatchMapping`: `@RequestMapping(method = PATCH)`.
-@RequestMapping(method : [RequestMethod.PATCH]) struct PatchMapping
+@RequestMapping(method : [RequestMethod.PATCH])
+struct PatchMapping
 {
     mixin ComposedMapping;
 }
 
 private mixin template NamedValue(bool withDefault)
 {
-    @AliasFor("name") string value; ///
-    @AliasFor("value") string name; ///
+    @AliasFor("name")
+    string value; ///
+    @AliasFor("value")
+    string name; ///
     bool required = true; ///
     static if (withDefault)
         string defaultValue = ValueConstants.DEFAULT_NONE; ///
@@ -272,24 +290,30 @@ struct ResponseBody
 /// `@ModelAttribute`.
 struct ModelAttribute
 {
-    @AliasFor("name") string value; ///
-    @AliasFor("value") string name; ///
+    @AliasFor("name")
+    string value; ///
+    @AliasFor("value")
+    string name; ///
     bool binding = true; ///
 }
 
 /// `@ResponseStatus`: the status of a handler's response or of an exception type.
 struct ResponseStatus
 {
-    @AliasFor("code") HttpStatus value = HttpStatus.INTERNAL_SERVER_ERROR; ///
-    @AliasFor("value") HttpStatus code = HttpStatus.INTERNAL_SERVER_ERROR; ///
+    @AliasFor("code")
+    HttpStatus value = HttpStatus.INTERNAL_SERVER_ERROR; ///
+    @AliasFor("value")
+    HttpStatus code = HttpStatus.INTERNAL_SERVER_ERROR; ///
     string reason = ""; ///
 }
 
 /// `@ExceptionHandler`: handles exceptions of the listed types (or the method's exception parameter type).
 struct ExceptionHandler
 {
-    @AliasFor("exception") ClassRef[] value; ///
-    @AliasFor("value") ClassRef[] exception; ///
+    @AliasFor("exception")
+    ClassRef[] value; ///
+    @AliasFor("value")
+    ClassRef[] exception; ///
     string[] produces; ///
 
     /// `@ExceptionHandler(classOf!E)`.
@@ -315,28 +339,40 @@ struct ExceptionHandler
 }
 
 /// `@Controller` with `@ResponseBody`.
-@Controller @ResponseBody struct RestController
+@Controller
+@ResponseBody
+struct RestController
 {
-    @AliasFor(annotation : controllerRef) string value; ///
+    @AliasFor(annotation : controllerRef)
+    string value; ///
 }
 
 private mixin template AdviceAttributes(bool composed)
 {
     static if (composed)
     {
-        @AliasFor(annotation : controllerAdviceRef) string name; ///
-        @AliasFor(annotation : controllerAdviceRef) string[] value; ///
-        @AliasFor(annotation : controllerAdviceRef) string[] basePackages; ///
-        @AliasFor(annotation : controllerAdviceRef) ClassRef[] basePackageClasses; ///
-        @AliasFor(annotation : controllerAdviceRef) ClassRef[] assignableTypes; ///
-        @AliasFor(annotation : controllerAdviceRef) ClassRef[] annotations; ///
+        @AliasFor(annotation : controllerAdviceRef)
+        string name; ///
+        @AliasFor(annotation : controllerAdviceRef)
+        string[] value; ///
+        @AliasFor(annotation : controllerAdviceRef)
+        string[] basePackages; ///
+        @AliasFor(annotation : controllerAdviceRef)
+        ClassRef[] basePackageClasses; ///
+        @AliasFor(annotation : controllerAdviceRef)
+        ClassRef[] assignableTypes; ///
+        @AliasFor(annotation : controllerAdviceRef)
+        ClassRef[] annotations; ///
     }
     else
     {
         @AliasFor(annotation : componentRef, attribute:
-                "value") string name; ///
-        @AliasFor("basePackages") string[] value; ///
-        @AliasFor("value") string[] basePackages; ///
+                "value")
+        string name; ///
+        @AliasFor("basePackages")
+        string[] value; ///
+        @AliasFor("value")
+        string[] basePackages; ///
         ClassRef[] basePackageClasses; ///
         ClassRef[] assignableTypes; ///
         ClassRef[] annotations; ///
@@ -369,13 +405,16 @@ private mixin template AdviceAttributes(bool composed)
 }
 
 /// `@ControllerAdvice`: `@ExceptionHandler` methods shared across controllers.
-@Component struct ControllerAdvice
+@Component
+struct ControllerAdvice
 {
     mixin AdviceAttributes!false;
 }
 
 /// `@ControllerAdvice` with `@ResponseBody`.
-@ControllerAdvice @ResponseBody struct RestControllerAdvice
+@ControllerAdvice
+@ResponseBody
+struct RestControllerAdvice
 {
     mixin AdviceAttributes!true;
 }
@@ -383,8 +422,10 @@ private mixin template AdviceAttributes(bool composed)
 /// `@CrossOrigin`: CORS for a controller class or handler method.
 struct CrossOrigin
 {
-    @AliasFor("origins") string[] value; ///
-    @AliasFor("value") string[] origins; ///
+    @AliasFor("origins")
+    string[] value; ///
+    @AliasFor("value")
+    string[] origins; ///
     string[] originPatterns; ///
     string[] allowedHeaders; ///
     string[] exposedHeaders; ///

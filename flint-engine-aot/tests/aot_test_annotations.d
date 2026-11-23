@@ -16,33 +16,41 @@ struct Component
 }
 
 /// `@Service`, a `@Component`.
-@Component struct Service
+@Component
+struct Service
 {
     /// Aliases `Component.value`.
-    @AliasFor(null, classOf!Component) string value;
+    @AliasFor(null, classOf!Component)
+    string value;
 }
 
 /// A `@Service` two levels above `@Component`.
-@Service struct Special
+@Service
+struct Special
 {
     /// Aliases `Service.value`.
-    @AliasFor("value", classOf!Service) string name;
+    @AliasFor("value", classOf!Service)
+    string name;
 }
 
 /// `@RequestMapping`-shaped: `value` and `path` mirror each other.
 struct Mapping
 {
     /// Mirrors `path`.
-    @AliasFor("path") string value;
+    @AliasFor("path")
+    string value;
     /// Mirrors `value`.
-    @AliasFor("value") string path;
+    @AliasFor("value")
+    string path;
     /// The HTTP method.
     string method = "ANY";
 }
 
 /// `@GetMapping`-shaped.
-@Mapping(null, null, "GET") struct GetMapping
+@Mapping(null, null, "GET")
+struct GetMapping
 {
     /// Aliases `Mapping.value`.
-    @AliasFor(null, classOf!Mapping) string value;
+    @AliasFor(null, classOf!Mapping)
+    string value;
 }

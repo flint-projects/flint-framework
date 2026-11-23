@@ -25,11 +25,13 @@ import flint.java.util : ArrayList, Comparator, List;
 
 @safe:
 
-@Order(1) private class A
+@Order(1)
+private class A
 {
 }
 
-@Order(2) private class B
+@Order(2)
+private class B
 {
 }
 
@@ -37,11 +39,13 @@ private class C : A
 {
 }
 
-@Priority(1) private class A2
+@Priority(1)
+private class A2
 {
 }
 
-@Priority(2) private class B2
+@Priority(2)
+private class B2
 {
 }
 

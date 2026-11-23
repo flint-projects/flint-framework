@@ -39,7 +39,8 @@ private enum EnumWithJsonValue : string
 }
 
 // EnumWithJsonValue's `@JsonValue public String external()`.
-@JsonValue private string external(EnumWithJsonValue e)
+@JsonValue
+private string external(EnumWithJsonValue e)
 {
     return "value:" ~ e;
 }
@@ -103,12 +104,14 @@ private enum EnumWithJsonKey : string
     B = "b",
 }
 
-@JsonKey private string externalKey(EnumWithJsonKey e)
+@JsonKey
+private string externalKey(EnumWithJsonKey e)
 {
     return "key:" ~ e;
 }
 
-@JsonValue private string externalValue(EnumWithJsonKey e)
+@JsonValue
+private string externalValue(EnumWithJsonKey e)
 {
     return "value:" ~ e;
 }
@@ -189,7 +192,8 @@ version (FlintJacksonMixIns)
 {
     private interface ToStringMixin
     {
-        @JsonValue string toString() const;
+        @JsonValue
+        string toString() const;
     }
 
     @("EnumSerializationTest.testEnumsWithJsonValueUsingMixin")

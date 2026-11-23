@@ -79,7 +79,8 @@ private final class Name
     }
 }
 
-@Configuration private class OtherConfiguration
+@Configuration
+private class OtherConfiguration
 {
     ITestBean three()
     {
@@ -87,7 +88,9 @@ private final class Name
     }
 }
 
-@Configuration @Import([classOf!OtherConfiguration]) private class ConfigurationWithImportAnnotation
+@Configuration
+@Import([classOf!OtherConfiguration])
+private class ConfigurationWithImportAnnotation
 {
     ITestBean one()
     {
@@ -95,7 +98,9 @@ private final class Name
     }
 }
 
-@Configuration @Import([classOf!OtherConfiguration]) private class OtherConfigurationWithImportAnnotation
+@Configuration
+@Import([classOf!OtherConfiguration])
+private class OtherConfigurationWithImportAnnotation
 {
     ITestBean two()
     {
@@ -103,7 +108,8 @@ private final class Name
     }
 }
 
-@Configuration private class DataSourceConfig
+@Configuration
+private class DataSourceConfig
 {
     ITestBean dataSourceA()
     {
@@ -111,7 +117,9 @@ private final class Name
     }
 }
 
-@Configuration @Import([classOf!DataSourceConfig]) private class AppConfig
+@Configuration
+@Import([classOf!DataSourceConfig])
+private class AppConfig
 {
     ITestBean transferService()
     {
@@ -124,7 +132,8 @@ private final class Name
     }
 }
 
-@Configuration private class Foo1
+@Configuration
+private class Foo1
 {
     ITestBean foo()
     {
@@ -132,7 +141,8 @@ private final class Name
     }
 }
 
-@Configuration private class Foo2
+@Configuration
+private class Foo2
 {
     ITestBean foo()
     {
@@ -140,11 +150,14 @@ private final class Name
     }
 }
 
-@Configuration @Import([classOf!Foo1, classOf!Foo2]) private class WithMultipleArgumentsThatWillCauseDuplication
+@Configuration
+@Import([classOf!Foo1, classOf!Foo2])
+private class WithMultipleArgumentsThatWillCauseDuplication
 {
 }
 
-@Configuration private class ExternalConfig
+@Configuration
+private class ExternalConfig
 {
     ITestBean extBean()
     {
@@ -152,14 +165,17 @@ private final class Name
     }
 }
 
-@Configuration private class OuterConfig
+@Configuration
+private class OuterConfig
 {
     Name whatev()
     {
         return new Name("whatev");
     }
 
-    @Configuration @Import([classOf!ExternalConfig]) static class InnerConfig
+    @Configuration
+    @Import([classOf!ExternalConfig])
+    static class InnerConfig
     {
         ITestBean innerBean()
         {
@@ -178,7 +194,9 @@ private final class InitBean
     }
 }
 
-@Configuration @DependsOn([typeNameOf!InitBean]) private class ThirdLevel
+@Configuration
+@DependsOn([typeNameOf!InitBean])
+private class ThirdLevel
 {
     this()
     {
@@ -201,7 +219,9 @@ private final class InitBean
     }
 }
 
-@Configuration @Import([classOf!ThirdLevel, classOf!InitBean]) private class SecondLevel
+@Configuration
+@Import([classOf!ThirdLevel, classOf!InitBean])
+private class SecondLevel
 {
     TestBean n()
     {
@@ -209,7 +229,9 @@ private final class InitBean
     }
 }
 
-@Configuration @Import([classOf!SecondLevel]) private class FirstLevel
+@Configuration
+@Import([classOf!SecondLevel])
+private class FirstLevel
 {
     TestBean m()
     {
@@ -217,11 +239,14 @@ private final class InitBean
     }
 }
 
-@Configuration @Import([classOf!ThirdLevel]) private class FirstLevelPlus
+@Configuration
+@Import([classOf!ThirdLevel])
+private class FirstLevelPlus
 {
 }
 
-@Configuration private class LeftConfig
+@Configuration
+private class LeftConfig
 {
     ITestBean left()
     {
@@ -229,7 +254,8 @@ private final class InitBean
     }
 }
 
-@Configuration private class RightConfig
+@Configuration
+private class RightConfig
 {
     ITestBean right()
     {
@@ -237,7 +263,9 @@ private final class InitBean
     }
 }
 
-@Configuration @Import([classOf!LeftConfig, classOf!RightConfig]) private class WithMultipleArgumentsToImportAnnotation
+@Configuration
+@Import([classOf!LeftConfig, classOf!RightConfig])
+private class WithMultipleArgumentsToImportAnnotation
 {
     TestBean m()
     {
@@ -249,15 +277,20 @@ private class NonConfigAnnotated
 {
 }
 
-@Configuration @Import([classOf!NonConfigAnnotated]) private class ConfigAnnotated
+@Configuration
+@Import([classOf!NonConfigAnnotated])
+private class ConfigAnnotated
 {
 }
 
-@Configuration("config-a") private class A
+@Configuration("config-a")
+private class A
 {
 }
 
-@Configuration("config-b") @Import([classOf!A]) private class B
+@Configuration("config-b")
+@Import([classOf!A])
+private class B
 {
 }
 
@@ -588,7 +621,8 @@ unittest
 // instead of being overridden by them, and a scanned class imported by an earlier one is defined twice.
 version (FlintImportedConfigurationPrecedence)
 {
-    @Configuration private class SiblingImportingConfigB
+    @Configuration
+    private class SiblingImportingConfigB
     {
         /// `@Bean(name = "a-imports-b")`
         Name bean()
@@ -597,7 +631,9 @@ version (FlintImportedConfigurationPrecedence)
         }
     }
 
-    @Configuration @Import([classOf!SiblingImportingConfigB]) private class SiblingImportingConfigA
+    @Configuration
+    @Import([classOf!SiblingImportingConfigB])
+    private class SiblingImportingConfigA
     {
         /// `@Bean(name = "a-imports-b")`
         Name bean()
@@ -606,7 +642,8 @@ version (FlintImportedConfigurationPrecedence)
         }
     }
 
-    @Configuration private class SiblingReversedImportingConfigA
+    @Configuration
+    private class SiblingReversedImportingConfigA
     {
         /// `@Bean(name = "b-imports-a")`
         Name bean()
@@ -615,7 +652,9 @@ version (FlintImportedConfigurationPrecedence)
         }
     }
 
-    @Configuration @Import([classOf!SiblingReversedImportingConfigA]) private class SiblingReversedImportingConfigB
+    @Configuration
+    @Import([classOf!SiblingReversedImportingConfigA])
+    private class SiblingReversedImportingConfigB
     {
         /// `@Bean(name = "b-imports-a")`
         Name bean()
@@ -682,7 +721,8 @@ version (FlintImportOnInterface)
         }
     }
 
-    @Configuration private class ImportedConfig
+    @Configuration
+    private class ImportedConfig
     {
         ImportedBean importedBean()
         {
@@ -690,7 +730,8 @@ version (FlintImportOnInterface)
         }
     }
 
-    @Configuration private class OverridingImportedConfig
+    @Configuration
+    private class OverridingImportedConfig
     {
         ImportedBean importedBean()
         {
@@ -698,15 +739,19 @@ version (FlintImportOnInterface)
         }
     }
 
-    @Import([classOf!ImportedConfig]) private interface ConfigImportMarker
+    @Import([classOf!ImportedConfig])
+    private interface ConfigImportMarker
     {
     }
 
-    @Configuration private class InterfaceBasedConfig : ConfigImportMarker
+    @Configuration
+    private class InterfaceBasedConfig : ConfigImportMarker
     {
     }
 
-    @Configuration @Import([classOf!OverridingImportedConfig]) private class OverridingConfig : ConfigImportMarker
+    @Configuration
+    @Import([classOf!OverridingImportedConfig])
+    private class OverridingConfig : ConfigImportMarker
     {
     }
 

@@ -50,12 +50,18 @@ private final class Event
 
 private final class Formatted
 {
-    @JsonFormat(pattern : "dd/MM/yyyy") LocalDate date;
-    @JsonFormat(pattern : "yyyy-MM-dd HH:mm:ss") LocalDateTime when;
-    @JsonFormat(pattern : "HH:mm") LocalTime time;
-    @JsonFormat(pattern : "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") OffsetDateTime offset;
-    @JsonFormat(shape : JsonFormat.Shape.NUMBER) LocalDate epochDay;
-    @JsonFormat(shape : JsonFormat.Shape.STRING) Duration asString;
+    @JsonFormat(pattern : "dd/MM/yyyy")
+    LocalDate date;
+    @JsonFormat(pattern : "yyyy-MM-dd HH:mm:ss")
+    LocalDateTime when;
+    @JsonFormat(pattern : "HH:mm")
+    LocalTime time;
+    @JsonFormat(pattern : "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    OffsetDateTime offset;
+    @JsonFormat(shape : JsonFormat.Shape.NUMBER)
+    LocalDate epochDay;
+    @JsonFormat(shape : JsonFormat.Shape.STRING)
+    Duration asString;
 
     this()
     {

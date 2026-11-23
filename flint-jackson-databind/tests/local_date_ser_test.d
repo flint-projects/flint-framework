@@ -21,7 +21,8 @@ import flint.java.time : LocalDate, Month;
 
 private final class EpochDayWrapper
 {
-    @JsonFormat(shape : JsonFormat.Shape.NUMBER_INT) LocalDate value;
+    @JsonFormat(shape : JsonFormat.Shape.NUMBER_INT)
+    LocalDate value;
 
     this()
     {
@@ -130,7 +131,8 @@ version (FlintJacksonGenericTypes)
     {
         LocalDate localDate;
         @JsonTypeInfo(use : JsonTypeInfo.Id.CLASS, include:
-                JsonTypeInfo.As.WRAPPER_OBJECT) Any object;
+                JsonTypeInfo.As.WRAPPER_OBJECT)
+        Any object;
 
         this(LocalDate localDate, Any object)
         {

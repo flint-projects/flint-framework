@@ -211,10 +211,12 @@ version (FlintHandlerMappingConfiguration)
         }
     }
 
-    @RestController @RequestMapping("/user")
+    @RestController
+    @RequestMapping("/user")
     private class UserController
     {
-        @GetMapping("/{id}") Object getUser()
+        @GetMapping("/{id}")
+        Object getUser()
         {
             return null;
         }
@@ -296,29 +298,35 @@ version (FlintApiVersioning)
         }
     }
 
-    @RestController @RequestMapping("/foo")
+    @RestController
+    @RequestMapping("/foo")
     private class VersionController
     {
-        @GetMapping string foo()
+        @GetMapping
+        string foo()
         {
             return "foo";
         }
 
-        @GetMapping(version_ : "1.1") string foo1_1()
+        @GetMapping(version_ : "1.1")
+        string foo1_1()
         {
             return "foo1_1";
         }
     }
 
-    @RestController @HttpExchange("/foo")
+    @RestController
+    @HttpExchange("/foo")
     private class VersionHttpExchangeController
     {
-        @GetExchange string foo()
+        @GetExchange
+        string foo()
         {
             return "foo";
         }
 
-        @GetExchange(version_ : "1.1") string foo1_1()
+        @GetExchange(version_ : "1.1")
+        string foo1_1()
         {
             return "foo1_1";
         }
@@ -459,11 +467,13 @@ version (FlintConsumesBodyRequired)
         ]));
     }
 
-    @RestController @RequestMapping(path : ["/controller"], consumes:
+    @RestController
+    @RequestMapping(path : ["/controller"], consumes:
             ["application/json"])
     private interface InterfaceController
     {
-        @PostMapping("/postMapping") void post(@RequestBody(false) Foo foo);
+        @PostMapping("/postMapping")
+        void post(@RequestBody(false) Foo foo);
     }
 
     private class InterfaceControllerImpl : InterfaceController
@@ -652,10 +662,12 @@ version (FlintHttpExchange)
         assert(headers == ["h1=hv1", "!h2"]);
     }
 
-    @RestController @HttpExchange("/exchange")
+    @RestController
+    @HttpExchange("/exchange")
     private class HttpExchangeController
     {
-        @HttpExchange void defaultValuesExchange()
+        @HttpExchange
+        void defaultValuesExchange()
         {
         }
 
@@ -675,32 +687,43 @@ version (FlintHttpExchange)
         }
     }
 
-    @HttpExchange("/exchange") @ExtraHttpExchange private class MultipleClassLevelAnnotationsHttpExchangeController
+    @HttpExchange("/exchange")
+    @ExtraHttpExchange
+    private class MultipleClassLevelAnnotationsHttpExchangeController
     {
-        @PostExchange("/post") void post()
+        @PostExchange("/post")
+        void post()
         {
         }
     }
 
     private class MultipleMethodLevelAnnotationsHttpExchangeController
     {
-        @PostExchange("/post") @PutExchange("/post") void post()
+        @PostExchange("/post")
+        @PutExchange("/post")
+        void post()
         {
         }
     }
 
-    @Controller @RequestMapping("/api") @HttpExchange("/api")
+    @Controller
+    @RequestMapping("/api")
+    @HttpExchange("/api")
     private class MixedClassLevelAnnotationsController
     {
-        @PostExchange("/post") void post()
+        @PostExchange("/post")
+        void post()
         {
         }
     }
 
-    @Controller @RequestMapping("/api")
+    @Controller
+    @RequestMapping("/api")
     private class MixedMethodLevelAnnotationsController
     {
-        @PostMapping("/post") @PostExchange("/post") void post()
+        @PostMapping("/post")
+        @PostExchange("/post")
+        void post()
         {
         }
     }
@@ -708,10 +731,12 @@ version (FlintHttpExchange)
     @HttpExchange("/service")
     private interface Service
     {
-        @PostExchange("/postExchange") void post();
+        @PostExchange("/postExchange")
+        void post();
     }
 
-    @Controller @RequestMapping("/controller")
+    @Controller
+    @RequestMapping("/controller")
     private class ClassLevelOverriddenHttpExchangeAnnotationsController : Service
     {
         override void post()
@@ -719,15 +744,18 @@ version (FlintHttpExchange)
         }
     }
 
-    @Controller @RequestMapping("/controller")
+    @Controller
+    @RequestMapping("/controller")
     private class MethodLevelOverriddenHttpExchangeAnnotationsController : Service
     {
-        @PostMapping("/postMapping") override void post()
+        @PostMapping("/postMapping")
+        override void post()
         {
         }
     }
 
-    @HttpExchange private struct ExtraHttpExchange
+    @HttpExchange
+    private struct ExtraHttpExchange
     {
     }
 }
@@ -799,16 +827,20 @@ version (FlintCglibProxy)
                     methodName, declaringClass, proxyClass.getName()));
     }
 
-    @Controller private class PrivateMethodController
+    @Controller
+    private class PrivateMethodController
     {
-        @RequestMapping("/private") private void privateMethod()
+        @RequestMapping("/private")
+        private void privateMethod()
         {
         }
     }
 
-    @Controller private class ProtectedMethodController
+    @Controller
+    private class ProtectedMethodController
     {
-        @RequestMapping("/protected") protected void protectedMethod()
+        @RequestMapping("/protected")
+        protected void protectedMethod()
         {
         }
     }
@@ -819,44 +851,56 @@ version (FlintCglibProxy)
 }
 
 // gh-31962: The presence of multiple @RequestMappings is intentional.
-@Controller @RequestMapping(consumes : [jsonValue]) @ExtraRequestMapping private class ComposedAnnotationController
+@Controller
+@RequestMapping(consumes : [jsonValue])
+@ExtraRequestMapping
+private class ComposedAnnotationController
 {
-    @RequestMapping void handle()
+    @RequestMapping
+    void handle()
     {
     }
 
-    @PostJson("/postJson") void postJson()
+    @PostJson("/postJson")
+    void postJson()
     {
     }
 
-    @GetMapping("/get") void get()
+    @GetMapping("/get")
+    void get()
     {
     }
 
     @PostMapping(path : ["/post"], consumes:
-            [MediaType.APPLICATION_XML_VALUE]) void post(@RequestBody(false) Foo foo)
+            [MediaType.APPLICATION_XML_VALUE])
+    void post(@RequestBody(false) Foo foo)
     {
     }
 
     // gh-31962: The presence of multiple @RequestMappings is intentional.
-    @PatchMapping("/put") @RequestMapping(path : ["/put"], method:
+    @PatchMapping("/put")
+    @RequestMapping(path : ["/put"], method:
             [RequestMethod.PUT])  // local @RequestMapping overrides meta-annotations
-    @PostMapping("/put") void put()
+    @PostMapping("/put")
+    void put()
     {
     }
 
-    @DeleteMapping("/delete") void delete_()
+    @DeleteMapping("/delete")
+    void delete_()
     {
     }
 
-    @PatchMapping("/patch") void patch()
+    @PatchMapping("/patch")
+    void patch()
     {
     }
 }
 
 private enum jsonValue = MediaType.APPLICATION_JSON_VALUE;
 
-@RequestMapping private struct ExtraRequestMapping
+@RequestMapping
+private struct ExtraRequestMapping
 {
 }
 
@@ -866,7 +910,8 @@ private enum jsonValue = MediaType.APPLICATION_JSON_VALUE;
         [MediaType.APPLICATION_JSON_VALUE])
 private struct PostJson
 {
-    @AliasFor(annotation : ClassRef(typeNameOf!RequestMapping)) string[] value;
+    @AliasFor(annotation : ClassRef(typeNameOf!RequestMapping))
+    string[] value;
 
     static PostJson opCall(string value) pure nothrow
     {

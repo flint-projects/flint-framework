@@ -74,7 +74,8 @@ private final class Name
     }
 }
 
-@Configuration private class Config
+@Configuration
+private class Config
 {
     TestBean testBean()
     {
@@ -84,7 +85,8 @@ private final class Name
     }
 }
 
-@Configuration("customConfigBeanName") private class ConfigWithCustomName
+@Configuration("customConfigBeanName")
+private class ConfigWithCustomName
 {
     TestBean testBean()
     {
@@ -92,7 +94,8 @@ private final class Name
     }
 }
 
-@Configuration private class TwoTestBeanConfig
+@Configuration
+private class TwoTestBeanConfig
 {
     TestBean tb1()
     {
@@ -105,7 +108,8 @@ private final class Name
     }
 }
 
-@Configuration private class NameConfig
+@Configuration
+private class NameConfig
 {
     Name name()
     {
@@ -119,7 +123,8 @@ private final class Name
     }
 }
 
-@Configuration private class AutowiredConfig
+@Configuration
+private class AutowiredConfig
 {
     Name autowiredName; // @Autowired
 

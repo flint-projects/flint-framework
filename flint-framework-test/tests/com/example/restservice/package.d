@@ -20,7 +20,8 @@ struct Greeting
 }
 
 /// The guide's controller.
-@RestController class GreetingController
+@RestController
+class GreetingController
 {
     private enum string template_ = "Hello, %s!";
     private AtomicLong counter;
@@ -32,7 +33,8 @@ struct Greeting
     }
 
     ///
-    @GetMapping("/greeting") Greeting greeting(@RequestParam(value : "name", defaultValue:
+    @GetMapping("/greeting")
+    Greeting greeting(@RequestParam(value : "name", defaultValue:
             "World") string name)
     {
         return Greeting(counter.incrementAndGet(), format(template_, name));

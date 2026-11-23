@@ -130,7 +130,8 @@ private final class Gamma
 {
 }
 
-@Component private final class BetaFactoryBean : FactoryBean!Object
+@Component
+private final class BetaFactoryBean : FactoryBean!Object
 {
     private Beta beta;
 

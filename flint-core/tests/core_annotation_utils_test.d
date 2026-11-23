@@ -52,47 +52,60 @@ private struct Transactional
     bool readOnly;
 }
 
-@Component("meta1") @Order private struct Meta1
+@Component("meta1")
+@Order
+private struct Meta1
 {
 }
 
-@Component("meta2") @Transactional(true) private struct Meta2
+@Component("meta2")
+@Transactional(true)
+private struct Meta2
 {
 }
 
-@Meta2 private struct MetaMeta
+@Meta2
+private struct MetaMeta
 {
 }
 
-@MetaMeta private struct MetaMetaMeta
+@MetaMeta
+private struct MetaMetaMeta
 {
 }
 
-@MetaCycle3 private struct MetaCycle1
+@MetaCycle3
+private struct MetaCycle1
 {
 }
 
-@MetaCycle1 private struct MetaCycle2
+@MetaCycle1
+private struct MetaCycle2
 {
 }
 
-@MetaCycle2 private struct MetaCycle3
+@MetaCycle2
+private struct MetaCycle3
 {
 }
 
-@Meta1 private interface InterfaceWithMetaAnnotation
+@Meta1
+private interface InterfaceWithMetaAnnotation
 {
 }
 
-@Meta2 private class ClassWithLocalMetaAnnotationAndMetaAnnotatedInterface : InterfaceWithMetaAnnotation
+@Meta2
+private class ClassWithLocalMetaAnnotationAndMetaAnnotatedInterface : InterfaceWithMetaAnnotation
 {
 }
 
-@Meta1 private class ClassWithInheritedMetaAnnotation
+@Meta1
+private class ClassWithInheritedMetaAnnotation
 {
 }
 
-@Meta2 private class SubClassWithInheritedMetaAnnotation : ClassWithInheritedMetaAnnotation
+@Meta2
+private class SubClassWithInheritedMetaAnnotation : ClassWithInheritedMetaAnnotation
 {
 }
 
@@ -100,11 +113,13 @@ private class SubSubClassWithInheritedMetaAnnotation : SubClassWithInheritedMeta
 {
 }
 
-@Transactional private class ClassWithInheritedAnnotation
+@Transactional
+private class ClassWithInheritedAnnotation
 {
 }
 
-@Meta2 private class SubClassWithInheritedAnnotation : ClassWithInheritedAnnotation
+@Meta2
+private class SubClassWithInheritedAnnotation : ClassWithInheritedAnnotation
 {
 }
 
@@ -112,30 +127,36 @@ private class SubSubClassWithInheritedAnnotation : SubClassWithInheritedAnnotati
 {
 }
 
-@MetaMeta private class MetaMetaAnnotatedClass
+@MetaMeta
+private class MetaMetaAnnotatedClass
 {
 }
 
-@MetaMetaMeta private class MetaMetaMetaAnnotatedClass
+@MetaMetaMeta
+private class MetaMetaMetaAnnotatedClass
 {
 }
 
-@MetaCycle3 private class MetaCycleAnnotatedClass
+@MetaCycle3
+private class MetaCycleAnnotatedClass
 {
 }
 
 private interface AnnotatedInterface
 {
-    @Order(0) void fromInterfaceImplementedByRoot();
+    @Order(0)
+    void fromInterfaceImplementedByRoot();
 }
 
 private class Root : AnnotatedInterface
 {
-    @Order(27) void annotatedOnRoot()
+    @Order(27)
+    void annotatedOnRoot()
     {
     }
 
-    @Meta1 void metaAnnotatedOnRoot()
+    @Meta1
+    void metaAnnotatedOnRoot()
     {
     }
 
@@ -143,7 +164,8 @@ private class Root : AnnotatedInterface
     {
     }
 
-    @Order(27) void overrideWithoutNewAnnotation()
+    @Order(27)
+    void overrideWithoutNewAnnotation()
     {
     }
 
@@ -158,19 +180,23 @@ private class Root : AnnotatedInterface
 
 private class Leaf : Root
 {
-    @Order(25) void annotatedOnLeaf()
+    @Order(25)
+    void annotatedOnLeaf()
     {
     }
 
-    @Meta1 void metaAnnotatedOnLeaf()
+    @Meta1
+    void metaAnnotatedOnLeaf()
     {
     }
 
-    @MetaMeta void metaMetaAnnotatedOnLeaf()
+    @MetaMeta
+    void metaMetaAnnotatedOnLeaf()
     {
     }
 
-    @Order(1) override void overrideToAnnotate()
+    @Order(1)
+    override void overrideToAnnotate()
     {
     }
 
@@ -181,17 +207,20 @@ private class Leaf : Root
 
 private abstract class Foo(T)
 {
-    @Order(1) abstract void something(T arg);
+    @Order(1)
+    abstract void something(T arg);
 }
 
 private class SimpleFoo : Foo!string
 {
-    @Transactional override void something(string arg)
+    @Transactional
+    override void something(string arg)
     {
     }
 }
 
-@Transactional private interface InheritedAnnotationInterface
+@Transactional
+private interface InheritedAnnotationInterface
 {
 }
 
@@ -203,7 +232,8 @@ private interface SubSubInheritedAnnotationInterface : SubInheritedAnnotationInt
 {
 }
 
-@Order private interface NonInheritedAnnotationInterface
+@Order
+private interface NonInheritedAnnotationInterface
 {
 }
 
@@ -223,7 +253,8 @@ private interface NonAnnotatedInterface
 {
 }
 
-@Transactional private class InheritedAnnotationClass
+@Transactional
+private class InheritedAnnotationClass
 {
 }
 
@@ -231,7 +262,8 @@ private class SubInheritedAnnotationClass : InheritedAnnotationClass
 {
 }
 
-@Order private class NonInheritedAnnotationClass
+@Order
+private class NonInheritedAnnotationClass
 {
 }
 
@@ -239,11 +271,13 @@ private class SubNonInheritedAnnotationClass : NonInheritedAnnotationClass
 {
 }
 
-@Transactional private class TransactionalClass
+@Transactional
+private class TransactionalClass
 {
 }
 
-@Order private class TransactionalAndOrderedClass : TransactionalClass
+@Order
+private class TransactionalAndOrderedClass : TransactionalClass
 {
 }
 
@@ -253,7 +287,8 @@ private class SubTransactionalAndOrderedClass : TransactionalAndOrderedClass
 
 private interface InterfaceWithAnnotatedMethod
 {
-    @Order void foo();
+    @Order
+    void foo();
 }
 
 private class ImplementsInterfaceWithAnnotatedMethod : InterfaceWithAnnotatedMethod
@@ -283,7 +318,8 @@ private class SubOfAbstractImplementsInterfaceWithAnnotatedMethod : AbstractDoes
 
 private interface InterfaceWithGenericAnnotatedMethod(T)
 {
-    @Order void foo(T t);
+    @Order
+    void foo(T t);
 }
 
 private class ImplementsInterfaceWithGenericAnnotatedMethod : InterfaceWithGenericAnnotatedMethod!string
@@ -295,7 +331,8 @@ private class ImplementsInterfaceWithGenericAnnotatedMethod : InterfaceWithGener
 
 private abstract class BaseClassWithGenericAnnotatedMethod(T)
 {
-    @Order abstract void foo(T t);
+    @Order
+    abstract void foo(T t);
 }
 
 private class ExtendsBaseClassWithGenericAnnotatedMethod : BaseClassWithGenericAnnotatedMethod!string
@@ -316,19 +353,24 @@ private struct MyRepeatable
     string value;
 }
 
-@MyRepeatable("meta1") private struct MyRepeatableMeta1
+@MyRepeatable("meta1")
+private struct MyRepeatableMeta1
 {
 }
 
-@MyRepeatable("meta2") private struct MyRepeatableMeta2
+@MyRepeatable("meta2")
+private struct MyRepeatableMeta2
 {
 }
 
-@MyRepeatable("meta1") @MyRepeatable("meta2") private struct MyRepeatableMeta1And2
+@MyRepeatable("meta1")
+@MyRepeatable("meta2")
+private struct MyRepeatableMeta1And2
 {
 }
 
-@MyRepeatableMeta1And2 private void methodWithComposedAnnotationMetaAnnotatedWithRepeatableAnnotations()
+@MyRepeatableMeta1And2
+private void methodWithComposedAnnotationMetaAnnotatedWithRepeatableAnnotations()
 {
 }
 
@@ -340,10 +382,16 @@ private enum containerOfYAndZ = MyRepeatableContainer([MyRepeatable("Y"), MyRepe
 
 private interface InterfaceWithRepeated
 {
-    @MyRepeatable("A") @containerOfBAndC @MyRepeatableMeta1 void foo();
+    @MyRepeatable("A")
+    @containerOfBAndC
+    @MyRepeatableMeta1
+    void foo();
 }
 
-@MyRepeatable("A") @containerOfBAndC @MyRepeatableMeta1 private class MyRepeatableClass
+@MyRepeatable("A")
+@containerOfBAndC
+@MyRepeatableMeta1
+private class MyRepeatableClass
 {
 }
 
@@ -372,22 +420,29 @@ private enum RequestMethod
 private struct WebMapping
 {
     string name;
-    @AliasFor(value : "path") string[] value = [""];
-    @AliasFor(attribute : "value") string[] path = [""];
+    @AliasFor(value : "path")
+    string[] value = [""];
+    @AliasFor(attribute : "value")
+    string[] path = [""];
     RequestMethod[] method;
 }
 
 @WebMapping(method : [RequestMethod.GET], name:
-        "") private struct Get
+        "")
+private struct Get
 {
-    @AliasFor(annotation : classOf!WebMapping) string value = "";
-    @AliasFor(annotation : classOf!WebMapping) string path = "";
+    @AliasFor(annotation : classOf!WebMapping)
+    string value = "";
+    @AliasFor(annotation : classOf!WebMapping)
+    string path = "";
 }
 
-@Component("webController") private class WebController
+@Component("webController")
+private class WebController
 {
     @WebMapping(value : ["/test"], name:
-            "foo") void handleMappedWithValueAttribute()
+            "foo")
+    void handleMappedWithValueAttribute()
     {
     }
 
@@ -408,8 +463,10 @@ private struct WebMapping
 
 private struct ContextConfig
 {
-    @AliasFor(value : "location") string value = "";
-    @AliasFor(value : "value") string location = "";
+    @AliasFor(value : "location")
+    string value = "";
+    @AliasFor(value : "value")
+    string location = "";
     ClassRef klass = classOf!Object;
 }
 
@@ -418,41 +475,55 @@ private struct Hierarchy
     ContextConfig[] value;
 }
 
-@Hierarchy([ContextConfig("A"), ContextConfig(location: "B")]) private class ConfigHierarchyTestCase
+@Hierarchy([ContextConfig("A"), ContextConfig(location: "B")])
+private class ConfigHierarchyTestCase
 {
 }
 
 private struct CharsContainer
 {
-    @AliasFor(attribute : "chars") const(char)[] value;
-    @AliasFor(attribute : "value") const(char)[] chars;
+    @AliasFor(attribute : "chars")
+    const(char)[] value;
+    @AliasFor(attribute : "value")
+    const(char)[] chars;
 }
 
-@ContextConfig private struct ImplicitAliasesContextConfig
+@ContextConfig
+private struct ImplicitAliasesContextConfig
 {
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string xmlFile = "";
+            "location")
+    string xmlFile = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string groovyScript = "";
+            "location")
+    string groovyScript = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string value = "";
+            "location")
+    string value = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location1 = "";
+            "location")
+    string location1 = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location2 = "";
+            "location")
+    string location2 = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location3 = "";
+            "location")
+    string location3 = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "klass") ClassRef configClass = classOf!Object;
+            "klass")
+    ClassRef configClass = classOf!Object;
     string nonAliasedAttribute = "";
 }
 
-@ContextConfig private struct ImplicitAliasesWithDifferentDefaultValuesContextConfig
+@ContextConfig
+private struct ImplicitAliasesWithDifferentDefaultValuesContextConfig
 {
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location1 = "foo";
+            "location")
+    string location1 = "foo";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location2 = "bar";
+            "location")
+    string location2 = "bar";
 }
 
 @ImplicitAliasesWithDifferentDefaultValuesContextConfig(location1 : "1", location2:
@@ -461,12 +532,15 @@ private class ImplicitAliasesWithDifferentDefaultValuesContextConfigClass
 {
 }
 
-@ContextConfig private struct ImplicitAliasesWithDuplicateValuesContextConfig
+@ContextConfig
+private struct ImplicitAliasesWithDuplicateValuesContextConfig
 {
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location1 = "";
+            "location")
+    string location1 = "";
     @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location") string location2 = "";
+            "location")
+    string location2 = "";
 }
 
 @ImplicitAliasesWithDuplicateValuesContextConfig(location1 : "1", location2:
@@ -485,7 +559,8 @@ private struct ComponentScan
     Filter[] excludeFilters;
 }
 
-@ComponentScan(excludeFilters : [Filter(pattern: "*Foo"), Filter(pattern: "*Bar")]) private class ComponentScanClass
+@ComponentScan(excludeFilters : [Filter(pattern: "*Foo"), Filter(pattern: "*Bar")])
+private class ComponentScanClass
 {
 }
 
@@ -494,7 +569,8 @@ private struct ComponentScanSingleFilter
     Filter value;
 }
 
-@ComponentScanSingleFilter(Filter(pattern: "*Foo")) private class ComponentScanSingleFilterClass
+@ComponentScanSingleFilter(Filter(pattern: "*Foo"))
+private class ComponentScanSingleFilterClass
 {
 }
 
@@ -516,7 +592,9 @@ private struct TestRepeatableContainer
     TestRepeatable[] value;
 }
 
-@TestRepeatable("a") @TestRepeatable("b") private class TestRepeatablesClass
+@TestRepeatable("a")
+@TestRepeatable("b")
+private class TestRepeatablesClass
 {
 }
 

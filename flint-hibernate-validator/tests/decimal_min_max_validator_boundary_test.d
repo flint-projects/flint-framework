@@ -20,17 +20,20 @@ import flint.jakarta.validation.constraints : DecimalMax, DecimalMin;
 
 private final class MinHolder
 {
-    @DecimalMin("0.100000000000000005") double d;
+    @DecimalMin("0.100000000000000005")
+    double d;
 }
 
 private final class MaxHolder
 {
-    @DecimalMax("0.1") double d;
+    @DecimalMax("0.1")
+    double d;
 }
 
 private final class TroubleHolder
 {
-    @DecimalMax("1.2") double d;
+    @DecimalMax("1.2")
+    double d;
 }
 
 @("DecimalMinMaxValidatorBoundaryTest.testDecimalMinValue")

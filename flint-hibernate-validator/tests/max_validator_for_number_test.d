@@ -24,7 +24,8 @@ import flint.jakarta.validation.constraints : DecimalMax, Max;
 
 private final class IntFoo
 {
-    @DecimalMax("15.0001") int num;
+    @DecimalMax("15.0001")
+    int num;
 
     this(int num)
     {
@@ -34,7 +35,8 @@ private final class IntFoo
 
 private final class DoubleFoo
 {
-    @DecimalMax("15.0001") double num;
+    @DecimalMax("15.0001")
+    double num;
 
     this(double num)
     {

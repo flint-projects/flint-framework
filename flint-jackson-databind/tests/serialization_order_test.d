@@ -25,7 +25,8 @@ private final class BeanWithCreator
     int b;
     int c;
 
-    @JsonCreator this(@JsonProperty("c") int c, @JsonProperty("a") int a)
+    @JsonCreator
+    this(@JsonProperty("c") int c, @JsonProperty("a") int a)
     {
         this.a = a;
         this.c = c;
@@ -68,15 +69,19 @@ private final class OrderMixIn
 @JsonPropertyOrder(["a", "b", "x", "z"])
 private final class BeanFor268
 {
-    @JsonProperty("a") string xA = "a";
-    @JsonProperty("z") string aZ = "z";
+    @JsonProperty("a")
+    string xA = "a";
+    @JsonProperty("z")
+    string aZ = "z";
 
-    @JsonProperty("b") string xB()
+    @JsonProperty("b")
+    string xB()
     {
         return "b";
     }
 
-    @JsonProperty("x") string aX()
+    @JsonProperty("x")
+    string aX()
     {
         return "x";
     }
@@ -97,7 +102,8 @@ private final class BeanForGH311
     private const int a;
     private const int b;
 
-    @JsonCreator this(@JsonProperty("b") int b, @JsonProperty("a") int a)
+    @JsonCreator
+    this(@JsonProperty("b") int b, @JsonProperty("a") int a)
     { //b and a are out of order, although alphabetic = true
         this.a = a;
         this.b = b;
@@ -121,9 +127,11 @@ private final class OrderingByIndexBean
     int r;
     int a;
 
-    @JsonProperty(index : 1) int b;
+    @JsonProperty(index : 1)
+    int b;
 
-    @JsonProperty(index : 0) int u;
+    @JsonProperty(index : 0)
+    int u;
 
     int f;
 }
@@ -136,7 +144,8 @@ private final class BeanFor2879
     int b;
     int a;
 
-    @JsonCreator this(@JsonProperty("a") int a, @JsonProperty("b") int b, @JsonProperty("c") int c)
+    @JsonCreator
+    this(@JsonProperty("a") int a, @JsonProperty("b") int b, @JsonProperty("c") int c)
     {
         this.a = a;
         this.b = b;
@@ -151,7 +160,8 @@ private final class BeanForStrictOrdering
     private int b;
     private const int c;
 
-    @JsonCreator this(@JsonProperty("c") int c, @JsonProperty("a") int a)
+    @JsonCreator
+    this(@JsonProperty("c") int c, @JsonProperty("a") int a)
     { //b and a are out of order, although alphabetic = true
         this.a = a;
         this.c = c;
@@ -180,7 +190,8 @@ private final class BeanForGH5918
     private string firstName;
     private string lastName;
 
-    @JsonCreator this(@JsonProperty("lastName") string lastName, @JsonProperty("firstName") string firstName)
+    @JsonCreator
+    this(@JsonProperty("lastName") string lastName, @JsonProperty("firstName") string firstName)
     {
         this.firstName = firstName;
         this.lastName = lastName;

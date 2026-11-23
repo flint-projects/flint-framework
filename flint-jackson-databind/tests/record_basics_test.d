@@ -41,7 +41,8 @@ private struct RecordOfRecord
 private struct RecordWithRename
 {
     int id;
-    @JsonProperty("rename") string name;
+    @JsonProperty("rename")
+    string name;
 }
 
 // [databind#2992]
@@ -54,21 +55,27 @@ private struct SnakeRecord
 
 private struct RecordSingleWriteOnly
 {
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY) int id;
+    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    int id;
 }
 
 private struct RecordSomeWriteOnly
 {
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY) int id;
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY) string name;
+    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    int id;
+    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    string name;
     string email;
 }
 
 private struct RecordAllWriteOnly
 {
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY) int id;
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY) string name;
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY) string email;
+    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    int id;
+    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    string name;
+    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    string email;
 }
 
 // The canonical constructor: one argument per component, in declaration order.
@@ -224,7 +231,8 @@ version (FlintJacksonInjectableValues)
     private struct RecordWithHeaderInject
     {
         int id;
-        @JacksonInject string name;
+        @JacksonInject
+        string name;
     }
 
     private struct RecordWithConstructorInject
@@ -270,7 +278,8 @@ version (FlintJacksonCustomSerializers)
     private struct RecordWithJsonDeserialize
     {
         int id;
-        @JsonDeserialize(converter : classOf!StringTrimmer) string name;
+        @JsonDeserialize(converter : classOf!StringTrimmer)
+        string name;
     }
 
     private final class StringTrimmer : Converter!(string, string)

@@ -52,11 +52,16 @@ private final class Pet
 
 private final class Annotated
 {
-    @JsonProperty("first_name") string firstName = "Betty";
-    @JsonIgnore string password = "secret";
-    @JsonInclude(JsonInclude.Include.NON_NULL) string nickname;
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) List!string tags;
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) string note = "";
+    @JsonProperty("first_name")
+    string firstName = "Betty";
+    @JsonIgnore
+    string password = "secret";
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    string nickname;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    List!string tags;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    string note = "";
     string lastName = "Davis";
     string middle;
 

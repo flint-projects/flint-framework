@@ -76,7 +76,8 @@ version (FlintJacksonCustomSerializers)
             any = new HashMap!(string, string)();
         }
 
-        @JsonAnySetter void setAny(string name, string value)
+        @JsonAnySetter
+        void setAny(string name, string value)
         {
             any.put(name, value);
         }

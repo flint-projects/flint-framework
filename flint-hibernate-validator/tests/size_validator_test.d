@@ -26,7 +26,8 @@ private final class Foo
 {
     @Size(min : 1, max:
             1, message:
-            "there can only be one") List!Foo listOfSubClasses;
+            "there can only be one")
+    List!Foo listOfSubClasses;
 
     this()
     {

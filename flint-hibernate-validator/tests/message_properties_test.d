@@ -24,30 +24,52 @@ import flint.java.util : ArrayList, List;
 
 private final class Bean
 {
-    @AssertFalse bool assertFalse = true;
-    @AssertTrue bool assertTrue = false;
-    @DecimalMax("3") double decimalMax = 4;
-    @DecimalMin("3") double decimalMin = 2;
+    @AssertFalse
+    bool assertFalse = true;
+    @AssertTrue
+    bool assertTrue = false;
+    @DecimalMax("3")
+    double decimalMax = 4;
+    @DecimalMin("3")
+    double decimalMin = 2;
     @Digits(integer : 1, fraction:
-            3) double digits = 13_333.3333f;
-    @Email string email = "invalid";
-    @Future LocalDate future = LocalDate.of(2010, 10, 4);
-    @FutureOrPresent LocalDate futureOrPresent = LocalDate.of(2010, 10, 4);
-    @Max(4) int max = 6;
-    @Min(4) int min = 2;
-    @Negative int negative = 4;
-    @NegativeOrZero int negativeOrZero = 4;
-    @NotBlank string notBlank = "";
-    @NotEmpty List!string notEmpty;
-    @NotNull string notNull = null;
-    @Null string nullConstraint = "not null";
-    @Past LocalDate past = LocalDate.of(2890, 10, 4);
-    @PastOrPresent LocalDate pastOrPresent = LocalDate.of(2890, 10, 4);
-    @Pattern(regexp : "[0-9]+") string pattern = "invalid";
-    @Positive int positive = -4;
-    @PositiveOrZero int positiveOrZero = -4;
+            3)
+    double digits = 13_333.3333f;
+    @Email
+    string email = "invalid";
+    @Future
+    LocalDate future = LocalDate.of(2010, 10, 4);
+    @FutureOrPresent
+    LocalDate futureOrPresent = LocalDate.of(2010, 10, 4);
+    @Max(4)
+    int max = 6;
+    @Min(4)
+    int min = 2;
+    @Negative
+    int negative = 4;
+    @NegativeOrZero
+    int negativeOrZero = 4;
+    @NotBlank
+    string notBlank = "";
+    @NotEmpty
+    List!string notEmpty;
+    @NotNull
+    string notNull = null;
+    @Null
+    string nullConstraint = "not null";
+    @Past
+    LocalDate past = LocalDate.of(2890, 10, 4);
+    @PastOrPresent
+    LocalDate pastOrPresent = LocalDate.of(2890, 10, 4);
+    @Pattern(regexp : "[0-9]+")
+    string pattern = "invalid";
+    @Positive
+    int positive = -4;
+    @PositiveOrZero
+    int positiveOrZero = -4;
     @Size(min : 2, max:
-            4) string size = "666666";
+            4)
+    string size = "666666";
 
     this()
     {

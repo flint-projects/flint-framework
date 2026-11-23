@@ -742,7 +742,8 @@ version (FlintJdbcRowMapperMappedNames) // BeanPropertyRowMapper has no mappedNa
 
     private class CustomPerson : Person
     {
-        @MyColumnName("birthdate") override void setBirth_date(LocalDateTime date)
+        @MyColumnName("birthdate")
+        override void setBirth_date(LocalDateTime date)
         {
             super.setBirth_date(date);
         }

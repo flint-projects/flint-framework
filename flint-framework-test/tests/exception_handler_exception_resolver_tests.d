@@ -280,13 +280,15 @@ version (FlintWebModelArgument)
         assert(mav.getModelMap().get("exceptionClassName").get!string == "IllegalArgumentException");
     }
 
-    @Controller private class ModelArgumentController
+    @Controller
+    private class ModelArgumentController
     {
         void handle()
         {
         }
 
-        @ExceptionHandler void handleException(Exception ex, Model model)
+        @ExceptionHandler
+        void handleException(Exception ex, Model model)
         {
             model.addAttribute("exceptionClassName", Any.of(simpleTypeName(typeid(ex).name)));
         }
@@ -316,13 +318,15 @@ version (FlintWebFlashAttributes)
         assert(flashMap.get("exceptionClassName").get!string == "IllegalArgumentException");
     }
 
-    @Controller private class RedirectAttributesController
+    @Controller
+    private class RedirectAttributesController
     {
         void handle()
         {
         }
 
-        @ExceptionHandler string handleException(Exception ex, RedirectAttributes redirectAttributes)
+        @ExceptionHandler
+        string handleException(Exception ex, RedirectAttributes redirectAttributes)
         {
             redirectAttributes.addFlashAttribute("exceptionClassName", Any.of(simpleTypeName(typeid(ex).name)));
             return "redirect:/";
@@ -767,25 +771,29 @@ private abstract class WebApplicationObjectSupport
 {
 }
 
-@Controller private class ModelAndViewController
+@Controller
+private class ModelAndViewController
 {
     void handle()
     {
     }
 
-    @ExceptionHandler ModelAndView handle(Exception ex)
+    @ExceptionHandler
+    ModelAndView handle(Exception ex)
     {
         return new ModelAndView("errorView").addObject("detail", Any.of(ex.msg));
     }
 }
 
-@Controller private class ResponseWriterController
+@Controller
+private class ResponseWriterController
 {
     void handle()
     {
     }
 
-    @ExceptionHandler void handleException(Exception ex, Writer writer)
+    @ExceptionHandler
+    void handleException(Exception ex, Writer writer)
     {
         writer.write(shortName(ex));
     }
@@ -795,10 +803,13 @@ private interface ResponseBodyInterface
 {
     void handle();
 
-    @ExceptionHandler @ResponseBody string handleException(IllegalArgumentException ex);
+    @ExceptionHandler
+    @ResponseBody
+    string handleException(IllegalArgumentException ex);
 }
 
-@Controller private class ResponseBodyController : WebApplicationObjectSupport, ResponseBodyInterface
+@Controller
+private class ResponseBodyController : WebApplicationObjectSupport, ResponseBodyInterface
 {
     override void handle()
     {
@@ -810,20 +821,25 @@ private interface ResponseBodyInterface
     }
 }
 
-@Controller private class IOExceptionController
+@Controller
+private class IOExceptionController
 {
     void handle()
     {
     }
 
-    @ExceptionHandler(classOf!IOException) void handleException()
+    @ExceptionHandler(classOf!IOException)
+    void handleException()
     {
     }
 }
 
-@RestControllerAdvice @Order(1) private class TestExceptionResolver
+@RestControllerAdvice
+@Order(1)
+private class TestExceptionResolver
 {
-    @ExceptionHandler string handleException(IllegalStateException ex)
+    @ExceptionHandler
+    string handleException(IllegalStateException ex)
     {
         return "TestExceptionResolver: " ~ shortName(ex);
     }
@@ -834,13 +850,16 @@ private interface ResponseBodyInterface
         return "HandlerMethod: " ~ handlerMethod.getMethodName();
     }
 
-    @ExceptionHandler(classOf!AssertionError) string handleAssertionError(AssertionError err)
+    @ExceptionHandler(classOf!AssertionError)
+    string handleAssertionError(AssertionError err)
     {
         return javaToString(err);
     }
 }
 
-@RestControllerAdvice @Order(2) private class AnotherTestExceptionResolver
+@RestControllerAdvice
+@Order(2)
+private class AnotherTestExceptionResolver
 {
     @ExceptionHandler([classOf!IllegalStateException, classOf!IllegalAccessException])
     string handleException(Exception ex)
@@ -849,7 +868,9 @@ private interface ResponseBodyInterface
     }
 }
 
-@RestControllerAdvice @Order(3) private class ResponseStatusTestExceptionResolver
+@RestControllerAdvice
+@Order(3)
+private class ResponseStatusTestExceptionResolver
 {
     @ExceptionHandler(classOf!SocketTimeoutException)
     @ResponseStatus(code : HttpStatus.GATEWAY_TIMEOUT, reason:
@@ -863,26 +884,34 @@ private interface ResponseBodyInterface
 private alias MyConfig = imported!"std.meta".AliasSeq!(TestExceptionResolver,
         AnotherTestExceptionResolver, ResponseStatusTestExceptionResolver);
 
-@RestControllerAdvice("java.lang") @Order(1) private class NotCalledTestExceptionResolver
+@RestControllerAdvice("java.lang")
+@Order(1)
+private class NotCalledTestExceptionResolver
 {
-    @ExceptionHandler string handleException(IllegalStateException ex)
+    @ExceptionHandler
+    string handleException(IllegalStateException ex)
     {
         return "NotCalledTestExceptionResolver: " ~ shortName(ex);
     }
 }
 
-@RestControllerAdvice(assignableTypes : [classOf!WebApplicationObjectSupport]) @Order(2)
+@RestControllerAdvice(assignableTypes : [classOf!WebApplicationObjectSupport])
+@Order(2)
 private class BasePackageTestExceptionResolver
 {
-    @ExceptionHandler string handleException(IllegalStateException ex)
+    @ExceptionHandler
+    string handleException(IllegalStateException ex)
     {
         return "BasePackageTestExceptionResolver: " ~ shortName(ex);
     }
 }
 
-@RestControllerAdvice @Order(3) private class DefaultTestExceptionResolver
+@RestControllerAdvice
+@Order(3)
+private class DefaultTestExceptionResolver
 {
-    @ExceptionHandler string handleException(IllegalStateException ex)
+    @ExceptionHandler
+    string handleException(IllegalStateException ex)
     {
         return "DefaultTestExceptionResolver: " ~ shortName(ex);
     }
@@ -892,14 +921,17 @@ private class BasePackageTestExceptionResolver
 private alias MyControllerAdviceConfig = imported!"std.meta".AliasSeq!(NotCalledTestExceptionResolver,
         BasePackageTestExceptionResolver, DefaultTestExceptionResolver);
 
-@Controller private class MediaTypeController
+@Controller
+private class MediaTypeController
 {
     void handle()
     {
     }
 
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"]) @ResponseBody string handleExceptionJson()
+            ["application/json"])
+    @ResponseBody
+    string handleExceptionJson()
     {
         return "jsonBody";
     }

@@ -225,33 +225,39 @@ private class BindException : SocketException
     }
 }
 
-@Controller private class ExceptionController
+@Controller
+private class ExceptionController
 {
     void handle()
     {
     }
 
-    @ExceptionHandler(classOf!IOException) void handleIOException()
+    @ExceptionHandler(classOf!IOException)
+    void handleIOException()
     {
     }
 
-    @ExceptionHandler(classOf!SocketException) void handleSocketException()
+    @ExceptionHandler(classOf!SocketException)
+    void handleSocketException()
     {
     }
 
-    @ExceptionHandler void handleIllegalArgumentException(IllegalArgumentException exception)
+    @ExceptionHandler
+    void handleIllegalArgumentException(IllegalArgumentException exception)
     {
     }
 }
 
-@Controller private class InheritedController : ExceptionController
+@Controller
+private class InheritedController : ExceptionController
 {
     override void handleIOException()
     {
     }
 }
 
-@Controller private class AmbiguousController
+@Controller
+private class AmbiguousController
 {
     void handle()
     {
@@ -263,61 +269,75 @@ private class BindException : SocketException
         return simpleTypeName(typeid(ex).name);
     }
 
-    @ExceptionHandler string handle2(IllegalArgumentException ex)
+    @ExceptionHandler
+    string handle2(IllegalArgumentException ex)
     {
         return simpleTypeName(typeid(ex).name);
     }
 }
 
-@Controller private class NoExceptionController
+@Controller
+private class NoExceptionController
 {
-    @ExceptionHandler void handle()
+    @ExceptionHandler
+    void handle()
     {
     }
 }
 
-@Controller private class MediaTypeController
+@Controller
+private class MediaTypeController
 {
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"]) void handleJson()
+            ["application/json"])
+    void handleJson()
     {
     }
 
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["text/html", "*/*"]) void handleHtml()
+            ["text/html", "*/*"])
+    void handleHtml()
     {
     }
 }
 
-@Controller private class AmbiguousMediaTypeController
+@Controller
+private class AmbiguousMediaTypeController
 {
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"]) void handleJson()
+            ["application/json"])
+    void handleJson()
     {
     }
 
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"]) void handleJsonToo()
+            ["application/json"])
+    void handleJsonToo()
     {
     }
 }
 
-@Controller private class MixedController
+@Controller
+private class MixedController
 {
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"]) void handleJson()
+            ["application/json"])
+    void handleJson()
     {
     }
 
-    @ExceptionHandler(classOf!IllegalArgumentException) void handleOther()
+    @ExceptionHandler(classOf!IllegalArgumentException)
+    void handleOther()
     {
     }
 }
 
-@Controller private class InvalidMediaTypeController
+@Controller
+private class InvalidMediaTypeController
 {
     @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["invalid-mediatype"]) void handle()
+            ["invalid-mediatype"])
+    void handle()
     {
     }
 }

@@ -35,10 +35,12 @@ unittest
     assert(table.find(Method.get, cast(const(ubyte)[]) "/shop").error.code == Status.notFound);
 }
 
-@RestController("/typed") @ApiVersion(2)
+@RestController("/typed")
+@ApiVersion(2)
 private struct Checked
 {
-    @Get("/:number") Error path(@PathVariable("number") uint number, ref scope RequestContext context)nothrow @nogc
+    @Get("/:number")
+    Error path(@PathVariable("number") uint number, ref scope RequestContext context)nothrow @nogc
     {
         assert(number != 0 && !context.cancellation.cancelled());
         return Error.init;

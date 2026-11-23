@@ -9,23 +9,33 @@ import flint.jakarta.annotation : Generated, Nonnull, Nullable, PostConstruct, P
 
 private final class Component
 {
-    @Resource string plain;
+    @Resource
+    string plain;
     @Resource(name : "jdbc/petclinic", shareable:
-            false) string named;
-    @Resource(lookup : "java:global/a") @Resource(lookup : "java:global/b") string twice;
-    @Nullable string optional;
-    @Nonnull string required = "x";
+            false)
+    string named;
+    @Resource(lookup : "java:global/a")
+    @Resource(lookup : "java:global/b")
+    string twice;
+    @Nullable
+    string optional;
+    @Nonnull
+    string required = "x";
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
     }
 
-    @PreDestroy void close()
+    @PreDestroy
+    void close()
     {
     }
 }
 
-@Priority(100) @Generated(["flint aot"], "2026-11-23T00:00:00Z") private struct Interceptor
+@Priority(100)
+@Generated(["flint aot"], "2026-11-23T00:00:00Z")
+private struct Interceptor
 {
 }
 

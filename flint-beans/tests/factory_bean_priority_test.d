@@ -201,11 +201,13 @@ unittest
 
 // ---- @Priority
 
-@Priority(5) private class HighPriorityTestBean : TestBean
+@Priority(5)
+private class HighPriorityTestBean : TestBean
 {
 }
 
-@Priority(500) private class LowPriorityTestBean : TestBean
+@Priority(500)
+private class LowPriorityTestBean : TestBean
 {
 }
 
@@ -223,19 +225,23 @@ private interface PriorityService
 {
 }
 
-@Priority(1) private final class PriorityService1 : PriorityService
+@Priority(1)
+private final class PriorityService1 : PriorityService
 {
 }
 
-@Priority(2) private final class PriorityService2A : PriorityService
+@Priority(2)
+private final class PriorityService2A : PriorityService
 {
 }
 
-@Priority(2) private final class PriorityService2B : PriorityService
+@Priority(2)
+private final class PriorityService2B : PriorityService
 {
 }
 
-@Priority(3) private final class PriorityService3 : PriorityService
+@Priority(3)
+private final class PriorityService3 : PriorityService
 {
 }
 

@@ -22,15 +22,19 @@ import flint.jakarta.annotation : Priority;
 
 @safe:
 
-@Order(50) private final class SimpleOrder
+@Order(50)
+private final class SimpleOrder
 {
 }
 
-@Priority(55) private final class SimplePriority
+@Priority(55)
+private final class SimplePriority
 {
 }
 
-@Order(50) @Priority(55) private final class OrderAndPriority
+@Order(50)
+@Priority(55)
+private final class OrderAndPriority
 {
 }
 

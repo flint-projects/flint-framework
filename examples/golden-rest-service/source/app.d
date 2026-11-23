@@ -19,16 +19,21 @@ import std.conv : ConvException, to;
 struct User
 {
     /// Database primary key.
-    @Id ulong id;
+    @Id
+    ulong id;
     /// Required display name with explicit SQL and JSON field names.
-    @Column("display_name") @JsonName("displayName") @NotBlank Text displayName;
+    @Column("display_name")
+    @JsonName("displayName")
+    @NotBlank
+    Text displayName;
 }
 
 alias UserRepository = CrudRepository!(User, ulong);
 alias UserBindings = BeanRegistrar!(Bind!(UserRepository, SqlRepository!(User, ulong)));
 
 /// Constructor-injected application service over the repository contract.
-@Service final class UserService
+@Service
+final class UserService
 {
     private UserRepository repository;
     /// Receive the statically registered repository implementation.

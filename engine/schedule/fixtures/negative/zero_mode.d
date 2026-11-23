@@ -10,7 +10,8 @@ import flint.engine.schedule : Scheduled, Scheduler, registerScheduled;
 final class MissingMode
 {
     /// Compile-fail fixture entry.
-    @Scheduled() Error invoke(ref Context context) nothrow @nogc
+    @Scheduled()
+    Error invoke(ref Context context) nothrow @nogc
     {
         return context.check();
     }

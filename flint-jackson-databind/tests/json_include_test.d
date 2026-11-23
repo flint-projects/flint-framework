@@ -40,7 +40,8 @@ private final class SimpleBean
 @JsonInclude(JsonInclude.Include.ALWAYS)  // just to ensure default
 private final class NoNullsBean
 {
-    @JsonInclude(JsonInclude.Include.NON_NULL) string getA()
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    string getA()
     {
         return null;
     }
@@ -95,7 +96,8 @@ private final class MixedBean
         return _a;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL) string getB()
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    string getB()
     {
         return _b;
     }
@@ -123,9 +125,11 @@ private final class ArrayBean
 @JsonPropertyOrder(["i1", "i2"])
 private final class DefaultIntBean
 {
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT) int i1;
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    int i1;
 
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT) Nullable!int i2;
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    Nullable!int i2;
 
     this(int i1, Nullable!int i2)
     {
@@ -138,9 +142,11 @@ private final class DefaultIntBean
 @JsonPropertyOrder(["b1", "b2"])
 private final class DefaultBooleanBean
 {
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT) bool b1; // primitive
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    bool b1; // primitive
 
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT) Nullable!bool b2; // wrapper
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    Nullable!bool b2; // wrapper
 
     this(bool b1, Nullable!bool b2)
     {
@@ -174,7 +180,8 @@ private final class NonDefaultBean4741
 
 private final class NonEmptyString
 {
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) string value;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    string value;
 
     this(string v)
     {
@@ -184,7 +191,8 @@ private final class NonEmptyString
 
 private final class NonEmptyInt
 {
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) int value;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    int value;
 
     this(int v)
     {
@@ -194,7 +202,8 @@ private final class NonEmptyInt
 
 private final class NonEmptyDouble
 {
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) double value;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    double value;
 
     this(double v)
     {
@@ -247,7 +256,8 @@ private final class Issue1327BeanEmpty
 // [databind#1327]
 private final class Issue1327BeanAlways
 {
-    @JsonInclude(JsonInclude.Include.ALWAYS) List!string myList;
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    List!string myList;
 
     this()
     {
@@ -278,7 +288,8 @@ private abstract class Issue1351NonBeanParent
         this.num = num;
     }
 
-    @JsonProperty("num") int getNum() const
+    @JsonProperty("num")
+    int getNum() const
     {
         return num;
     }
@@ -288,7 +299,8 @@ private final class Issue1351NonBean : Issue1351NonBeanParent
 {
     private string str;
 
-    @JsonCreator this(@JsonProperty("num") int num)
+    @JsonCreator
+    this(@JsonProperty("num") int num)
     {
         super(num);
     }

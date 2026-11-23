@@ -23,7 +23,8 @@ import flint.jakarta.validation.constraints : DecimalMin, Min;
 
 private final class IntFoo
 {
-    @DecimalMin("15.0001") int num;
+    @DecimalMin("15.0001")
+    int num;
 
     this(int num)
     {
@@ -33,7 +34,8 @@ private final class IntFoo
 
 private final class DoubleFoo
 {
-    @DecimalMin("15.0001") double num;
+    @DecimalMin("15.0001")
+    double num;
 
     this(double num)
     {

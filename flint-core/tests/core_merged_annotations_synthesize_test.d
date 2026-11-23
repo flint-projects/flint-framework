@@ -70,8 +70,10 @@ private enum RequestMethod
 private struct RequestMapping
 {
     string name;
-    @AliasFor(value : "path") string[] value = [""];
-    @AliasFor(attribute : "value") string[] path = [""];
+    @AliasFor(value : "path")
+    string[] value = [""];
+    @AliasFor(attribute : "value")
+    string[] path = [""];
     RequestMethod[] method;
     // All remaining attributes declare default values that are used solely
     // for the purpose of testing the toString() implementations for annotations.
@@ -92,16 +94,21 @@ private struct RequestMapping
 }
 
 @RequestMapping(method : [RequestMethod.GET], name:
-        "") private struct GetMapping
+        "")
+private struct GetMapping
 {
-    @AliasFor(annotation : classOf!RequestMapping) string value = "";
-    @AliasFor(annotation : classOf!RequestMapping) string path = "";
+    @AliasFor(annotation : classOf!RequestMapping)
+    string value = "";
+    @AliasFor(annotation : classOf!RequestMapping)
+    string path = "";
 }
 
-@Component("webController") private class WebController
+@Component("webController")
+private class WebController
 {
     @RequestMapping(value : ["/test"], name:
-            "foo") void handleMappedWithValueAttribute()
+            "foo")
+    void handleMappedWithValueAttribute()
     {
     }
 
@@ -130,7 +137,9 @@ private struct GeneratedValue
     string strategy;
 }
 
-@Id @GeneratedValue(strategy : "AUTO") private long getId()
+@Id
+@GeneratedValue(strategy : "AUTO")
+private long getId()
 {
     return 42L;
 }
@@ -140,11 +149,13 @@ private struct PlainAttributeMetaAnnotation
     string value = "enigma";
 }
 
-@PlainAttributeMetaAnnotation private struct ComposedPlainAttributeAnnotation
+@PlainAttributeMetaAnnotation
+private struct ComposedPlainAttributeAnnotation
 {
 }
 
-@ComposedPlainAttributeAnnotation private class ComponentWithPlainAttributeMetaAnnotation
+@ComposedPlainAttributeAnnotation
+private class ComponentWithPlainAttributeMetaAnnotation
 {
 }
 
@@ -154,29 +165,37 @@ private struct RootAnnotation
     bool flag = false;
 }
 
-@RootAnnotation private struct ComposedRootAnnotation
+@RootAnnotation
+private struct ComposedRootAnnotation
 {
     @AliasFor(annotation : classOf!RootAnnotation, attribute:
-            "flag") bool enabled = true;
+            "flag")
+    bool enabled = true;
 }
 
-@ComposedRootAnnotation private struct DoublyComposedRootAnnotation
+@ComposedRootAnnotation
+private struct DoublyComposedRootAnnotation
 {
 }
 
 private class DomainType
 {
-    @RootAnnotation Object directlyAnnotated;
+    @RootAnnotation
+    Object directlyAnnotated;
 
-    @ComposedRootAnnotation Object metaAnnotated;
+    @ComposedRootAnnotation
+    Object metaAnnotated;
 
-    @DoublyComposedRootAnnotation Object metaMetaAnnotated;
+    @DoublyComposedRootAnnotation
+    Object metaMetaAnnotated;
 }
 
 private struct TestConfiguration
 {
-    @AliasFor(value : "location") string value = "";
-    @AliasFor(value : "value") string location = "";
+    @AliasFor(value : "location")
+    string value = "";
+    @AliasFor(value : "value")
+    string location = "";
     ClassRef configClass = classOf!Object;
 }
 
@@ -185,86 +204,107 @@ private struct Hierarchy
     TestConfiguration[] value;
 }
 
-@Hierarchy([TestConfiguration("A"), TestConfiguration(location: "B")]) private class HierarchyClass
+@Hierarchy([TestConfiguration("A"), TestConfiguration(location: "B")])
+private class HierarchyClass
 {
 }
 
-@TestConfiguration("simple.xml") private class TestConfigurationClass
+@TestConfiguration("simple.xml")
+private class TestConfigurationClass
 {
 }
 
 private struct CharsContainer
 {
-    @AliasFor(attribute : "chars") const(char)[] value;
-    @AliasFor(attribute : "value") const(char)[] chars;
+    @AliasFor(attribute : "chars")
+    const(char)[] value;
+    @AliasFor(attribute : "value")
+    const(char)[] chars;
 }
 
-@CharsContainer(chars : ['x', 'y', 'z']) private class GroupOfCharsClass
+@CharsContainer(chars : ['x', 'y', 'z'])
+private class GroupOfCharsClass
 {
 }
 
 private struct AliasForWithMissingAttributeDeclaration
 {
-    @AliasFor string foo = "";
+    @AliasFor
+    string foo = "";
 }
 
-@AliasForWithMissingAttributeDeclaration private class AliasForWithMissingAttributeDeclarationClass
+@AliasForWithMissingAttributeDeclaration
+private class AliasForWithMissingAttributeDeclarationClass
 {
 }
 
 private struct AliasForWithDuplicateAttributeDeclaration
 {
     @AliasFor(value : "bar", attribute:
-            "baz") string foo = "";
+            "baz")
+    string foo = "";
 }
 
-@AliasForWithDuplicateAttributeDeclaration private class AliasForWithDuplicateAttributeDeclarationClass
+@AliasForWithDuplicateAttributeDeclaration
+private class AliasForWithDuplicateAttributeDeclarationClass
 {
 }
 
 private struct AliasForNonexistentAttribute
 {
-    @AliasFor(value : "bar") string foo = "";
+    @AliasFor(value : "bar")
+    string foo = "";
 }
 
-@AliasForNonexistentAttribute private class AliasForNonexistentAttributeClass
+@AliasForNonexistentAttribute
+private class AliasForNonexistentAttributeClass
 {
 }
 
 private struct AliasForWithMirroredAliasForWrongAttribute
 {
-    @AliasFor(attribute : "bar") string[] foo = [""];
-    @AliasFor(attribute : "quux") string[] bar = [""];
+    @AliasFor(attribute : "bar")
+    string[] foo = [""];
+    @AliasFor(attribute : "quux")
+    string[] bar = [""];
 }
 
-@AliasForWithMirroredAliasForWrongAttribute private class AliasForWithMirroredAliasForWrongAttributeClass
+@AliasForWithMirroredAliasForWrongAttribute
+private class AliasForWithMirroredAliasForWrongAttributeClass
 {
 }
 
 private struct AliasForAttributeOfDifferentType
 {
-    @AliasFor(value : "bar") string[] foo = [""];
-    @AliasFor(value : "foo") bool bar = true;
+    @AliasFor(value : "bar")
+    string[] foo = [""];
+    @AliasFor(value : "foo")
+    bool bar = true;
 }
 
-@AliasForAttributeOfDifferentType private class AliasForAttributeOfDifferentTypeClass
+@AliasForAttributeOfDifferentType
+private class AliasForAttributeOfDifferentTypeClass
 {
 }
 
 private struct AliasForAttributeWithDifferentDefaultValue
 {
-    @AliasFor(value : "bar") string foo = "X";
-    @AliasFor(value : "foo") string bar = "Z";
+    @AliasFor(value : "bar")
+    string foo = "X";
+    @AliasFor(value : "foo")
+    string bar = "Z";
 }
 
-@AliasForAttributeWithDifferentDefaultValue private class AliasForAttributeWithDifferentDefaultValueClass
+@AliasForAttributeWithDifferentDefaultValue
+private class AliasForAttributeWithDifferentDefaultValueClass
 {
 }
 
 private struct AliasedComposedTestConfigurationNotMetaPresent
 {
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string xmlConfigFile;
+            "location")
+    string xmlConfigFile;
 }
 
 @AliasedComposedTestConfigurationNotMetaPresent(xmlConfigFile : "test.xml")
@@ -272,22 +312,30 @@ private class AliasedComposedTestConfigurationNotMetaPresentClass
 {
 }
 
-@TestConfiguration private struct ImplicitAliasesTestConfiguration
+@TestConfiguration
+private struct ImplicitAliasesTestConfiguration
 {
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string xmlFile = "";
+            "location")
+    string xmlFile = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string groovyScript = "";
+            "location")
+    string groovyScript = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string value = "";
+            "location")
+    string value = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location1 = "";
+            "location")
+    string location1 = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location2 = "";
+            "location")
+    string location2 = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location3 = "";
+            "location")
+    string location3 = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "configClass") ClassRef configClass = classOf!Object;
+            "configClass")
+    ClassRef configClass = classOf!Object;
     string nonAliasedAttribute = "";
 }
 
@@ -296,24 +344,31 @@ private class GroovyImplicitAliasesSimpleTestConfigurationClass
 {
 }
 
-@ImplicitAliasesTestConfiguration(xmlFile : "xmlFile") private class XmlImplicitAliasesTestConfigurationClass
+@ImplicitAliasesTestConfiguration(xmlFile : "xmlFile")
+private class XmlImplicitAliasesTestConfigurationClass
 {
 }
 
-@ImplicitAliasesTestConfiguration(value : "value") private class ValueImplicitAliasesTestConfigurationClass
+@ImplicitAliasesTestConfiguration(value : "value")
+private class ValueImplicitAliasesTestConfigurationClass
 {
 }
 
-@ImplicitAliasesTestConfiguration(location1 : "location1") private class Location1ImplicitAliasesTestConfigurationClass
+@ImplicitAliasesTestConfiguration(location1 : "location1")
+private class Location1ImplicitAliasesTestConfigurationClass
 {
 }
 
-@TestConfiguration private struct ImplicitAliasesWithImpliedAliasNamesOmittedTestConfiguration
+@TestConfiguration
+private struct ImplicitAliasesWithImpliedAliasNamesOmittedTestConfiguration
 {
-    @AliasFor(annotation : classOf!TestConfiguration) string value = "";
-    @AliasFor(annotation : classOf!TestConfiguration) string location = "";
+    @AliasFor(annotation : classOf!TestConfiguration)
+    string value = "";
+    @AliasFor(annotation : classOf!TestConfiguration)
+    string location = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string xmlFile = "";
+            "location")
+    string xmlFile = "";
 }
 
 @ImplicitAliasesWithImpliedAliasNamesOmittedTestConfiguration(value : "value")
@@ -331,12 +386,15 @@ private class XmlFilesImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurati
 {
 }
 
-@TestConfiguration private struct ImplicitAliasesWithDifferentDefaultValuesTestConfiguration
+@TestConfiguration
+private struct ImplicitAliasesWithDifferentDefaultValuesTestConfiguration
 {
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location1 = "foo";
+            "location")
+    string location1 = "foo";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location2 = "bar";
+            "location")
+    string location2 = "bar";
 }
 
 @ImplicitAliasesWithDifferentDefaultValuesTestConfiguration(location1 : "1", location2:
@@ -345,12 +403,15 @@ private class ImplicitAliasesWithDifferentDefaultValuesTestConfigurationClass
 {
 }
 
-@TestConfiguration private struct ImplicitAliasesWithDuplicateValuesTestConfiguration
+@TestConfiguration
+private struct ImplicitAliasesWithDuplicateValuesTestConfiguration
 {
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location1 = "";
+            "location")
+    string location1 = "";
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string location2 = "";
+            "location")
+    string location2 = "";
 }
 
 @ImplicitAliasesWithDuplicateValuesTestConfiguration(location1 : "1", location2:
@@ -359,12 +420,15 @@ private class ImplicitAliasesWithDuplicateValuesTestConfigurationClass
 {
 }
 
-@TestConfiguration private struct ImplicitAliasesForAliasPairTestConfiguration
+@TestConfiguration
+private struct ImplicitAliasesForAliasPairTestConfiguration
 {
     @AliasFor(annotation : classOf!TestConfiguration, attribute:
-            "location") string xmlFile = "";
+            "location")
+    string xmlFile = "";
     @AliasFor(annotation : classOf!TestConfiguration, value:
-            "value") string groovyScript = "";
+            "value")
+    string groovyScript = "";
 }
 
 @ImplicitAliasesForAliasPairTestConfiguration(xmlFile : "test.xml")
@@ -372,12 +436,15 @@ private class ImplicitAliasesForAliasPairTestConfigurationClass
 {
 }
 
-@ImplicitAliasesTestConfiguration private struct TransitiveImplicitAliasesTestConfiguration
+@ImplicitAliasesTestConfiguration
+private struct TransitiveImplicitAliasesTestConfiguration
 {
     @AliasFor(annotation : classOf!ImplicitAliasesTestConfiguration, attribute:
-            "xmlFile") string xml = "";
+            "xmlFile")
+    string xml = "";
     @AliasFor(annotation : classOf!ImplicitAliasesTestConfiguration, attribute:
-            "groovyScript") string groovy = "";
+            "groovyScript")
+    string groovy = "";
 }
 
 @TransitiveImplicitAliasesTestConfiguration(xml : "test.xml")
@@ -387,7 +454,8 @@ private class ImplicitAliasesForAliasPairTestConfigurationClass
     }
 }
 
-@ImplicitAliasesForAliasPairTestConfiguration private struct TransitiveImplicitAliasesForAliasPairTestConfiguration
+@ImplicitAliasesForAliasPairTestConfiguration
+private struct TransitiveImplicitAliasesForAliasPairTestConfiguration
 {
     @AliasFor(annotation : classOf!ImplicitAliasesForAliasPairTestConfiguration, attribute:
             "xmlFile")
@@ -409,12 +477,15 @@ private struct Filter
 
 private struct ComponentScan
 {
-    @AliasFor(value : "basePackages") string[] value;
-    @AliasFor(value : "value") string[] basePackages;
+    @AliasFor(value : "basePackages")
+    string[] value;
+    @AliasFor(value : "value")
+    string[] basePackages;
     Filter[] excludeFilters;
 }
 
-@ComponentScan(excludeFilters : [Filter(pattern: "*Foo"), Filter(pattern: "*Bar")]) private class ComponentScanClass
+@ComponentScan(excludeFilters : [Filter(pattern: "*Foo"), Filter(pattern: "*Bar")])
+private class ComponentScanClass
 {
 }
 
@@ -423,7 +494,8 @@ private struct ComponentScanSingleFilter
     Filter value;
 }
 
-@ComponentScanSingleFilter(Filter(pattern: "*Foo")) private class ComponentScanSingleFilterClass
+@ComponentScanSingleFilter(Filter(pattern: "*Foo"))
+private class ComponentScanSingleFilterClass
 {
 }
 
@@ -435,34 +507,44 @@ private struct AnnotationWithDefaults
 }
 
 @TestConfiguration(value : "foo", location:
-        "bar") private interface TestConfigurationMismatch
+        "bar")
+private interface TestConfigurationMismatch
 {
 }
 
 private struct TestPropertySource
 {
-    @AliasFor(value : "locations") string[] value;
-    @AliasFor(value : "value") string[] locations;
+    @AliasFor(value : "locations")
+    string[] value;
+    @AliasFor(value : "value")
+    string[] locations;
 }
 
 private struct ContextConfiguration
 {
-    @AliasFor(attribute : "locations") string[] value;
-    @AliasFor(attribute : "value") string[] locations;
+    @AliasFor(attribute : "locations")
+    string[] value;
+    @AliasFor(attribute : "value")
+    string[] locations;
     ClassRef[] classes;
 }
 
-@ContextConfiguration private struct SpringApplicationConfiguration
+@ContextConfiguration
+private struct SpringApplicationConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] locations;
+            "locations")
+    string[] locations;
     // Do NOT use @AliasFor(annotation = ...)
-    @AliasFor(value : "value") ClassRef[] classes;
+    @AliasFor(value : "value")
+    ClassRef[] classes;
     // Do NOT use @AliasFor(annotation = ...)
-    @AliasFor(value : "classes") ClassRef[] value;
+    @AliasFor(value : "classes")
+    ClassRef[] value;
 }
 
-@SpringApplicationConfiguration(value : [classOf!Number]) private class SpringApplicationConfigurationClass
+@SpringApplicationConfiguration(value : [classOf!Number])
+private class SpringApplicationConfigurationClass
 {
 }
 

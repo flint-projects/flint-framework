@@ -23,7 +23,9 @@ private class Base : Repository
 {
 }
 
-@Service("owners") @GetMapping("/owners") private class OwnerService : Base
+@Service("owners")
+@GetMapping("/owners")
+private class OwnerService : Base
 {
     string city = "Madison";
     int visits;
@@ -598,11 +600,13 @@ unittest
 }
 
 /// An interface and a base class carrying annotations, for the supertype aggregates (contract 3).
-@Component("api") private interface AnnotatedApi
+@Component("api")
+private interface AnnotatedApi
 {
 }
 
-@Service("base") private class AnnotatedBase
+@Service("base")
+private class AnnotatedBase
 {
 }
 
@@ -627,7 +631,8 @@ unittest
 private struct Misconfigured
 {
     @AliasFor(attribute : "a", value:
-            "b") string a;
+            "b")
+    string a;
 }
 
 unittest

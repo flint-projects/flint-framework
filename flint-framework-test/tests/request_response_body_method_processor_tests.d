@@ -770,7 +770,8 @@ unittest
         }) !is null);
 }
 
-@RequestMapping private imported!"flint.java.io".OutputStream handleAndReturnOutputStream()
+@RequestMapping
+private imported!"flint.java.io".OutputStream handleAndReturnOutputStream()
 {
     return null;
 }
@@ -1226,8 +1227,10 @@ version (FlintJacksonJsonView)
 
     private class JacksonViewBean
     {
-        @JsonView(classOf!MyJacksonView1) private string withView1;
-        @JsonView(classOf!MyJacksonView2) private string withView2;
+        @JsonView(classOf!MyJacksonView1)
+        private string withView1;
+        @JsonView(classOf!MyJacksonView2)
+        private string withView2;
         private string withoutView;
 
         string getWithView1()
@@ -1332,7 +1335,9 @@ version (FlintJacksonGenericTypes)
 
     private class BaseController(T)
     {
-        @RequestMapping @ResponseBody List!T handleTypeInfoList()
+        @RequestMapping
+        @ResponseBody
+        List!T handleTypeInfoList()
         {
             return Arrays.asList!T(cast(T) new Foo("foo"), cast(T) new Bar("bar"));
         }
@@ -1570,22 +1575,27 @@ private class SimpleBean : Identifiable
     }
 }
 
-@ResponseBody private class ResponseBodyController
+@ResponseBody
+private class ResponseBodyController
 {
-    @RequestMapping string handle()
+    @RequestMapping
+    string handle()
     {
         return "hello";
     }
 
-    @RequestMapping string handleWithCharSequence()
+    @RequestMapping
+    string handleWithCharSequence()
     {
         return null;
     }
 }
 
-@RestController private class TestRestController
+@RestController
+private class TestRestController
 {
-    @RequestMapping string handle()
+    @RequestMapping
+    string handle()
     {
         return "hello";
     }
@@ -1605,7 +1615,10 @@ private class JacksonController : JacksonControllerBase
         import flint.jackson.annotation : JsonView;
         import flint.java.lang : classOf;
 
-        @RequestMapping @ResponseBody @JsonView(classOf!MyJacksonView2) JacksonViewBean handleResponseBody()
+        @RequestMapping
+        @ResponseBody
+        @JsonView(classOf!MyJacksonView2)
+        JacksonViewBean handleResponseBody()
         {
             auto bean = new JacksonViewBean();
             bean.setWithView1("with");
@@ -1614,7 +1627,9 @@ private class JacksonController : JacksonControllerBase
             return bean;
         }
 
-        @RequestMapping @JsonView(classOf!MyJacksonView2) ResponseEntity handleResponseEntity()
+        @RequestMapping
+        @JsonView(classOf!MyJacksonView2)
+        ResponseEntity handleResponseEntity()
         {
             auto bean = new JacksonViewBean();
             bean.setWithView1("with");
@@ -1623,20 +1638,24 @@ private class JacksonController : JacksonControllerBase
             return ResponseEntity.of(bean, HttpStatus.OK);
         }
 
-        @RequestMapping @ResponseBody JacksonViewBean handleRequestBody(
-                @JsonView(classOf!MyJacksonView1) @RequestBody JacksonViewBean bean)
+        @RequestMapping
+        @ResponseBody
+        JacksonViewBean handleRequestBody(@JsonView(classOf!MyJacksonView1) @RequestBody JacksonViewBean bean)
         {
             return bean;
         }
 
-        @RequestMapping @ResponseBody JacksonViewBean handleHttpEntity(
-                @JsonView(classOf!MyJacksonView1) HttpEntity entity)
+        @RequestMapping
+        @ResponseBody
+        JacksonViewBean handleHttpEntity(@JsonView(classOf!MyJacksonView1) HttpEntity entity)
         {
             return entity.getBody!JacksonViewBean();
         }
     }
 
-    @RequestMapping @ResponseBody Identifiable handleSubType()
+    @RequestMapping
+    @ResponseBody
+    Identifiable handleSubType()
     {
         auto foo = new SimpleBean();
         foo.setId(123L);
@@ -1644,7 +1663,9 @@ private class JacksonController : JacksonControllerBase
         return foo;
     }
 
-    @RequestMapping @ResponseBody List!Identifiable handleSubTypeList()
+    @RequestMapping
+    @ResponseBody
+    List!Identifiable handleSubTypeList()
     {
         auto foo = new SimpleBean();
         foo.setId(123L);
@@ -1655,7 +1676,9 @@ private class JacksonController : JacksonControllerBase
         return Arrays.asList!Identifiable(foo, bar);
     }
 
-    @RequestMapping(produces : [MediaType.APPLICATION_JSON_VALUE]) @ResponseBody string defaultCharset()
+    @RequestMapping(produces : [MediaType.APPLICATION_JSON_VALUE])
+    @ResponseBody
+    string defaultCharset()
     {
         return "foo";
     }

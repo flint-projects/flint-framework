@@ -16,10 +16,12 @@ private struct Note
 {
     ulong id;
     string title;
-    @JsonName("body_text") string body;
+    @JsonName("body_text")
+    string body;
     Priority priority;
     string[] tags;
-    @JsonIgnore string secret;
+    @JsonIgnore
+    string secret;
 }
 
 private struct NewNote

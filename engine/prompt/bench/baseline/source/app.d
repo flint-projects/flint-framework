@@ -13,7 +13,8 @@ import prompt_replay : capacity, choices, decimal, fields, filter, parseDecimal,
 
 private struct Required
 {
-    @NotBlank string value;
+    @NotBlank
+    string value;
 }
 
 private ulong form()

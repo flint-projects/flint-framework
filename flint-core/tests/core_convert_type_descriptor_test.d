@@ -66,11 +66,13 @@ private struct MethodAnnotation3
 {
 }
 
-@MethodAnnotation1 private struct ComposedMethodAnnotation1
+@MethodAnnotation1
+private struct ComposedMethodAnnotation1
 {
 }
 
-@ComposedMethodAnnotation1 private struct ComposedComposedMethodAnnotation1
+@ComposedMethodAnnotation1
+private struct ComposedComposedMethodAnnotation1
 {
 }
 
@@ -124,9 +126,12 @@ private final class Fields
     Map!(string, List!int) nestedMapField;
     Map!(List!int, List!long) fieldMap;
     List!(Map!(int, string)) test4;
-    @FieldAnnotation List!string fieldAnnotated;
-    @FieldAnnotation List!(List!int) listPreserveContext;
-    @FieldAnnotation Map!(List!int, List!int) mapPreserveContext;
+    @FieldAnnotation
+    List!string fieldAnnotated;
+    @FieldAnnotation
+    List!(List!int) listPreserveContext;
+    @FieldAnnotation
+    Map!(List!int, List!int) mapPreserveContext;
     List!NumberValue isAssignableElementTypes;
     Map!(const(char)[], NumberValue) isAssignableMapKeyValueTypes;
     MultiValueMap!(string, int) multiValueMap;
@@ -138,7 +143,8 @@ version (FlintTypeDescriptorSources) // no TypeDescriptor from a MethodParameter
     /// The methods of Java's test class (methods designed for test introspection).
     private class Methods
     {
-        @MethodAnnotation3 private Map!(List!int, List!long) property_;
+        @MethodAnnotation3
+        private Map!(List!int, List!long) property_;
 
         void testParameterPrimitive(int primitive)
         {
@@ -194,25 +200,30 @@ version (FlintTypeDescriptorSources) // no TypeDescriptor from a MethodParameter
             return null;
         }
 
-        @MethodAnnotation1 Map!(List!int, List!long) getProperty()
+        @MethodAnnotation1
+        Map!(List!int, List!long) getProperty()
         {
             return property_;
         }
 
-        @MethodAnnotation2 void setProperty(Map!(List!int, List!long) property)
+        @MethodAnnotation2
+        void setProperty(Map!(List!int, List!long) property)
         {
             property_ = property;
         }
 
-        @MethodAnnotation1 void methodWithLocalAnnotation()
+        @MethodAnnotation1
+        void methodWithLocalAnnotation()
         {
         }
 
-        @ComposedMethodAnnotation1 void methodWithComposedAnnotation()
+        @ComposedMethodAnnotation1
+        void methodWithComposedAnnotation()
         {
         }
 
-        @ComposedComposedMethodAnnotation1 void methodWithComposedComposedAnnotation()
+        @ComposedComposedMethodAnnotation1
+        void methodWithComposedComposedAnnotation()
         {
         }
 
@@ -240,7 +251,8 @@ version (FlintTypeDescriptorSources) // no TypeDescriptor from a MethodParameter
         {
         }
 
-        @MethodAnnotation1 List!T getListProperty()
+        @MethodAnnotation1
+        List!T getListProperty()
         {
             return null;
         }

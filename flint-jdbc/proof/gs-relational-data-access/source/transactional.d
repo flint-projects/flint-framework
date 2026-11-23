@@ -33,13 +33,15 @@ class CustomerService
     }
 
     /// Insert every name in one transaction.
-    @Transactional void insertAll(string[][] names)
+    @Transactional
+    void insertAll(string[][] names)
     {
         jdbcTemplate.batchUpdate("INSERT INTO customers(first_name, last_name) VALUES (?,?)", names);
     }
 
     /// Insert a name, then fail: the transaction rolls back.
-    @Transactional void insertThenFail(string firstName, string lastName)
+    @Transactional
+    void insertThenFail(string firstName, string lastName)
     {
         jdbcTemplate.update("INSERT INTO customers(first_name, last_name) VALUES (?,?)", firstName, lastName);
         throw new RuntimeException("Simulated failure after the insert");

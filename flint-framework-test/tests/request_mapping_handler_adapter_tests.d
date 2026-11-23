@@ -102,7 +102,8 @@ version (RequestMappingHandlerAdapterFixture)
         import flint.ui : Model;
         import flint.web.bind.annotation : ModelAttribute, RequestBody, ResponseBody;
 
-        @ModelAttribute void addAttributes(Model model)
+        @ModelAttribute
+        void addAttributes(Model model)
         {
             model.addAttribute("attr1", Any.of("lAttr1"));
         }
@@ -122,7 +123,8 @@ version (RequestMappingHandlerAdapterFixture)
             return ResponseEntity.of("body", HttpStatus.BAD_REQUEST);
         }
 
-        @ResponseBody string handleBody(@RequestBody(false) Map!(string, string) body_)
+        @ResponseBody
+        string handleBody(@RequestBody(false) Map!(string, string) body_)
         {
             return "Body: " ~ (body_ is null ? "null" : body_.toString());
         }
@@ -403,9 +405,11 @@ version (FlintModelAttributeMethods)
         assert(mav.getModel().get("attr3").isNull());
     }
 
-    @ControllerAdvice private class ModelAttributeAdvice
+    @ControllerAdvice
+    private class ModelAttributeAdvice
     {
-        @ModelAttribute void addAttributes(Model model)
+        @ModelAttribute
+        void addAttributes(Model model)
         {
             model.addAttribute("attr1", Any.of("gAttr1"));
             model.addAttribute("attr2", Any.of("gAttr2"));
@@ -417,7 +421,8 @@ version (FlintModelAttributeMethods)
     @ControllerAdvice(["flint.web", "object"])
     private class ModelAttributePackageAdvice
     {
-        @ModelAttribute void addAttributes(Model model)
+        @ModelAttribute
+        void addAttributes(Model model)
         {
             model.addAttribute("attr2", Any.of("gAttr2"));
         }
@@ -426,7 +431,8 @@ version (FlintModelAttributeMethods)
     @ControllerAdvice("object")
     private class ModelAttributeNotUsedPackageAdvice
     {
-        @ModelAttribute void addAttributes(Model model)
+        @ModelAttribute
+        void addAttributes(Model model)
         {
             model.addAttribute("attr3", Any.of("gAttr3"));
         }
@@ -473,7 +479,8 @@ version (FlintResponseBodyAdvice)
     advice implementing both `ResponseBodyAdvice` and `RequestBodyAdvice` does not get registered twice
     (gh-22638).
     +/
-    @ControllerAdvice private class ResponseCodeSuppressingAdvice : ResponseBodyAdvice, RequestBodyAdvice
+    @ControllerAdvice
+    private class ResponseCodeSuppressingAdvice : ResponseBodyAdvice, RequestBodyAdvice
     {
         bool supports(MethodParameter returnType, string converterType)
         {
@@ -544,7 +551,8 @@ version (FlintRequestBodyAdvice)
         assert(f.response.getContentAsString() == "Body: {foo=bar}");
     }
 
-    @ControllerAdvice private class EmptyBodyAdvice : RequestBodyAdvice
+    @ControllerAdvice
+    private class EmptyBodyAdvice : RequestBodyAdvice
     {
         bool supports(MethodParameter param, string targetType, string type)
         {

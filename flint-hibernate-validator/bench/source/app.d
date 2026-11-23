@@ -22,8 +22,10 @@ private enum Size cityLength = () { Size size; size.min = 2; size.max = 30; retu
 
 private final class Owner
 {
-    @NotBlank string firstName;
-    @cityLength string city;
+    @NotBlank
+    string firstName;
+    @cityLength
+    string city;
 
     this(string firstName, string city)
     {

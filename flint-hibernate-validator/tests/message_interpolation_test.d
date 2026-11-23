@@ -51,33 +51,38 @@ private final class AllowedValuesValidator : ConstraintValidator!(AllowedValues,
 // Foo's getBar() in group Bar.
 private final class FooBar
 {
-    @NotNull(message : "{bar}") string bar = null;
+    @NotNull(message : "{bar}")
+    string bar = null;
 }
 
 // Foo's getBaz() in group Baz.
 private final class FooBaz
 {
     @Min(value : 5, message:
-            "{baz}") int baz = 0;
+            "{baz}")
+    int baz = 0;
 }
 
 // Foo's getBuz() in group Buz.
 private final class FooBuz
 {
-    @AllowedValues(values : ["bar", "baz", "qux"]) string buz = "buz";
+    @AllowedValues(values : ["bar", "baz", "qux"])
+    string buz = "buz";
 }
 
 // Foo's getQux() in group Qux.
 private final class FooQux
 {
-    @NotNull(message : "{qux}") string qux = null;
+    @NotNull(message : "{qux}")
+    string qux = null;
 }
 
 // Foo's getZap() in group Zap.
 private final class FooZap
 {
     @Min(value : 10, message:
-            "{zap}") int zap = 0;
+            "{zap}")
+    int zap = 0;
 }
 
 private Validator createValidator()

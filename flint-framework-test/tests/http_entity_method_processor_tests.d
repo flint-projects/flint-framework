@@ -322,7 +322,9 @@ version (FlintJacksonGenericTypes)
 
     private class JacksonController
     {
-        @RequestMapping @ResponseBody HttpEntity handleList()
+        @RequestMapping
+        @ResponseBody
+        HttpEntity handleList()
         {
             import flint.java.util : ArrayList;
 

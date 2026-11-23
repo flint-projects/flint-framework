@@ -31,15 +31,23 @@ import flint.jakarta.validation.constraints : DecimalMax, DecimalMin, Digits, Ma
 
 private final class B
 {
-    @PositiveOrZero double pz = -0.0;
-    @Negative double neg = -0.0;
-    @Min(0) double min0 = -0.0;
-    @Min(16_777_217) float minF = 16_777_216f;
+    @PositiveOrZero
+    double pz = -0.0;
+    @Negative
+    double neg = -0.0;
+    @Min(0)
+    double min0 = -0.0;
+    @Min(16_777_217)
+    float minF = 16_777_216f;
     @Digits(integer : 1, fraction:
-            1) string digitsText = "1.10";
-    @Max(10) string maxText = " 5";
-    @DecimalMin("0.1") float decF = 0.1f;
-    @DecimalMax("9223372036854775806") long decL = long.max;
+            1)
+    string digitsText = "1.10";
+    @Max(10)
+    string maxText = " 5";
+    @DecimalMin("0.1")
+    float decF = 0.1f;
+    @DecimalMax("9223372036854775806")
+    long decL = long.max;
 }
 
 @("number constraints follow Double.compare, Float.compare and BigDecimal, as Hibernate does")

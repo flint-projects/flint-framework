@@ -83,7 +83,8 @@ private final class UnwrappedChild
 @JsonIgnoreProperties(ignoreUnknown : true)
 private final class IgnoreUnknownUnwrapped
 {
-    @JsonUnwrapped UnwrappedChild child;
+    @JsonUnwrapped
+    UnwrappedChild child;
 }
 
 @JsonIgnoreProperties(["a", "d"])
@@ -93,9 +94,11 @@ private final class IgnoreMap : HashMap!(string, Any)
 
 private final class ImplicitIgnores
 {
-    @JsonIgnore int a;
+    @JsonIgnore
+    int a;
 
-    @JsonIgnore void setB(int)
+    @JsonIgnore
+    void setB(int)
     {
     }
 
@@ -109,7 +112,8 @@ private final class YZ
 
 private final class XYZWrapper1
 {
-    @JsonIgnoreProperties(["x"]) YZ value;
+    @JsonIgnoreProperties(["x"])
+    YZ value;
 }
 
 @JsonIgnoreProperties(["z"])
@@ -120,12 +124,14 @@ private final class X
 
 private final class XYZWrapper2
 {
-    @JsonIgnoreProperties(["y"]) X value;
+    @JsonIgnoreProperties(["y"])
+    X value;
 }
 
 private final class MapWithoutX
 {
-    @JsonIgnoreProperties(["x"]) Map!(string, int) values;
+    @JsonIgnoreProperties(["x"])
+    Map!(string, int) values;
 }
 
 // [databind#987]
@@ -313,12 +319,14 @@ version (FlintJacksonAnySetter)
             props = new HashMap!(string, Any)();
         }
 
-        @JsonAnySetter void addProperty(string key, Any value)
+        @JsonAnySetter
+        void addProperty(string key, Any value)
         {
             props.put(key, value);
         }
 
-        @JsonAnyGetter Map!(string, Any) getProperties()
+        @JsonAnyGetter
+        Map!(string, Any) getProperties()
         {
             return props;
         }

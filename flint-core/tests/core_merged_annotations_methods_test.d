@@ -38,7 +38,8 @@ private struct Indexed
 }
 
 /// Spring's `org.springframework.core.testfixture.stereotype.Component`.
-@Indexed private struct Component
+@Indexed
+private struct Component
 {
     string value;
 }
@@ -50,28 +51,37 @@ private struct Transactional
     bool readOnly;
 }
 
-@Component("meta1") @Order private struct Meta1
+@Component("meta1")
+@Order
+private struct Meta1
 {
 }
 
-@Component("meta2") @Transactional(readOnly : true) private struct Meta2
+@Component("meta2")
+@Transactional(readOnly : true)
+private struct Meta2
 {
 }
 
-@Meta2 private struct MetaMeta
+@Meta2
+private struct MetaMeta
 {
 }
 
-@Transactional private interface InterfaceWithInheritedAnnotation
+@Transactional
+private interface InterfaceWithInheritedAnnotation
 {
-    @Order void handleFromInterface();
+    @Order
+    void handleFromInterface();
 }
 
 private abstract class AbstractClassWithInheritedAnnotation(T) : InterfaceWithInheritedAnnotation
 {
-    @Transactional abstract void handle();
+    @Transactional
+    abstract void handle();
 
-    @Transactional void handleParameterized(T t)
+    @Transactional
+    void handleParameterized(T t)
     {
     }
 }
@@ -99,7 +109,8 @@ private struct TestAnnotation1
 /// `AnnotationsScannerTests.Hello1`.
 private interface Hello1
 {
-    @TestAnnotation1 void method();
+    @TestAnnotation1
+    void method();
 }
 
 /// `AnnotationsScannerTests.Hello2`.
@@ -117,16 +128,19 @@ private class Hello2Impl : Hello2
 
 private interface AnnotatedInterface
 {
-    @Order(0) void fromInterfaceImplementedByRoot();
+    @Order(0)
+    void fromInterfaceImplementedByRoot();
 }
 
 private class Root : AnnotatedInterface
 {
-    @Order(27) void annotatedOnRoot()
+    @Order(27)
+    void annotatedOnRoot()
     {
     }
 
-    @Meta1 void metaAnnotatedOnRoot()
+    @Meta1
+    void metaAnnotatedOnRoot()
     {
     }
 
@@ -134,7 +148,8 @@ private class Root : AnnotatedInterface
     {
     }
 
-    @Order(27) void overrideWithoutNewAnnotation()
+    @Order(27)
+    void overrideWithoutNewAnnotation()
     {
     }
 
@@ -149,19 +164,23 @@ private class Root : AnnotatedInterface
 
 private class Leaf : Root
 {
-    @Order(25) void annotatedOnLeaf()
+    @Order(25)
+    void annotatedOnLeaf()
     {
     }
 
-    @Meta1 void metaAnnotatedOnLeaf()
+    @Meta1
+    void metaAnnotatedOnLeaf()
     {
     }
 
-    @MetaMeta void metaMetaAnnotatedOnLeaf()
+    @MetaMeta
+    void metaMetaAnnotatedOnLeaf()
     {
     }
 
-    @Order(1) override void overrideToAnnotate()
+    @Order(1)
+    override void overrideToAnnotate()
     {
     }
 
@@ -172,19 +191,22 @@ private class Leaf : Root
 
 private abstract class SimpleGeneric(T)
 {
-    @Order(1) abstract void something(T arg);
+    @Order(1)
+    abstract void something(T arg);
 }
 
 private class TransactionalStringGeneric : SimpleGeneric!string
 {
-    @Transactional override void something(string arg)
+    @Transactional
+    override void something(string arg)
     {
     }
 }
 
 private interface InterfaceWithAnnotatedMethod
 {
-    @Order void foo();
+    @Order
+    void foo();
 }
 
 private class ImplementsInterfaceWithAnnotatedMethod : InterfaceWithAnnotatedMethod
@@ -214,7 +236,8 @@ private class SubOfAbstractImplementsInterfaceWithAnnotatedMethod : AbstractDoes
 
 private interface InterfaceWithGenericAnnotatedMethod(T)
 {
-    @Order void foo(T t);
+    @Order
+    void foo(T t);
 }
 
 private class ImplementsInterfaceWithGenericAnnotatedMethod : InterfaceWithGenericAnnotatedMethod!string
@@ -226,7 +249,8 @@ private class ImplementsInterfaceWithGenericAnnotatedMethod : InterfaceWithGener
 
 private abstract class BaseClassWithGenericAnnotatedMethod(T)
 {
-    @Order abstract void foo(T t);
+    @Order
+    abstract void foo(T t);
 }
 
 private class ExtendsBaseClassWithGenericAnnotatedMethod : BaseClassWithGenericAnnotatedMethod!string
@@ -238,7 +262,8 @@ private class ExtendsBaseClassWithGenericAnnotatedMethod : BaseClassWithGenericA
 
 private interface GenericInterface(A, B)
 {
-    @Transactional void processOneAndTwo(A value1, B value2);
+    @Transactional
+    void processOneAndTwo(A value1, B value2);
 }
 
 private abstract class GenericAbstractSuperclass(C) : GenericInterface!(long, C)

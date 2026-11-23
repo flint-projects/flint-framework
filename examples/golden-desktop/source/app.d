@@ -61,7 +61,8 @@ struct Report
 }
 
 /// Counter commands; every change is pushed to the frontend as an event.
-@DesktopCommands struct Counter
+@DesktopCommands
+struct Counter
 {
     /// Current value, owned by the UI thread.
     long value;
@@ -87,7 +88,8 @@ struct Report
 }
 
 /// Greeting command building its reply in the invocation arena.
-@DesktopCommands struct Greeter
+@DesktopCommands
+struct Greeter
 {
     /// Reply "Hello, <name>!" for a name of 1–64 bytes.
     @Command("greet")
@@ -113,7 +115,8 @@ struct Report
 }
 
 /// Session lifecycle: frontend readiness and the self-test report.
-@DesktopCommands struct Session
+@DesktopCommands
+struct Session
 {
     /// The frontend loaded and installed its listeners.
     bool ready;

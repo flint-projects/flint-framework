@@ -30,7 +30,8 @@ import std.typecons : Nullable;
 private final class Wrapper
 {
     @JsonFormat(pattern : "yyyy_MM_dd'T'HH:mmZ", shape:
-            JsonFormat.Shape.STRING) LocalDate value;
+            JsonFormat.Shape.STRING)
+    LocalDate value;
 
     this()
     {
@@ -44,7 +45,8 @@ private final class Wrapper
 
 private final class ShapeWrapper
 {
-    @JsonFormat(shape : JsonFormat.Shape.NUMBER_INT) LocalDate date;
+    @JsonFormat(shape : JsonFormat.Shape.NUMBER_INT)
+    LocalDate date;
 
     this()
     {
@@ -59,7 +61,8 @@ private final class ShapeWrapper
 private final class StrictWrapperWithFormat
 {
     @JsonFormat(pattern : "yyyy-MM-dd", lenient:
-            OptBoolean.FALSE) LocalDate value;
+            OptBoolean.FALSE)
+    LocalDate value;
 
     this()
     {
@@ -74,7 +77,8 @@ private final class StrictWrapperWithFormat
 private final class StrictWrapperWithYearOfEra
 {
     @JsonFormat(pattern : "yyyy-MM-dd G", lenient:
-            OptBoolean.FALSE) LocalDate value;
+            OptBoolean.FALSE)
+    LocalDate value;
 
     this()
     {
@@ -89,7 +93,8 @@ private final class StrictWrapperWithYearOfEra
 private final class StrictWrapperWithYearWithoutEra
 {
     @JsonFormat(pattern : "uuuu-MM-dd", lenient:
-            OptBoolean.FALSE) LocalDate value;
+            OptBoolean.FALSE)
+    LocalDate value;
 
     this()
     {

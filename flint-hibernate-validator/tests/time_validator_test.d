@@ -20,10 +20,14 @@ import flint.java.time : Instant, LocalDateTime, ZoneOffset, ZonedDateTime;
 
 private final class DateHolder
 {
-    @Past ZonedDateTime calendarWithPastDate;
-    @Future ZonedDateTime calendarWithFutureDate;
-    @Past Instant past;
-    @Past Instant future;
+    @Past
+    ZonedDateTime calendarWithPastDate;
+    @Future
+    ZonedDateTime calendarWithFutureDate;
+    @Past
+    Instant past;
+    @Past
+    Instant future;
 
     this()
     {

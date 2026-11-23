@@ -14,10 +14,13 @@ private void emit(scope const(char)[] text) nothrow @nogc
     fputc('\n', stdout);
 }
 
-@JsonPropertyOrder(["id", "name"]) private struct Owner
+@JsonPropertyOrder(["id", "name"])
+private struct Owner
 {
-    @JsonProperty("owner_id") long id;
-    @JsonIgnore string password;
+    @JsonProperty("owner_id")
+    long id;
+    @JsonIgnore
+    string password;
 }
 
 int main(string[] args)

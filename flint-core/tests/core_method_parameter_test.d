@@ -41,12 +41,14 @@ private int method(string str, long lng)
     return 42;
 }
 
-@Nullable private string jspecifyNullableMethod(@Nullable string nullableParameter, string nonNullParameter)
+@Nullable
+private string jspecifyNullableMethod(@Nullable string nullableParameter, string nonNullParameter)
 {
     return nullableParameter;
 }
 
-@Nullable private string springNullableMethod(@Nullable string nullableParameter, string nonNullParameter)
+@Nullable
+private string springNullableMethod(@Nullable string nullableParameter, string nonNullParameter)
 {
     return nullableParameter;
 }

@@ -8,11 +8,13 @@ import flint.engine.web : Get, RestController, Server, registerController;
 @RestController("/orders")
 private struct Orders
 {
-    @Get("/:id") void primary() nothrow @nogc
+    @Get("/:id")
+    void primary() nothrow @nogc
     {
     }
 
-    @Get("/:order") void duplicate() nothrow @nogc
+    @Get("/:order")
+    void duplicate() nothrow @nogc
     {
     }
 }

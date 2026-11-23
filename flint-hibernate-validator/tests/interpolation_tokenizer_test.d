@@ -24,7 +24,8 @@ private string interpolated(string template_)()
     static final class Bean
     {
         @Size(min : 2, message:
-                template_) string v = "x";
+                template_)
+        string v = "x";
     }
 
     auto violations = validatorFor!Bean().validate(new Bean());

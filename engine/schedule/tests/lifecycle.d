@@ -82,7 +82,8 @@ private final class Component
 {
     int calls;
 
-    @Scheduled(null, 10) Error step(ref Context context) nothrow @nogc
+    @Scheduled(null, 10)
+    Error step(ref Context context) nothrow @nogc
     {
         ++calls;
         return context.check();
@@ -311,7 +312,8 @@ private struct Counter
     int calls;
     int* mirror;
 
-    @Scheduled(null, 10) Error tick(ref Context context) nothrow @nogc
+    @Scheduled(null, 10)
+    Error tick(ref Context context) nothrow @nogc
     {
         *mirror = ++calls;
         return context.check();
@@ -322,7 +324,9 @@ private final class Flaky
 {
     int calls;
 
-    @Scheduled(null, 10) @Retryable(3, 0, 0) Error tick(ref Context) nothrow @nogc
+    @Scheduled(null, 10)
+    @Retryable(3, 0, 0)
+    Error tick(ref Context) nothrow @nogc
     {
         return ++calls < 3 ? Error(Status.unavailable) : Error.init;
     }
@@ -330,12 +334,14 @@ private final class Flaky
 
 private final class Pair
 {
-    @Scheduled(null, 10) Error first(ref Context context) nothrow @nogc
+    @Scheduled(null, 10)
+    Error first(ref Context context) nothrow @nogc
     {
         return context.check();
     }
 
-    @Scheduled(null, 20) Error second(ref Context context) nothrow @nogc
+    @Scheduled(null, 20)
+    Error second(ref Context context) nothrow @nogc
     {
         return context.check();
     }

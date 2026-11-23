@@ -16,7 +16,8 @@ import flint.jakarta.validation.executable : ExecutableValidator;
 
 private final class Owner
 {
-    @NotBlank string firstName;
+    @NotBlank
+    string firstName;
 
     this(string firstName)
     {

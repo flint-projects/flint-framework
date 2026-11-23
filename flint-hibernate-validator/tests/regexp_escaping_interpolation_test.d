@@ -20,7 +20,8 @@ private enum REGEXP_CONTAINING_SPECIAL_CHARACTERS = "[{0-9]{1,160}$";
 
 private final class PatternWithCharactersUsedForInterpolationEntity
 {
-    @Pattern(regexp : REGEXP_CONTAINING_SPECIAL_CHARACTERS) string field;
+    @Pattern(regexp : REGEXP_CONTAINING_SPECIAL_CHARACTERS)
+    string field;
 
     this(string field)
     {

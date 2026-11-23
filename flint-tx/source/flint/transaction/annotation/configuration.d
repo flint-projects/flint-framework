@@ -62,18 +62,23 @@ abstract class AbstractTransactionManagementConfiguration
 `@Configuration` class that registers the Spring infrastructure beans necessary to enable proxy-based
 annotation-driven transaction management.
 +/
-@Configuration(proxyBeanMethods : false) @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+@Configuration(proxyBeanMethods : false)
+@Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 class ProxyTransactionManagementConfiguration : AbstractTransactionManagementConfiguration
 {
     /// The source of `@Transactional` attributes.
-    @Bean @Role(BeanDefinition.ROLE_INFRASTRUCTURE) TransactionAttributeSource transactionAttributeSource()
+    @Bean
+    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+    TransactionAttributeSource transactionAttributeSource()
     {
         return new DescriptorTransactionAttributeSource;
     }
 
     /// The interceptor (and advisor) that runs `@Transactional` methods in a transaction.
-    @Bean @Role(BeanDefinition.ROLE_INFRASTRUCTURE) TransactionInterceptor transactionInterceptor(
-            TransactionAttributeSource transactionAttributeSource, ConfigurableApplicationContext context)
+    @Bean
+    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+    TransactionInterceptor transactionInterceptor(TransactionAttributeSource transactionAttributeSource,
+            ConfigurableApplicationContext context)
     {
         auto interceptor = new TransactionInterceptor;
         interceptor.setTransactionAttributeSource(transactionAttributeSource);

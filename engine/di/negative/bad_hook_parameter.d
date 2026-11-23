@@ -8,7 +8,8 @@ import flint.engine.di : AppContext, PostConstruct;
 
 private class Worker
 {
-    @PostConstruct void start(uint)
+    @PostConstruct
+    void start(uint)
     {
     }
 }

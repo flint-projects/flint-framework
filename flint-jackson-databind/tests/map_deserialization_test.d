@@ -165,7 +165,8 @@ version (FlintJacksonDelegatingCreators)
             value = v;
         }
 
-        @JsonCreator static KeyType create(string v)
+        @JsonCreator
+        static KeyType create(string v)
         {
             return new KeyType(v, true);
         }

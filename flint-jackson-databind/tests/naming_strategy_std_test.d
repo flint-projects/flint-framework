@@ -94,7 +94,8 @@ private final class OtherNonStandardNames
 
 private final class Bean428
 {
-    @JsonProperty("fooBar") string whatever()
+    @JsonProperty("fooBar")
+    string whatever()
     {
         return "";
     }
@@ -116,9 +117,12 @@ private final class ClassWithObjectNodeField
 
 private final class ExplicitBean
 {
-    @JsonProperty("firstName") string userFirstName = "Peter";
-    @JsonProperty("lastName") string userLastName = "Venkman";
-    @JsonProperty string userAge = "35";
+    @JsonProperty("firstName")
+    string userFirstName = "Peter";
+    @JsonProperty("lastName")
+    string userLastName = "Venkman";
+    @JsonProperty
+    string userAge = "35";
 }
 
 @JsonNaming()
@@ -347,7 +351,8 @@ version (FlintJacksonObjectReader)
         private string timeZone;
         private string utcZone;
 
-        @JsonProperty("time_zone") void unpackTimeZone(Map!(string, string) timeZone)
+        @JsonProperty("time_zone")
+        void unpackTimeZone(Map!(string, string) timeZone)
         {
             this.setTimeZone(timeZone.get("name"));
             this.setUtcZone(timeZone.get("utc_zone"));
@@ -580,7 +585,8 @@ version (FlintJacksonAnnotationIntrospector)
     {
         string _id, _fullName;
 
-        @JsonCreator protected this(@Name("id") string id, @Name("fullName") string fn)
+        @JsonCreator
+        protected this(@Name("id") string id, @Name("fullName") string fn)
         {
             _id = id;
             _fullName = fn;

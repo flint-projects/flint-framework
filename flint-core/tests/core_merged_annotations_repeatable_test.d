@@ -39,11 +39,13 @@ private struct MyRepeatable
     string value;
 }
 
-@MyRepeatable("meta1") private struct MyRepeatableMeta1
+@MyRepeatable("meta1")
+private struct MyRepeatableMeta1
 {
 }
 
-@MyRepeatable("meta2") private struct MyRepeatableMeta2
+@MyRepeatable("meta2")
+private struct MyRepeatableMeta2
 {
 }
 
@@ -55,10 +57,16 @@ private enum containerOfYAndZ = MyRepeatableContainer([MyRepeatable("Y"), MyRepe
 
 private interface InterfaceWithRepeated
 {
-    @MyRepeatable("A") @containerOfBAndC @MyRepeatableMeta1 void foo();
+    @MyRepeatable("A")
+    @containerOfBAndC
+    @MyRepeatableMeta1
+    void foo();
 }
 
-@MyRepeatable("A") @containerOfBAndC @MyRepeatableMeta1 private class MyRepeatableClass
+@MyRepeatable("A")
+@containerOfBAndC
+@MyRepeatableMeta1
+private class MyRepeatableClass
 {
 }
 
@@ -80,8 +88,10 @@ private class SubSubMyRepeatableWithAdditionalLocalDeclarationsClass
 
 private struct TestConfiguration
 {
-    @AliasFor(value : "location") string value = "";
-    @AliasFor(value : "value") string location = "";
+    @AliasFor(value : "location")
+    string value = "";
+    @AliasFor(value : "value")
+    string location = "";
 }
 
 private struct Hierarchy
@@ -89,7 +99,8 @@ private struct Hierarchy
     TestConfiguration[] value;
 }
 
-@Hierarchy([TestConfiguration("A"), TestConfiguration(location: "B")]) private class HierarchyClass
+@Hierarchy([TestConfiguration("A"), TestConfiguration(location: "B")])
+private class HierarchyClass
 {
 }
 

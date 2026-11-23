@@ -72,7 +72,8 @@ private Result!Response text(ref scope RequestContext context, string value) not
 @RestController("")
 private struct Application
 {
-    @Get("/slow") Result!Response slow(ref scope RequestContext context) nothrow @nogc
+    @Get("/slow")
+    Result!Response slow(ref scope RequestContext context) nothrow @nogc
     {
         const held = hold(context);
         if (held.code != Status.ok)

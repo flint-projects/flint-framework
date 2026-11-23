@@ -10,7 +10,8 @@ import flint.engine.schedule : Scheduled, Scheduler, registerScheduled;
 final class ConflictingModes
 {
     /// Compile-fail fixture entry.
-    @Scheduled("* * * * * *", 10) Error invoke(ref Context context) nothrow @nogc
+    @Scheduled("* * * * * *", 10)
+    Error invoke(ref Context context) nothrow @nogc
     {
         return context.check();
     }

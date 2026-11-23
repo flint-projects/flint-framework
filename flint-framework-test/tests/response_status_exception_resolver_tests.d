@@ -241,7 +241,8 @@ private interface ITestBean
 {
 }
 
-@ResponseStatus(HttpStatus.BAD_REQUEST) private class StatusCodeException : Exception
+@ResponseStatus(HttpStatus.BAD_REQUEST)
+private class StatusCodeException : Exception
 {
     this() pure nothrow @nogc
     {
@@ -249,7 +250,8 @@ private interface ITestBean
     }
 }
 
-@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR) private class ServerErrorException : Exception
+@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+private class ServerErrorException : Exception
 {
     this() pure nothrow @nogc
     {
@@ -258,7 +260,8 @@ private interface ITestBean
 }
 
 @ResponseStatus(code : HttpStatus.GONE, reason:
-        "You suck!") private class StatusCodeAndReasonException : Exception
+        "You suck!")
+private class StatusCodeAndReasonException : Exception
 {
     this() pure nothrow @nogc
     {
@@ -267,7 +270,8 @@ private interface ITestBean
 }
 
 @ResponseStatus(code : HttpStatus.GONE, reason:
-        "gone.reason") private class StatusCodeAndReasonMessageException : Exception
+        "gone.reason")
+private class StatusCodeAndReasonMessageException : Exception
 {
     this() pure nothrow @nogc
     {
@@ -275,7 +279,8 @@ private interface ITestBean
     }
 }
 
-@ResponseStatus private struct ComposedResponseStatus
+@ResponseStatus
+private struct ComposedResponseStatus
 {
     @AliasFor(annotation : classOf!ResponseStatus, attribute:
             "code")

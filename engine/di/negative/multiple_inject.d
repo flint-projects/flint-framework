@@ -12,11 +12,13 @@ private struct Config
 
 private class Consumer
 {
-    @Inject this()
+    @Inject
+    this()
     {
     }
 
-    @Inject this(Config)
+    @Inject
+    this(Config)
     {
     }
 }

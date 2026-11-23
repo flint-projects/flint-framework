@@ -21,7 +21,8 @@ import flint.jakarta.validation.constraints : NotBlank;
 
 private final class Foo
 {
-    @NotBlank string name;
+    @NotBlank
+    string name;
 }
 
 @("BlankValidatorTest.testConstraintValidator")

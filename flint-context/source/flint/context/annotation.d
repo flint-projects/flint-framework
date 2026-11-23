@@ -45,10 +45,12 @@ Indicates that a class declares `@Bean` methods and may be processed by the cont
 With `proxyBeanMethods` true, Flint AOT generates a `X__FlintConfiguration` subclass so inter-bean method calls
 return the container's singletons (contract section 5.3).
 +/
-@Component struct Configuration
+@Component
+struct Configuration
 {
     /// Alias for `Component.value`.
-    @AliasFor(null, classOf!Component) string value;
+    @AliasFor(null, classOf!Component)
+    string value;
     /// Whether `@Bean` methods are proxied to enforce singleton semantics.
     bool proxyBeanMethods = true;
     /// Whether `@Bean` methods must have unique names.
@@ -59,9 +61,11 @@ return the container's singletons (contract section 5.3).
 struct Bean
 {
     /// Alias for `name`.
-    @AliasFor("name") string[] value;
+    @AliasFor("name")
+    string[] value;
     /// The bean name and aliases; empty for the method name.
-    @AliasFor("value") string[] name;
+    @AliasFor("value")
+    string[] name;
     /// Whether this bean is a candidate for autowiring other beans.
     bool autowireCandidate = true;
     /// Whether this bean is a candidate for autowiring by type by default.
@@ -113,9 +117,11 @@ enum ScopedProxyMode
 struct Scope
 {
     /// Alias for `scopeName`.
-    @AliasFor("scopeName") string value;
+    @AliasFor("scopeName")
+    string value;
     /// The scope name.
-    @AliasFor("value") string scopeName;
+    @AliasFor("value")
+    string scopeName;
     /// Whether a scoped proxy is created.
     ScopedProxyMode proxyMode = ScopedProxyMode.DEFAULT;
 }
@@ -145,9 +151,11 @@ struct Role
 struct ComponentScan
 {
     /// Alias for `basePackages`.
-    @AliasFor("basePackages") string[] value;
+    @AliasFor("basePackages")
+    string[] value;
     /// Base packages (D module prefixes) to scan.
-    @AliasFor("value") string[] basePackages;
+    @AliasFor("value")
+    string[] basePackages;
     /// Classes whose modules mark base packages.
     ClassRef[] basePackageClasses;
     /// Whether `@Component` classes are detected.

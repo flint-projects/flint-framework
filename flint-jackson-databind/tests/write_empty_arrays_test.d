@@ -48,7 +48,8 @@ private final class C
 
 private final class D
 {
-    @JsonInclude(JsonInclude.Include.ALWAYS) List!string list;
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    List!string list;
 
     this()
     {

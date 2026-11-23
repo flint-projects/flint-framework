@@ -58,18 +58,24 @@ private struct PrimitiveArrays
     double[] doubles;
 }
 
-@PrimitiveArrays private struct ComposedPrimitiveSingleValues
+@PrimitiveArrays
+private struct ComposedPrimitiveSingleValues
 {
     @AliasFor(annotation : classOf!PrimitiveArrays, attribute:
-            "ints") int anInt = 0;
+            "ints")
+    int anInt = 0;
     @AliasFor(annotation : classOf!PrimitiveArrays, attribute:
-            "longs") long aLong = 0L;
+            "longs")
+    long aLong = 0L;
     @AliasFor(annotation : classOf!PrimitiveArrays, attribute:
-            "booleans") bool aBoolean = false;
+            "booleans")
+    bool aBoolean = false;
     @AliasFor(annotation : classOf!PrimitiveArrays, attribute:
-            "chars") char aChar = 'x';
+            "chars")
+    char aChar = 'x';
     @AliasFor(annotation : classOf!PrimitiveArrays, attribute:
-            "doubles") double aDouble = 0.0;
+            "doubles")
+    double aDouble = 0.0;
 }
 
 @ComposedPrimitiveSingleValues(anInt : 42, aLong:
@@ -83,73 +89,92 @@ private class ComposedPrimitiveSingleValuesClass
 
 private struct AliasedTransactional
 {
-    @AliasFor(attribute : "qualifier") string value = "";
-    @AliasFor(attribute : "value") string qualifier = "";
+    @AliasFor(attribute : "qualifier")
+    string value = "";
+    @AliasFor(attribute : "value")
+    string qualifier = "";
 }
 
-@Transactional private struct TxComposedWithOverride
+@Transactional
+private struct TxComposedWithOverride
 {
     string qualifier = "txMgr";
 }
 
-@AliasedTransactional(value : "aliasForQualifier") @Component private struct AliasedTransactionalComponent
+@AliasedTransactional(value : "aliasForQualifier")
+@Component
+private struct AliasedTransactionalComponent
 {
 }
 
-@AliasedTransactionalComponent private class AliasedTransactionalComponentClass
+@AliasedTransactionalComponent
+private class AliasedTransactionalComponentClass
 {
 }
 
-@AliasedTransactional private struct MyAliasedTransactional
+@AliasedTransactional
+private struct MyAliasedTransactional
 {
     @AliasFor(annotation : classOf!AliasedTransactional, attribute:
             "value")
     string value = "defaultTransactionManager";
 }
 
-@MyAliasedTransactional("anotherTransactionManager") private struct ComposedMyAliasedTransactional
+@MyAliasedTransactional("anotherTransactionManager")
+private struct ComposedMyAliasedTransactional
 {
 }
 
-@ComposedMyAliasedTransactional private class ComposedTransactionalClass
+@ComposedMyAliasedTransactional
+private class ComposedTransactionalClass
 {
 }
 
-@AliasedTransactional("meta") private struct MetaAliasedTransactional
+@AliasedTransactional("meta")
+private struct MetaAliasedTransactional
 {
 }
 
-@MetaAliasedTransactional private struct MetaMetaAliasedTransactional
+@MetaAliasedTransactional
+private struct MetaMetaAliasedTransactional
 {
 }
 
-@MetaMetaAliasedTransactional private class MetaMetaAliasedTransactionalClass
+@MetaMetaAliasedTransactional
+private class MetaMetaAliasedTransactionalClass
 {
 }
 
 @TxComposedWithOverride // Override default "txMgr" from @TxComposedWithOverride with "localTxMgr"
-@Transactional(qualifier : "localTxMgr") private struct MetaAndLocalTxConfig
+@Transactional(qualifier : "localTxMgr")
+private struct MetaAndLocalTxConfig
 {
 }
 
-@MetaAndLocalTxConfig private class MetaAndLocalTxConfigClass
+@MetaAndLocalTxConfig
+private class MetaAndLocalTxConfigClass
 {
 }
 
 private struct TestPropertySource
 {
-    @AliasFor(value : "locations") string[] value;
-    @AliasFor(value : "value") string[] locations;
+    @AliasFor(value : "locations")
+    string[] value;
+    @AliasFor(value : "value")
+    string[] locations;
 }
 
 private struct ContextConfiguration
 {
-    @AliasFor(attribute : "locations") string[] value;
-    @AliasFor(attribute : "value") string[] locations;
+    @AliasFor(attribute : "locations")
+    string[] value;
+    @AliasFor(attribute : "value")
+    string[] locations;
     ClassRef[] classes;
 }
 
-@ContextConfiguration private struct ConventionBasedComposedContextConfiguration
+@ContextConfiguration
+private struct ConventionBasedComposedContextConfiguration
 {
     // Do NOT use @AliasFor here
     string[] locations;
@@ -157,36 +182,47 @@ private struct ContextConfiguration
     ClassRef[] classes;
 }
 
-@ContextConfiguration private struct HalfConventionBasedAndHalfAliasedComposedContextConfiguration
+@ContextConfiguration
+private struct HalfConventionBasedAndHalfAliasedComposedContextConfiguration
 {
     // Do NOT use @AliasFor here
     string[] locations;
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] xmlConfigFiles;
+            "locations")
+    string[] xmlConfigFiles;
 }
 
-@ContextConfiguration private struct AliasedComposedContextConfiguration
+@ContextConfiguration
+private struct AliasedComposedContextConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] xmlConfigFiles;
+            "locations")
+    string[] xmlConfigFiles;
 }
 
-@ContextConfiguration private struct AliasedValueComposedContextConfiguration
+@ContextConfiguration
+private struct AliasedValueComposedContextConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "value") string[] locations;
+            "value")
+    string[] locations;
 }
 
-@ContextConfiguration private struct ImplicitAliasesContextConfiguration
+@ContextConfiguration
+private struct ImplicitAliasesContextConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] groovyScripts;
+            "locations")
+    string[] groovyScripts;
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] xmlFiles;
+            "locations")
+    string[] xmlFiles;
     // intentionally omitted: attribute = "locations"
-    @AliasFor(annotation : classOf!ContextConfiguration) string[] locations;
+    @AliasFor(annotation : classOf!ContextConfiguration)
+    string[] locations;
     // intentionally omitted: attribute = "locations" (SPR-14069)
-    @AliasFor(annotation : classOf!ContextConfiguration) string[] value;
+    @AliasFor(annotation : classOf!ContextConfiguration)
+    string[] value;
 }
 
 @ImplicitAliasesContextConfiguration(xmlFiles : ["A.xml", "B.xml"])
@@ -194,29 +230,37 @@ private struct ComposedImplicitAliasesContextConfiguration
 {
 }
 
-@ImplicitAliasesContextConfiguration private struct TransitiveImplicitAliasesContextConfiguration
+@ImplicitAliasesContextConfiguration
+private struct TransitiveImplicitAliasesContextConfiguration
 {
     @AliasFor(annotation : classOf!ImplicitAliasesContextConfiguration, attribute:
-            "xmlFiles") string[] xml;
+            "xmlFiles")
+    string[] xml;
     @AliasFor(annotation : classOf!ImplicitAliasesContextConfiguration, attribute:
-            "groovyScripts") string[] groovy;
+            "groovyScripts")
+    string[] groovy;
 }
 
-@ImplicitAliasesContextConfiguration private struct SingleLocationTransitiveImplicitAliasesContextConfiguration
+@ImplicitAliasesContextConfiguration
+private struct SingleLocationTransitiveImplicitAliasesContextConfiguration
 {
     @AliasFor(annotation : classOf!ImplicitAliasesContextConfiguration, attribute:
-            "xmlFiles") string xml = "";
+            "xmlFiles")
+    string xml = "";
     @AliasFor(annotation : classOf!ImplicitAliasesContextConfiguration, attribute:
             "groovyScripts")
     string groovy = "";
 }
 
-@ImplicitAliasesContextConfiguration private struct TransitiveImplicitAliasesWithSkippedLevelContextConfiguration
+@ImplicitAliasesContextConfiguration
+private struct TransitiveImplicitAliasesWithSkippedLevelContextConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] xml;
+            "locations")
+    string[] xml;
     @AliasFor(annotation : classOf!ImplicitAliasesContextConfiguration, attribute:
-            "groovyScripts") string[] groovy;
+            "groovyScripts")
+    string[] groovy;
 }
 
 @ImplicitAliasesContextConfiguration
@@ -224,22 +268,24 @@ private struct ComposedImplicitAliasesContextConfiguration
     private struct SingleLocationTransitiveImplicitAliasesWithSkippedLevelContextConfiguration
     {
         @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-                "locations") string xml = "";
+                "locations")
+        string xml = "";
         @AliasFor(annotation : classOf!ImplicitAliasesContextConfiguration, attribute:
                 "groovyScripts")
         string groovy = "";
     }
 }
 
-@ContextConfiguration(value : ["duplicateDeclaration"]) private struct ShadowedAliasComposedContextConfiguration
+@ContextConfiguration(value : ["duplicateDeclaration"])
+private struct ShadowedAliasComposedContextConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] xmlConfigFiles;
+            "locations")
+    string[] xmlConfigFiles;
 }
 
-@ContextConfiguration(locations : ["shadowed.xml"]) @TestPropertySource(locations : [
-    "test.properties"
-])
+@ContextConfiguration(locations : ["shadowed.xml"])
+@TestPropertySource(locations : ["test.properties"])
 private struct AliasedComposedContextConfigurationAndTestPropertySource
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
@@ -247,14 +293,18 @@ private struct AliasedComposedContextConfigurationAndTestPropertySource
     string[] xmlConfigFiles = ["default.xml"];
 }
 
-@ContextConfiguration private struct SpringApplicationConfiguration
+@ContextConfiguration
+private struct SpringApplicationConfiguration
 {
     @AliasFor(annotation : classOf!ContextConfiguration, attribute:
-            "locations") string[] locations;
+            "locations")
+    string[] locations;
     // Do NOT use @AliasFor(annotation = ...)
-    @AliasFor(value : "value") ClassRef[] classes;
+    @AliasFor(value : "value")
+    ClassRef[] classes;
     // Do NOT use @AliasFor(annotation = ...)
-    @AliasFor(value : "classes") ClassRef[] value;
+    @AliasFor(value : "classes")
+    ClassRef[] value;
 }
 
 private struct Filter
@@ -264,27 +314,34 @@ private struct Filter
 
 private struct ComponentScan
 {
-    @AliasFor(value : "basePackages") string[] value;
-    @AliasFor(value : "value") string[] basePackages;
+    @AliasFor(value : "basePackages")
+    string[] value;
+    @AliasFor(value : "value")
+    string[] basePackages;
     Filter[] excludeFilters;
 }
 
-@ComponentScan(excludeFilters : [Filter(pattern: "*Test"), Filter(pattern: "*Tests")]) private struct TestComponentScan
+@ComponentScan(excludeFilters : [Filter(pattern: "*Test"), Filter(pattern: "*Tests")])
+private struct TestComponentScan
 {
     @AliasFor(attribute : "basePackages", annotation:
-            classOf!ComponentScan) string[] packages;
+            classOf!ComponentScan)
+    string[] packages;
 }
 
-@ComponentScan private struct ConventionBasedSinglePackageComponentScan
+@ComponentScan
+private struct ConventionBasedSinglePackageComponentScan
 {
     // Do NOT use @AliasFor here
     string basePackages;
 }
 
-@ComponentScan private struct AliasForBasedSinglePackageComponentScan
+@ComponentScan
+private struct AliasForBasedSinglePackageComponentScan
 {
     @AliasFor(attribute : "basePackages", annotation:
-            classOf!ComponentScan) string pkg;
+            classOf!ComponentScan)
+    string pkg;
 }
 
 @ConventionBasedComposedContextConfiguration(locations : ["explicitDeclaration"])
@@ -314,15 +371,18 @@ private class AliasedValueComposedContextConfigurationClass
 {
 }
 
-@ImplicitAliasesContextConfiguration(value : ["foo.xml"]) private class ImplicitAliasesContextConfigurationClass1
+@ImplicitAliasesContextConfiguration(value : ["foo.xml"])
+private class ImplicitAliasesContextConfigurationClass1
 {
 }
 
-@ImplicitAliasesContextConfiguration(locations : ["bar.xml"]) private class ImplicitAliasesContextConfigurationClass2
+@ImplicitAliasesContextConfiguration(locations : ["bar.xml"])
+private class ImplicitAliasesContextConfigurationClass2
 {
 }
 
-@ImplicitAliasesContextConfiguration(xmlFiles : ["baz.xml"]) private class ImplicitAliasesContextConfigurationClass3
+@ImplicitAliasesContextConfiguration(xmlFiles : ["baz.xml"])
+private class ImplicitAliasesContextConfigurationClass3
 {
 }
 
@@ -346,7 +406,8 @@ private class SingleLocationTransitiveImplicitAliasesWithSkippedLevelContextConf
 {
 }
 
-@ComposedImplicitAliasesContextConfiguration private class ComposedImplicitAliasesContextConfigurationClass
+@ComposedImplicitAliasesContextConfiguration
+private class ComposedImplicitAliasesContextConfigurationClass
 {
 }
 
@@ -366,7 +427,8 @@ private class ComponentScanWithBasePackagesAndValueAliasClass
 {
 }
 
-@TestComponentScan(packages : ["com.example.app.test"]) private class TestComponentScanClass
+@TestComponentScan(packages : ["com.example.app.test"])
+private class TestComponentScanClass
 {
 }
 
@@ -380,7 +442,8 @@ private class AliasForBasedSinglePackageComponentScanClass
 {
 }
 
-@SpringApplicationConfiguration(value : [classOf!Number]) private class SpringApplicationConfigurationClass
+@SpringApplicationConfiguration(value : [classOf!Number])
+private class SpringApplicationConfigurationClass
 {
 }
 
@@ -393,29 +456,37 @@ private enum RequestMethod
 private struct RequestMapping
 {
     string name;
-    @AliasFor(value : "path") string[] value = [""];
-    @AliasFor(attribute : "value") string[] path = [""];
+    @AliasFor(value : "path")
+    string[] value = [""];
+    @AliasFor(attribute : "value")
+    string[] path = [""];
     RequestMethod[] method;
 }
 
 @RequestMapping(method : [RequestMethod.GET], name:
-        "") private struct GetMapping
+        "")
+private struct GetMapping
 {
-    @AliasFor(annotation : classOf!RequestMapping) string value = "";
-    @AliasFor(annotation : classOf!RequestMapping) string path = "";
+    @AliasFor(annotation : classOf!RequestMapping)
+    string value = "";
+    @AliasFor(annotation : classOf!RequestMapping)
+    string path = "";
 }
 
 @RequestMapping(method : [RequestMethod.POST], name:
-        "") private struct PostMapping
+        "")
+private struct PostMapping
 {
     // Do NOT use @AliasFor here
     string path = "";
 }
 
-@Component("webController") private class WebController
+@Component("webController")
+private class WebController
 {
     @RequestMapping(value : ["/test"], name:
-            "foo") void handleMappedWithValueAttribute()
+            "foo")
+    void handleMappedWithValueAttribute()
     {
     }
 
@@ -426,15 +497,18 @@ private struct RequestMapping
     {
     }
 
-    @GetMapping("/test") void getMappedWithValueAttribute()
+    @GetMapping("/test")
+    void getMappedWithValueAttribute()
     {
     }
 
-    @GetMapping(path : "/test") void getMappedWithPathAttribute()
+    @GetMapping(path : "/test")
+    void getMappedWithPathAttribute()
     {
     }
 
-    @PostMapping(path : "/test") void postMappedWithPathAttribute()
+    @PostMapping(path : "/test")
+    void postMappedWithPathAttribute()
     {
     }
 
@@ -451,62 +525,78 @@ private struct DefaultOverrideRoot
     string text = "root";
 }
 
-@DefaultOverrideRoot private struct DefaultOverrideMeta
+@DefaultOverrideRoot
+private struct DefaultOverrideMeta
 {
 }
 
-@DefaultOverrideMeta private struct DefaultOverrideMetaMeta
+@DefaultOverrideMeta
+private struct DefaultOverrideMetaMeta
 {
     string text = "metameta";
 }
 
-@DefaultOverrideMetaMeta private struct DefaultOverrideMetaMetaMeta
+@DefaultOverrideMetaMeta
+private struct DefaultOverrideMetaMetaMeta
 {
 }
 
-@DefaultOverrideMetaMetaMeta private class DefaultOverrideClass
+@DefaultOverrideMetaMetaMeta
+private class DefaultOverrideClass
 {
 }
 
-@DefaultOverrideRoot private struct DefaultOverrideImplicitAlias
+@DefaultOverrideRoot
+private struct DefaultOverrideImplicitAlias
 {
     @AliasFor(annotation : classOf!DefaultOverrideRoot, attribute:
-            "text") string text1 = "alias";
+            "text")
+    string text1 = "alias";
     @AliasFor(annotation : classOf!DefaultOverrideRoot, attribute:
-            "text") string text2 = "alias";
+            "text")
+    string text2 = "alias";
 }
 
-@DefaultOverrideImplicitAlias(text1 : "alias-meta-1") private struct DefaultOverrideAliasImplicitMeta1
+@DefaultOverrideImplicitAlias(text1 : "alias-meta-1")
+private struct DefaultOverrideAliasImplicitMeta1
 {
 }
 
-@DefaultOverrideImplicitAlias(text2 : "alias-meta-2") private struct DefaultOverrideImplicitAliasMeta2
+@DefaultOverrideImplicitAlias(text2 : "alias-meta-2")
+private struct DefaultOverrideImplicitAliasMeta2
 {
 }
 
-@DefaultOverrideAliasImplicitMeta1 private class DefaultOverrideImplicitAliasMetaClass1
+@DefaultOverrideAliasImplicitMeta1
+private class DefaultOverrideImplicitAliasMetaClass1
 {
 }
 
-@DefaultOverrideImplicitAliasMeta2 private class DefaultOverrideImplicitAliasMetaClass2
+@DefaultOverrideImplicitAliasMeta2
+private class DefaultOverrideImplicitAliasMetaClass2
 {
 }
 
 private struct DefaultOverrideExplicitAliasRoot
 {
-    @AliasFor(value : "value") string text = "";
-    @AliasFor(value : "text") string value = "";
+    @AliasFor(value : "value")
+    string text = "";
+    @AliasFor(value : "text")
+    string value = "";
 }
 
-@DefaultOverrideExplicitAliasRoot("meta") private struct DefaultOverrideExplicitAliasRootMeta
+@DefaultOverrideExplicitAliasRoot("meta")
+private struct DefaultOverrideExplicitAliasRootMeta
 {
 }
 
-@DefaultOverrideExplicitAliasRootMeta private struct DefaultOverrideExplicitAliasRootMetaMeta
+@DefaultOverrideExplicitAliasRootMeta
+private struct DefaultOverrideExplicitAliasRootMetaMeta
 {
 }
 
-@DefaultOverrideExplicitAliasRootMetaMeta private class DefaultOverrideExplicitAliasRootMetaMetaClass
+@DefaultOverrideExplicitAliasRootMetaMeta
+private class DefaultOverrideExplicitAliasRootMetaMetaClass
 {
 }
 
@@ -515,16 +605,19 @@ private struct ValueAttribute
     string[] value;
 }
 
-@ValueAttribute(["FromValueAttributeMeta"]) private struct ValueAttributeMeta
+@ValueAttribute(["FromValueAttributeMeta"])
+private struct ValueAttributeMeta
 {
     string[] value;
 }
 
-@ValueAttributeMeta(["FromValueAttributeMetaMeta"]) private struct ValueAttributeMetaMeta
+@ValueAttributeMeta(["FromValueAttributeMetaMeta"])
+private struct ValueAttributeMetaMeta
 {
 }
 
-@ValueAttributeMetaMeta private class ValueAttributeMetaMetaClass
+@ValueAttributeMetaMeta
+private class ValueAttributeMetaMetaClass
 {
 }
 
@@ -645,96 +738,123 @@ private struct AliasedAnnotation
     string foo = "";
 }
 
-@AliasedAnnotation private struct BothNonBlank
+@AliasedAnnotation
+private struct BothNonBlank
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, value:
             "foo", attribute:
-            "foo") string bar = "bothNonBlank";
+            "foo")
+    string bar = "bothNonBlank";
 }
 
-@AliasedAnnotation private struct BothBlank
+@AliasedAnnotation
+private struct BothBlank
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, value:
             " ", attribute:
-            " ") string bar = "bothBlank";
+            " ")
+    string bar = "bothBlank";
 }
 
-@AliasedAnnotation private struct BlankValue
+@AliasedAnnotation
+private struct BlankValue
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, value:
             " ", attribute:
-            "foo") string bar = "blankValue";
+            "foo")
+    string bar = "blankValue";
 }
 
-@AliasedAnnotation private struct BlankAttribute
+@AliasedAnnotation
+private struct BlankAttribute
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, value:
             "foo", attribute:
-            " ") string bar = "blankAttribute";
+            " ")
+    string bar = "blankAttribute";
 }
 
-@AliasedAnnotation private struct OnlyBlankValue
+@AliasedAnnotation
+private struct OnlyBlankValue
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, value:
-            " ") string bar = "onlyBlankValue";
+            " ")
+    string bar = "onlyBlankValue";
 }
 
-@AliasedAnnotation private struct OnlyBlankAttribute
+@AliasedAnnotation
+private struct OnlyBlankAttribute
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, attribute:
-            " ") string bar = "onlyBlankAttribute";
+            " ")
+    string bar = "onlyBlankAttribute";
 }
 
-@AliasedAnnotation private struct OnlyValue
+@AliasedAnnotation
+private struct OnlyValue
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, value:
-            "foo") string bar = "fromValue";
+            "foo")
+    string bar = "fromValue";
 }
 
-@AliasedAnnotation private struct OnlyAttribute
+@AliasedAnnotation
+private struct OnlyAttribute
 {
     @AliasFor(annotation : classOf!AliasedAnnotation, attribute:
-            "foo") string bar = "fromAttribute";
+            "foo")
+    string bar = "fromAttribute";
 }
 
-@AliasedAnnotation private struct NeitherSet
+@AliasedAnnotation
+private struct NeitherSet
 {
-    @AliasFor(annotation : classOf!AliasedAnnotation) string foo = "fromSelf";
+    @AliasFor(annotation : classOf!AliasedAnnotation)
+    string foo = "fromSelf";
 }
 
-@BothNonBlank private class WithBothNonBlank
-{
-}
-
-@BothBlank private class WithBothBlank
-{
-}
-
-@BlankValue private class WithBlankValue
+@BothNonBlank
+private class WithBothNonBlank
 {
 }
 
-@BlankAttribute private class WithBlankAttribute
+@BothBlank
+private class WithBothBlank
 {
 }
 
-@OnlyBlankValue private class WithOnlyBlankValue
+@BlankValue
+private class WithBlankValue
 {
 }
 
-@OnlyBlankAttribute private class WithOnlyBlankAttribute
+@BlankAttribute
+private class WithBlankAttribute
 {
 }
 
-@OnlyValue private class WithOnlyValue
+@OnlyBlankValue
+private class WithOnlyBlankValue
 {
 }
 
-@OnlyAttribute private class WithOnlyAttribute
+@OnlyBlankAttribute
+private class WithOnlyBlankAttribute
 {
 }
 
-@NeitherSet private class WithNeitherSet
+@OnlyValue
+private class WithOnlyValue
+{
+}
+
+@OnlyAttribute
+private class WithOnlyAttribute
+{
+}
+
+@NeitherSet
+private class WithNeitherSet
 {
 }
 

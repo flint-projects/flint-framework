@@ -48,20 +48,24 @@ private final class OwnerValidator : Validator
 }
 
 /// `POST /owners`.
-@RestController class OwnerController
+@RestController
+class OwnerController
 {
     /// Echoes a valid owner.
-    @PostMapping("/owners") OwnerDto addOwner(@Valid @RequestBody OwnerDto owner)
+    @PostMapping("/owners")
+    OwnerDto addOwner(@Valid @RequestBody OwnerDto owner)
     {
         return owner;
     }
 }
 
 /// Turns validation failures into a 400 ProblemDetail listing the field errors.
-@RestControllerAdvice class ValidationAdvice
+@RestControllerAdvice
+class ValidationAdvice
 {
     /// The advice's handler.
-    @ExceptionHandler ResponseEntity handle(MethodArgumentNotValidException ex)
+    @ExceptionHandler
+    ResponseEntity handle(MethodArgumentNotValidException ex)
     {
         auto detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         string fields;

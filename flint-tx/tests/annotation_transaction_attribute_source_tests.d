@@ -70,7 +70,8 @@ private struct Tx
 @(txRules())
 private struct TxWithAttribute
 {
-    @AliasFor("readOnly", classOf!Transactional) bool readOnly;
+    @AliasFor("readOnly", classOf!Transactional)
+    bool readOnly;
 }
 
 private MergedAnnotation transactional(Transactional value, ubyte distance = 0)

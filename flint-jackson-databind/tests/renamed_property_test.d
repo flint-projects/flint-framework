@@ -19,14 +19,17 @@ import flint.jackson.databind.exc : InvalidDefinitionException;
 
 private final class Two
 {
-    @JsonProperty("foo") int a = 1;
-    @JsonProperty("foo") int b = 2;
+    @JsonProperty("foo")
+    int a = 1;
+    @JsonProperty("foo")
+    int b = 2;
 }
 
 private final class Mixed
 {
     int z = 3;
-    @JsonProperty("z") int _z = 4;
+    @JsonProperty("z")
+    int _z = 4;
 }
 
 private JsonMapper mapper()

@@ -810,8 +810,10 @@ version (FlintJacksonJsonView)
     @JsonView([classOf!MyJacksonView3])
     private class JacksonViewBean
     {
-        @JsonView([classOf!MyJacksonView1]) private string withView1;
-        @JsonView([classOf!MyJacksonView2]) private string withView2;
+        @JsonView([classOf!MyJacksonView1])
+        private string withView1;
+        @JsonView([classOf!MyJacksonView2])
+        private string withView2;
         private string withoutView;
 
         string getWithView1()

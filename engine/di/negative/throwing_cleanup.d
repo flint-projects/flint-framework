@@ -8,7 +8,8 @@ import flint.engine.di : AppContext, PreDestroy;
 
 private class Worker
 {
-    @PreDestroy void stop()
+    @PreDestroy
+    void stop()
     {
     }
 }

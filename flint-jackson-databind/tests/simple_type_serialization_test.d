@@ -38,7 +38,8 @@ private class SimpleFieldBean
     package int z;
 
     // ignored, not detectable either
-    @JsonIgnore int a;
+    @JsonIgnore
+    int a;
 }
 
 private final class TransientBean
@@ -52,7 +53,8 @@ private final class TransientBean
 
 private final class OkDupFieldBean : SimpleFieldBean
 {
-    @JsonProperty("x") protected int myX;
+    @JsonProperty("x")
+    protected int myX;
 
     int y;
 
@@ -83,9 +85,11 @@ private Descriptor okDupFieldBeanDescriptor()
  */
 private final class FieldAndMethodBean
 {
-    @JsonProperty int z;
+    @JsonProperty
+    int z;
 
-    @JsonProperty("z") int getZ()
+    @JsonProperty("z")
+    int getZ()
     {
         return z + 1;
     }
@@ -95,7 +99,8 @@ private final class DupFieldBean2
 {
     int z = 3;
 
-    @JsonProperty("z") int _z = 4;
+    @JsonProperty("z")
+    int _z = 4;
 }
 
 // Helper classes: auto-detect configuration
@@ -132,7 +137,8 @@ private final class FieldBeanWithStatic
     static int y = 2;
 
     // not even @JsonProperty should make statics usable...
-    @JsonProperty static int z = 3;
+    @JsonProperty
+    static int z = 3;
 }
 
 private final class GetterBeanWithStatic
@@ -148,7 +154,8 @@ private final class GetterBeanWithStatic
     }
 
     // not even @JsonProperty should make statics usable...
-    @JsonProperty static int getFoo()
+    @JsonProperty
+    static int getFoo()
     {
         return 123;
     }
@@ -505,10 +512,12 @@ version (FlintJacksonCustomSerializers)
 {
     private final class SimpleFieldBean2
     {
-        @JsonSerialize private string[] values;
+        @JsonSerialize
+        private string[] values;
 
         // note: this annotation should not matter for serialization:
-        @JsonDeserialize private int dummy;
+        @JsonDeserialize
+        private int dummy;
     }
 
     @("SimpleTypeSerializationTest.testSimpleAnnotation")
@@ -544,7 +553,8 @@ version (FlintJacksonAutoDetect)
         // not auto-detectable any more
         int x;
 
-        @JsonProperty("z") int _z;
+        @JsonProperty("z")
+        int _z;
     }
 
     @("SimpleTypeSerializationTest.testNoAutoDetect")
@@ -595,9 +605,11 @@ version (FlintJacksonCustomSerializers)
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private final class Item240
     {
-        @JsonProperty private string id;
+        @JsonProperty
+        private string id;
         // only include annotation to ensure it won't override settings
-        @JsonSerialize(typing : JsonSerialize.Typing.STATIC) private string state;
+        @JsonSerialize(typing : JsonSerialize.Typing.STATIC)
+        private string state;
 
         this(string id, string state)
         {
@@ -619,9 +631,11 @@ version (FlintJacksonCustomSerializers)
      */
     private final class DupFieldBean
     {
-        @JsonProperty("foo") int _z = 1;
+        @JsonProperty("foo")
+        int _z = 1;
 
-        @JsonSerialize private int foo = 2;
+        @JsonSerialize
+        private int foo = 2;
     }
 
     @("SimpleTypeSerializationTest.testFailureDueToDupField1")

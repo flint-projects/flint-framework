@@ -202,7 +202,8 @@ private HandlerMapping handlerRow(C, alias method)()
 private struct Person
 {
     @Size(min : 1, max:
-            10) string name;
+            10)
+    string name;
 
     string getName() const pure nothrow @nogc
     {
@@ -240,12 +241,14 @@ private class MyClass
     {
     }
 
-    @Valid Person getPerson()
+    @Valid
+    Person getPerson()
     {
         throw new UnsupportedOperationException();
     }
 
-    @Max(10) int getIntValue()
+    @Max(10)
+    int getIntValue()
     {
         throw new UnsupportedOperationException();
     }
@@ -265,9 +268,11 @@ private interface MyInterface
 
     void addPersonNotValidated(Person);
 
-    @Valid Person getPerson();
+    @Valid
+    Person getPerson();
 
-    @Max(10) int getIntValue();
+    @Max(10)
+    int getIntValue();
 }
 
 private class MyInterfaceImpl : MyInterface
@@ -307,13 +312,15 @@ private class MyInterfaceImpl : MyInterface
     }
 }
 
-@Validated private class MyValidatedClass
+@Validated
+private class MyValidatedClass
 {
     void addPerson(@Valid Person)
     {
     }
 
-    @Valid Person getPerson()
+    @Valid
+    Person getPerson()
     {
         throw new UnsupportedOperationException();
     }

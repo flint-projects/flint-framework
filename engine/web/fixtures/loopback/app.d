@@ -31,7 +31,8 @@ private struct Bounds
 
 private struct Payload
 {
-    @NotBlank Text name;
+    @NotBlank
+    Text name;
 }
 
 private struct Observation
@@ -46,11 +47,13 @@ private struct WorkerValue
     size_t bytes;
 }
 
-@WorkerController @RestController("/worker")
+@WorkerController
+@RestController("/worker")
 private struct WorkerFixture
 {
-    @Get("/:id") Result!WorkerValue allocate(@PathVariable("id") uint id,
-            @QueryParam("slow") bool slow, ref scope RequestContext context)
+    @Get("/:id")
+    Result!WorkerValue allocate(@PathVariable("id") uint id, @QueryParam("slow") bool slow,
+            ref scope RequestContext context)
     {
         atomicOp!"+="(workStarted, 1U);
         scope (exit)
@@ -74,7 +77,8 @@ private struct WorkerFixture
     }
 }
 
-@ControllerAdvice private struct FixtureAdvice
+@ControllerAdvice
+private struct FixtureAdvice
 {
     Response handle(Error failure, ref scope RequestContext context) nothrow @nogc
     {
@@ -90,12 +94,14 @@ private struct WorkerFixture
 @RestController("")
 private struct Fixture
 {
-    @Get("/") Result!Response root(ref scope RequestContext context) nothrow @nogc
+    @Get("/")
+    Result!Response root(ref scope RequestContext context) nothrow @nogc
     {
         return large(context);
     }
 
-    @Post("/") Result!Response rootPost(ref scope RequestContext context) nothrow @nogc
+    @Post("/")
+    Result!Response rootPost(ref scope RequestContext context) nothrow @nogc
     {
         return large(context);
     }
@@ -145,17 +151,20 @@ private struct Fixture
         return Result!Observation(Observation(atomicLoad(admitted), atomicLoad(canceled)));
     }
 
-    @Get("/worker-observations") Result!Observation workerObservations() nothrow @nogc
+    @Get("/worker-observations")
+    Result!Observation workerObservations() nothrow @nogc
     {
         return Result!Observation(Observation(atomicLoad(workStarted), atomicLoad(workFinished)));
     }
 
-    @Get("/worker-canceled") Result!uint workerCanceled() nothrow @nogc
+    @Get("/worker-canceled")
+    Result!uint workerCanceled() nothrow @nogc
     {
         return Result!uint(atomicLoad(workCanceled));
     }
 
-    @Get("/release-worker") Error releaseWorker() nothrow @nogc
+    @Get("/release-worker")
+    Error releaseWorker() nothrow @nogc
     {
         atomicStore(allowWork, true);
         return Error.init;
@@ -168,7 +177,8 @@ private struct Fixture
         return Error.init;
     }
 
-    @Get("/conflict") Error conflict() nothrow @nogc
+    @Get("/conflict")
+    Error conflict() nothrow @nogc
     {
         return Error(Status.conflict, "private fixture diagnostic", 23);
     }

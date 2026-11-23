@@ -16,14 +16,17 @@ private void emit(scope const(char)[] text) nothrow @nogc
 
 private final class Component
 {
-    @Resource("jdbc/petclinic") string dataSource;
+    @Resource("jdbc/petclinic")
+    string dataSource;
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
     }
 }
 
-@Priority(7) private struct Interceptor
+@Priority(7)
+private struct Interceptor
 {
 }
 

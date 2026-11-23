@@ -34,7 +34,8 @@ Error validateFields(scope const Field[] fields, FormOptions options)
 
 private struct Required
 {
-    @NotBlank string value;
+    @NotBlank
+    string value;
 }
 
 Error requiredValue(scope const ref Answer answer)

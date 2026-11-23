@@ -224,7 +224,8 @@ private final class PetPageDto
 private final class ValidationMessageDto
 {
     string message;
-    @JsonAnyGetter LinkedHashMap!(string, string) additionalProperties;
+    @JsonAnyGetter
+    LinkedHashMap!(string, string) additionalProperties;
 
     this()
     {

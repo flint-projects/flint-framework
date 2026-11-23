@@ -577,7 +577,8 @@ private E thrown(E : Exception)(scope void delegate() @safe action)
     return null;
 }
 
-@ResponseStatus private struct ComposedResponseStatus
+@ResponseStatus
+private struct ComposedResponseStatus
 {
     @AliasFor(annotation : classOf!ResponseStatus, attribute:
             "code")
@@ -650,7 +651,8 @@ version (FlintAsyncWebRequest)
 
     private class MethodLevelResponseBodyHandler
     {
-        @ResponseBody DeferredResult!string handle()
+        @ResponseBody
+        DeferredResult!string handle()
         {
             return null;
         }
@@ -658,13 +660,15 @@ version (FlintAsyncWebRequest)
         // Unusual but legal return type
         // Properly test generic type handling of Flux values collected to a List
 
-        @ResponseBody Flux!(List!string) handleFluxOfLists()
+        @ResponseBody
+        Flux!(List!string) handleFluxOfLists()
         {
             return null;
         }
     }
 
-    @ResponseBody private class TypeLevelResponseBodyHandler
+    @ResponseBody
+    private class TypeLevelResponseBodyHandler
     {
         DeferredResult!string handle()
         {
@@ -674,7 +678,8 @@ version (FlintAsyncWebRequest)
 
     private class DeferredResultSubclassHandler
     {
-        @ResponseBody CustomDeferredResult handle()
+        @ResponseBody
+        CustomDeferredResult handle()
         {
             return null;
         }

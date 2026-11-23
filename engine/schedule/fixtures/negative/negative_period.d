@@ -10,7 +10,8 @@ import flint.engine.schedule : Scheduled, Scheduler, registerScheduled;
 final class NegativeDelay
 {
     /// Compile-fail fixture entry.
-    @Scheduled(null, 0, -10) Error invoke(ref Context context) nothrow @nogc
+    @Scheduled(null, 0, -10)
+    Error invoke(ref Context context) nothrow @nogc
     {
         return context.check();
     }

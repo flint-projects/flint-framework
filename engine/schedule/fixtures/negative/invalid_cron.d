@@ -10,7 +10,8 @@ import flint.engine.schedule : Scheduled, Scheduler, registerScheduled;
 final class MalformedCalendar
 {
     /// Compile-fail fixture entry.
-    @Scheduled("60 0 0 * * *") Error invoke(ref Context context) nothrow @nogc
+    @Scheduled("60 0 0 * * *")
+    Error invoke(ref Context context) nothrow @nogc
     {
         return context.check();
     }

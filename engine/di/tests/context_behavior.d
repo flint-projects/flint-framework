@@ -51,12 +51,14 @@ private final class NativeRecords : Records
         return id;
     }
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
         journal.record(2);
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(8);
     }
@@ -77,18 +79,21 @@ private final class MockRecords : Records
         return 99;
     }
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
         journal.record(4);
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(9);
     }
 }
 
-@Service private final class Manager
+@Service
+private final class Manager
 {
     Records records;
 
@@ -110,12 +115,14 @@ private struct Controller
         journal.record(5);
     }
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
         journal.record(6);
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(7);
     }
@@ -207,12 +214,14 @@ private final class A
         journal.record(1);
     }
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
         journal.record(2);
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(12);
     }
@@ -229,13 +238,15 @@ private final class Failure
         journal.record(3);
     }
 
-    @PostConstruct Error start()
+    @PostConstruct
+    Error start()
     {
         journal.record(4);
         return Error(Status.ioError, "fixture startup failure", 77);
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(11);
     }
@@ -279,12 +290,14 @@ private final class B
         journal.record(3);
     }
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
         journal.record(4);
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(13);
     }
@@ -301,13 +314,15 @@ private final class ThrowingStart
         journal.record(5);
     }
 
-    @PostConstruct void start()
+    @PostConstruct
+    void start()
     {
         journal.record(6);
         throw new Exception("fixture startup hook exception");
     }
 
-    @PreDestroy void stop() nothrow
+    @PreDestroy
+    void stop() nothrow
     {
         journal.record(14);
     }
@@ -334,7 +349,8 @@ private final class Throwing
         throw new Exception("fixture constructor exception");
     }
 
-    @PreDestroy void never() nothrow
+    @PreDestroy
+    void never() nothrow
     {
         assert(0, "cleanup of a constructor that did not return");
     }
@@ -387,7 +403,8 @@ private final class ValueSelected
 {
     uint selected;
 
-    @Inject this(Pool pool)
+    @Inject
+    this(Pool pool)
     {
         selected = pool.id;
     }
@@ -407,7 +424,8 @@ private final class RefSelected
         selected = pool.id + 1;
     }
 
-    @Inject this(ref Pool pool)
+    @Inject
+    this(ref Pool pool)
     {
         selected = pool.id;
     }
@@ -488,7 +506,8 @@ private interface Clock
     long now();
 }
 
-@Service private final class SystemClock : Clock
+@Service
+private final class SystemClock : Clock
 {
     long now()
     {
@@ -496,7 +515,8 @@ private interface Clock
     }
 }
 
-@Service private final class FixedClock : Clock
+@Service
+private final class FixedClock : Clock
 {
     long now()
     {
@@ -509,7 +529,9 @@ private struct PoolSettings
     uint size = 4;
 }
 
-@ConditionalOnConfig("database") @Service private final class DatabasePool
+@ConditionalOnConfig("database")
+@Service
+private final class DatabasePool
 {
     uint size;
     this(PoolSettings settings)
@@ -518,11 +540,14 @@ private struct PoolSettings
     }
 }
 
-@ConditionalOnConfig("cache") @Service private final class CacheClient
+@ConditionalOnConfig("cache")
+@Service
+private final class CacheClient
 {
 }
 
-@Service private final class Reporter
+@Service
+private final class Reporter
 {
     Clock clock;
     this(Clock clock)
@@ -554,7 +579,9 @@ unittest
     context.shutdown();
 }
 
-@ConditionalOnMissingBean @Service private final class FallbackClock : Clock
+@ConditionalOnMissingBean
+@Service
+private final class FallbackClock : Clock
 {
     long now()
     {
@@ -609,7 +636,8 @@ private struct ServerLauncher
 {
 }
 
-@ConditionalOnConfig("cache") private struct CacheWarmer
+@ConditionalOnConfig("cache")
+private struct CacheWarmer
 {
 }
 

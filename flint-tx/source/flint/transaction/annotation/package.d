@@ -38,9 +38,11 @@ the rule closest to the thrown exception's class wins.
 struct Transactional
 {
     /// Alias for `transactionManager`.
-    @AliasFor("transactionManager") string value;
+    @AliasFor("transactionManager")
+    string value;
     /// A qualifier value for the specified transaction: the bean name or qualifier of the `TransactionManager`.
-    @AliasFor("value") string transactionManager;
+    @AliasFor("value")
+    string transactionManager;
     /// Defines zero (0) or more transaction labels, for descriptive purposes or custom transaction managers.
     string[] label;
     /// The transaction propagation type. Defaults to `Propagation.REQUIRED`.

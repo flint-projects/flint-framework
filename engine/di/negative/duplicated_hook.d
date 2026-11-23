@@ -8,11 +8,13 @@ import flint.engine.di : AppContext, PostConstruct;
 
 private class Worker
 {
-    @PostConstruct void first()
+    @PostConstruct
+    void first()
     {
     }
 
-    @PostConstruct void second()
+    @PostConstruct
+    void second()
     {
     }
 }

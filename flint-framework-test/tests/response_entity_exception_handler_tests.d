@@ -629,23 +629,28 @@ version (FlintResponseEntityExceptionHandler)
         }
     }
 
-    @Controller private class ExceptionThrowingController
+    @Controller
+    private class ExceptionThrowingController
     {
-        @RequestMapping("/") void handleRequest()
+        @RequestMapping("/")
+        void handleRequest()
         {
             throw new ServletRequestBindingException("message");
         }
     }
 
-    @Controller private class NestedExceptionThrowingController
+    @Controller
+    private class NestedExceptionThrowingController
     {
-        @RequestMapping("/") void handleRequest()
+        @RequestMapping("/")
+        void handleRequest()
         {
             throw new IllegalStateException(new ServletRequestBindingException("message"));
         }
     }
 
-    @ControllerAdvice private class ApplicationExceptionHandler : ResponseEntityExceptionHandler
+    @ControllerAdvice
+    private class ApplicationExceptionHandler : ResponseEntityExceptionHandler
     {
         protected override Nullable!ResponseEntity handleServletRequestBindingException(
                 ServletRequestBindingException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request)

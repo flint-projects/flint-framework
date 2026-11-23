@@ -42,7 +42,8 @@ private struct Indexed
 }
 
 /// Spring's `org.springframework.core.testfixture.stereotype.Component`.
-@Indexed private struct Component
+@Indexed
+private struct Component
 {
     string value;
 }
@@ -54,11 +55,14 @@ private struct Transactional
     bool readOnly;
 }
 
-@Transactional @Component private struct TransactionalComponent
+@Transactional
+@Component
+private struct TransactionalComponent
 {
 }
 
-@TransactionalComponent private struct ComposedTransactionalComponent
+@TransactionalComponent
+private struct ComposedTransactionalComponent
 {
 }
 
@@ -66,7 +70,8 @@ private class NonAnnotatedClass
 {
 }
 
-@Component private class AnnotatedClass
+@Component
+private class AnnotatedClass
 {
     class NonAnnotatedInnerClass
     {
@@ -81,7 +86,8 @@ private interface NonAnnotatedInterface
 {
 }
 
-@TransactionalComponent private class TransactionalComponentClass
+@TransactionalComponent
+private class TransactionalComponentClass
 {
 }
 
@@ -89,31 +95,38 @@ private class SubTransactionalComponentClass : TransactionalComponentClass
 {
 }
 
-@ComposedTransactionalComponent private class ComposedTransactionalComponentClass
+@ComposedTransactionalComponent
+private class ComposedTransactionalComponentClass
 {
 }
 
-@Transactional(qualifier : "composed1") private struct InheritedComposed
+@Transactional(qualifier : "composed1")
+private struct InheritedComposed
 {
 }
 
 @Transactional(qualifier : "composed2", readOnly:
-        true) private struct Composed
+        true)
+private struct Composed
 {
 }
 
-@Transactional("TxInheritedComposed") private struct TxInheritedComposed
+@Transactional("TxInheritedComposed")
+private struct TxInheritedComposed
 {
 }
 
-@Transactional("TxComposed") private struct TxComposed
+@Transactional("TxComposed")
+private struct TxComposed
 {
 }
 
 private struct TestConfiguration
 {
-    @AliasFor(value : "location") string value = "";
-    @AliasFor(value : "value") string location = "";
+    @AliasFor(value : "location")
+    string value = "";
+    @AliasFor(value : "value")
+    string location = "";
 }
 
 private struct Hierarchy
@@ -121,15 +134,18 @@ private struct Hierarchy
     TestConfiguration[] value;
 }
 
-@Hierarchy([TestConfiguration("A"), TestConfiguration(location: "B")]) private class HierarchyClass
+@Hierarchy([TestConfiguration("A"), TestConfiguration(location: "B")])
+private class HierarchyClass
 {
 }
 
-@Transactional private class ClassWithInheritedAnnotation
+@Transactional
+private class ClassWithInheritedAnnotation
 {
 }
 
-@Composed private class SubClassWithInheritedAnnotation : ClassWithInheritedAnnotation
+@Composed
+private class SubClassWithInheritedAnnotation : ClassWithInheritedAnnotation
 {
 }
 
@@ -137,11 +153,13 @@ private class SubSubClassWithInheritedAnnotation : SubClassWithInheritedAnnotati
 {
 }
 
-@InheritedComposed private class ClassWithInheritedComposedAnnotation
+@InheritedComposed
+private class ClassWithInheritedComposedAnnotation
 {
 }
 
-@Composed private class SubClassWithInheritedComposedAnnotation : ClassWithInheritedComposedAnnotation
+@Composed
+private class SubClassWithInheritedComposedAnnotation : ClassWithInheritedComposedAnnotation
 {
 }
 
@@ -149,28 +167,36 @@ private class SubSubClassWithInheritedComposedAnnotation : SubClassWithInherited
 {
 }
 
-@Transactional("TxConfig") private class TxConfig
+@Transactional("TxConfig")
+private class TxConfig
 {
 }
 
-@Transactional("DerivedTxConfig") private class DerivedTxConfig : TxConfig
+@Transactional("DerivedTxConfig")
+private class DerivedTxConfig : TxConfig
 {
 }
 
-@TxInheritedComposed @TxComposed private class TxFromMultipleComposedAnnotations
+@TxInheritedComposed
+@TxComposed
+private class TxFromMultipleComposedAnnotations
 {
 }
 
-@Transactional private interface InterfaceWithInheritedAnnotation
+@Transactional
+private interface InterfaceWithInheritedAnnotation
 {
-    @Order void handleFromInterface();
+    @Order
+    void handleFromInterface();
 }
 
 private abstract class AbstractClassWithInheritedAnnotation(T) : InterfaceWithInheritedAnnotation
 {
-    @Transactional abstract void handle();
+    @Transactional
+    abstract void handle();
 
-    @Transactional void handleParameterized(T t)
+    @Transactional
+    void handleParameterized(T t)
     {
     }
 }
@@ -190,7 +216,8 @@ private class ConcreteClassWithInheritedAnnotation : AbstractClassWithInheritedA
     }
 }
 
-@Transactional private interface InheritedAnnotationInterface
+@Transactional
+private interface InheritedAnnotationInterface
 {
 }
 
@@ -202,7 +229,8 @@ private interface SubSubInheritedAnnotationInterface : SubInheritedAnnotationInt
 {
 }
 
-@Order private interface NonInheritedAnnotationInterface
+@Order
+private interface NonInheritedAnnotationInterface
 {
 }
 
@@ -214,47 +242,60 @@ private interface SubSubNonInheritedAnnotationInterface : SubNonInheritedAnnotat
 {
 }
 
-@Component("meta1") @Order private struct Meta1
+@Component("meta1")
+@Order
+private struct Meta1
 {
 }
 
-@Component("meta2") @Transactional(readOnly : true) private struct Meta2
+@Component("meta2")
+@Transactional(readOnly : true)
+private struct Meta2
 {
 }
 
-@Meta2 private struct MetaMeta
+@Meta2
+private struct MetaMeta
 {
 }
 
-@MetaMeta private struct MetaMetaMeta
+@MetaMeta
+private struct MetaMetaMeta
 {
 }
 
-@MetaCycle3 private struct MetaCycle1
+@MetaCycle3
+private struct MetaCycle1
 {
 }
 
-@MetaCycle1 private struct MetaCycle2
+@MetaCycle1
+private struct MetaCycle2
 {
 }
 
-@MetaCycle2 private struct MetaCycle3
+@MetaCycle2
+private struct MetaCycle3
 {
 }
 
-@Meta1 private interface InterfaceWithMetaAnnotation
+@Meta1
+private interface InterfaceWithMetaAnnotation
 {
 }
 
-@Meta2 private class ClassWithLocalMetaAnnotationAndMetaAnnotatedInterface : InterfaceWithMetaAnnotation
+@Meta2
+private class ClassWithLocalMetaAnnotationAndMetaAnnotatedInterface : InterfaceWithMetaAnnotation
 {
 }
 
-@Meta1 private class ClassWithInheritedMetaAnnotation
+@Meta1
+private class ClassWithInheritedMetaAnnotation
 {
 }
 
-@Meta2 private class SubClassWithInheritedMetaAnnotation : ClassWithInheritedMetaAnnotation
+@Meta2
+private class SubClassWithInheritedMetaAnnotation : ClassWithInheritedMetaAnnotation
 {
 }
 
@@ -262,19 +303,23 @@ private class SubSubClassWithInheritedMetaAnnotation : SubClassWithInheritedMeta
 {
 }
 
-@MetaMeta private class MetaMetaAnnotatedClass
+@MetaMeta
+private class MetaMetaAnnotatedClass
 {
 }
 
-@MetaMetaMeta private class MetaMetaMetaAnnotatedClass
+@MetaMetaMeta
+private class MetaMetaMetaAnnotatedClass
 {
 }
 
-@MetaCycle3 private class MetaCycleAnnotatedClass
+@MetaCycle3
+private class MetaCycleAnnotatedClass
 {
 }
 
-@Transactional private class InheritedAnnotationClass
+@Transactional
+private class InheritedAnnotationClass
 {
 }
 
@@ -282,7 +327,8 @@ private class SubInheritedAnnotationClass : InheritedAnnotationClass
 {
 }
 
-@Order private class NonInheritedAnnotationClass
+@Order
+private class NonInheritedAnnotationClass
 {
 }
 
@@ -290,11 +336,13 @@ private class SubNonInheritedAnnotationClass : NonInheritedAnnotationClass
 {
 }
 
-@Transactional private class TransactionalClass
+@Transactional
+private class TransactionalClass
 {
 }
 
-@Order private class TransactionalAndOrderedClass : TransactionalClass
+@Order
+private class TransactionalAndOrderedClass : TransactionalClass
 {
 }
 
@@ -302,13 +350,15 @@ private class SubTransactionalAndOrderedClass : TransactionalAndOrderedClass
 {
 }
 
-@Resource(name : "x") private class ResourceHolder
+@Resource(name : "x")
+private class ResourceHolder
 {
 }
 
 private interface TransactionalService
 {
-    @Transactional void doIt();
+    @Transactional
+    void doIt();
 }
 
 private class TransactionalServiceImpl : TransactionalService

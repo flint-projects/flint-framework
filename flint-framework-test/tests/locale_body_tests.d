@@ -135,10 +135,12 @@ private final class PageView : View
 }
 
 /// A controller rendering a view object.
-@Controller class PageController
+@Controller
+class PageController
 {
     /// `GET /page`.
-    @GetMapping("/page") ModelAndView page()
+    @GetMapping("/page")
+    ModelAndView page()
     {
         return new ModelAndView(new PageView);
     }
@@ -164,10 +166,12 @@ struct Point
 }
 
 /// A controller echoing a JSON body.
-@RestController class PointController
+@RestController
+class PointController
 {
     /// `POST /points`.
-    @PostMapping("/points") Point echo(@RequestBody Point point)
+    @PostMapping("/points")
+    Point echo(@RequestBody Point point)
     {
         return Point(point.x * 2, point.label ~ "!");
     }

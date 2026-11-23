@@ -17,8 +17,10 @@ private void emit(scope const(char)[] text) nothrow @nogc
 
 private struct Visit
 {
-    @NotNull string description;
-    @Min(1) int pets;
+    @NotNull
+    string description;
+    @Min(1)
+    int pets;
 }
 
 int main(string[] args)

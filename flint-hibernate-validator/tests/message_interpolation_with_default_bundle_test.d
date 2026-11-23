@@ -24,24 +24,30 @@ import flint.jakarta.validation.constraints : DecimalMax, DecimalMin, Email;
 
 private final class User
 {
-    @Email string email;
+    @Email
+    string email;
     // Gap: Hibernate's own constraints (@Range, @DurationMin, @DurationMax) are not ported.
     version (FlintHibernateConstraints)
     {
         @Range(min : 18, max:
-                21) int age;
+                21)
+        int age;
     }
 }
 
 private final class DoubleHolder
 {
-    @DecimalMax(value : "1.0") double inclusiveMaxDouble;
+    @DecimalMax(value : "1.0")
+    double inclusiveMaxDouble;
     @DecimalMax(value : "1.0", inclusive:
-            false) double exclusiveMaxDouble;
+            false)
+    double exclusiveMaxDouble;
 
-    @DecimalMin(value : "1.0") double inclusiveMinDouble;
+    @DecimalMin(value : "1.0")
+    double inclusiveMinDouble;
     @DecimalMin(value : "1.0", inclusive:
-            false) double exclusiveMinDouble;
+            false)
+    double exclusiveMinDouble;
 
     this()
     {
@@ -173,13 +179,17 @@ version (FlintHibernateConstraints)
 {
     private final class DurationHolder
     {
-        @DurationMax(days : 2L) Duration inclusiveMaxDuration;
+        @DurationMax(days : 2L)
+        Duration inclusiveMaxDuration;
         @DurationMax(days : 2L, inclusive:
-                false) Duration exclusiveMaxDuration;
+                false)
+        Duration exclusiveMaxDuration;
 
-        @DurationMin(days : 2L) Duration inclusiveMinDuration;
+        @DurationMin(days : 2L)
+        Duration inclusiveMinDuration;
         @DurationMin(days : 2L, inclusive:
-                false) Duration exclusiveMinDuration;
+                false)
+        Duration exclusiveMinDuration;
 
         this()
         {
