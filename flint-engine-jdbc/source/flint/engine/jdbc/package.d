@@ -1849,6 +1849,130 @@ final class FlintDatabaseMetaData : DatabaseMetaData
         return sqlite() ? Connection.TRANSACTION_SERIALIZABLE : Connection.TRANSACTION_READ_COMMITTED;
     }
 
+    override ResultSet getTables(string catalog, string schemaPattern, string tableNamePattern, string[] types)
+    {
+        string sql;
+        string[] args = [tableNamePattern is null ? "%" : tableNamePattern];
+        if (sqlite())
+            sql = "SELECT NULL AS TABLE_CAT, 'main' AS TABLE_SCHEM, name AS TABLE_NAME, "
+                ~ "CASE type WHEN 'view' THEN 'VIEW' ELSE 'TABLE' END AS TABLE_TYPE, NULL AS REMARKS "
+                ~ "FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' "
+                ~ "AND name LIKE ?";
+        else
+        {
+            sql = "SELECT table_catalog AS \"TABLE_CAT\", table_schema AS \"TABLE_SCHEM\", "
+                ~ "table_name AS \"TABLE_NAME\", CASE table_type WHEN 'BASE TABLE' THEN 'TABLE' "
+                ~ "ELSE table_type END AS \"TABLE_TYPE\", NULL AS \"REMARKS\" FROM information_schema.tables "
+                ~ "WHERE table_name LIKE ? AND table_schema LIKE ? "
+                ~ "AND table_schema NOT IN ('pg_catalog', 'information_schema')";
+            args ~= schemaPattern is null ? "%" : schemaPattern;
+        }
+        if (types.length)
+        {
+            sql ~= " AND " ~ (sqlite() ? "CASE type WHEN 'view' THEN 'VIEW' ELSE 'TABLE' END"
+                    : "CASE table_type WHEN 'BASE TABLE' THEN 'TABLE' ELSE table_type END") ~ " IN (";
+            foreach (index, type; types)
+            {
+                sql ~= (index ? ", ?" : "?");
+                args ~= type;
+            }
+            sql ~= ")";
+        }
+        return metaDataQuery(sql ~ (sqlite() ? " ORDER BY name" : " ORDER BY table_schema, table_name"), args);
+    }
+
+    override ResultSet getColumns(string catalog, string schemaPattern, string tableNamePattern,
+            string columnNamePattern)
+    {
+        const table = tableNamePattern is null ? "%" : tableNamePattern;
+        const column = columnNamePattern is null ? "%" : columnNamePattern;
+        string sql;
+        if (sqlite())
+        {
+            sql = "SELECT NULL AS TABLE_CAT, 'main' AS TABLE_SCHEM, m.name AS TABLE_NAME, p.name AS COLUMN_NAME, ";
+            sql ~= sqliteDataType("p.type") ~ " AS DATA_TYPE, p.type AS TYPE_NAME, NULL AS COLUMN_SIZE, ";
+            sql ~= "NULL AS DECIMAL_DIGITS, CASE WHEN p.\"notnull\" = 0 AND p.pk = 0 THEN 1 ELSE 0 END AS NULLABLE, ";
+            sql ~= "p.cid + 1 AS ORDINAL_POSITION, ";
+            sql ~= "CASE WHEN p.\"notnull\" = 0 AND p.pk = 0 THEN 'YES' ELSE 'NO' END AS IS_NULLABLE ";
+            sql ~= "FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type IN ('table', 'view') ";
+            sql ~= "AND m.name LIKE ? AND p.name LIKE ? ORDER BY m.name, p.cid";
+            return metaDataQuery(sql, [table, column]);
+        }
+        sql = "SELECT table_catalog AS \"TABLE_CAT\", table_schema AS \"TABLE_SCHEM\", ";
+        sql ~= "table_name AS \"TABLE_NAME\", column_name AS \"COLUMN_NAME\", ";
+        sql ~= postgresDataType("data_type") ~ " AS \"DATA_TYPE\", data_type AS \"TYPE_NAME\", ";
+        sql ~= "character_maximum_length AS \"COLUMN_SIZE\", numeric_scale AS \"DECIMAL_DIGITS\", ";
+        sql ~= "CASE is_nullable WHEN 'YES' THEN 1 ELSE 0 END AS \"NULLABLE\", ";
+        sql ~= "ordinal_position AS \"ORDINAL_POSITION\", is_nullable AS \"IS_NULLABLE\" ";
+        sql ~= "FROM information_schema.columns WHERE table_name LIKE ? AND table_schema LIKE ? ";
+        sql ~= "AND column_name LIKE ? ORDER BY table_schema, table_name, ordinal_position";
+        return metaDataQuery(sql, [table, schemaPattern is null ? "%" : schemaPattern, column]);
+    }
+
+    /// Run a metadata query with string parameters on the connection.
+    private ResultSet metaDataQuery(string sql, string[] args)
+    {
+        auto statement = connection.prepareStatement(sql);
+        foreach (index, arg; args)
+            statement.setString(cast(int) index + 1, arg);
+        return statement.executeQuery();
+    }
+
+    /// The `Types` code of a SQLite declared type, by its affinity rules.
+    private static string sqliteDataType(string column)
+    {
+        const type = "upper(" ~ column ~ ")";
+        string like(string pattern)
+        {
+            return type ~ " LIKE '" ~ pattern ~ "'";
+        }
+
+        string sql = "CASE WHEN " ~ like("%INT%") ~ " THEN " ~ decimal(Types.INTEGER);
+        sql ~= " WHEN " ~ like("%CHAR%") ~ " OR " ~ like("%CLOB%") ~ " OR " ~ like("%TEXT%");
+        sql ~= " THEN " ~ decimal(Types.VARCHAR);
+        sql ~= " WHEN " ~ like("%BLOB%") ~ " OR " ~ type ~ " = '' THEN " ~ decimal(Types.BLOB);
+        sql ~= " WHEN " ~ like("%REAL%") ~ " OR " ~ like("%FLOA%") ~ " OR " ~ like("%DOUB%");
+        sql ~= " THEN " ~ decimal(Types.DOUBLE);
+        sql ~= " WHEN " ~ like("%BOOL%") ~ " THEN " ~ decimal(Types.BOOLEAN);
+        sql ~= " WHEN " ~ like("%TIMESTAMP%") ~ " THEN " ~ decimal(Types.TIMESTAMP);
+        sql ~= " WHEN " ~ like("%DATE%") ~ " THEN " ~ decimal(Types.DATE);
+        return sql ~ " ELSE " ~ decimal(Types.NUMERIC) ~ " END";
+    }
+
+    /// The `Types` code of a PostgreSQL `information_schema` data type, as pgjdbc reports it.
+    private static string postgresDataType(string column)
+    {
+        static immutable string[2][] names = [
+            ["integer", "INTEGER"], ["bigint", "BIGINT"], ["smallint", "SMALLINT"],
+            ["character varying", "VARCHAR"], ["character", "CHAR"], ["text", "VARCHAR"],
+            ["boolean", "BIT"], ["date", "DATE"], ["time without time zone", "TIME"],
+            ["timestamp without time zone", "TIMESTAMP"], ["timestamp with time zone", "TIMESTAMP"],
+            ["numeric", "NUMERIC"], ["double precision", "DOUBLE"], ["real", "REAL"],
+            ["bytea", "BINARY"]
+        ];
+        string sql = "CASE " ~ column;
+        foreach (pair; names)
+            sql ~= " WHEN '" ~ pair[0] ~ "' THEN " ~ decimal(typeCode(pair[1]));
+        return sql ~ " ELSE " ~ decimal(Types.OTHER) ~ " END";
+    }
+
+    private static int typeCode(string name)
+    {
+        switch (name)
+        {
+            static foreach (member; [
+                "INTEGER", "BIGINT", "SMALLINT", "VARCHAR", "CHAR", "BIT", "DATE", "TIME",
+                "TIMESTAMP", "NUMERIC", "DOUBLE", "REAL", "BINARY"
+            ])
+            {
+        case member:
+                return __traits(getMember, Types, member);
+            }
+        default:
+            return Types.OTHER;
+        }
+    }
+
     override Connection getConnection()
     {
         return connection;

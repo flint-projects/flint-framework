@@ -227,6 +227,26 @@ private void exercise(Connection connection, string table)
     {
     }
 
+    // Metadata: the table and its columns, with JDBC's column labels and Types codes.
+    auto metaData = connection.getMetaData();
+    auto tables = metaData.getTables(null, null, table, ["TABLE"]);
+    assert(tables.next() && tables.getString("TABLE_NAME") == table && tables.getString("TABLE_TYPE") == "TABLE");
+    assert(!tables.next());
+    auto columns = metaData.getColumns(null, null, table, null);
+    string[] columnNames;
+    int[] dataTypes;
+    bool[] nullable;
+    while (columns.next())
+    {
+        columnNames ~= columns.getString("COLUMN_NAME");
+        dataTypes ~= columns.getInt("DATA_TYPE");
+        nullable ~= columns.getBoolean("NULLABLE");
+    }
+    assert(columnNames == ["id", "first_name", "score", "note"], columnNames[0]);
+    assert(dataTypes == [Types.INTEGER, Types.VARCHAR, Types.DOUBLE, Types.VARCHAR]);
+    assert(nullable == [false, false, true, true]);
+    assert(!metaData.getTables(null, null, "no_such_table", null).next());
+
     statement.execute("DROP TABLE " ~ table);
     statement.close();
     try

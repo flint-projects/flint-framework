@@ -775,6 +775,20 @@ interface DatabaseMetaData : Wrapper
     bool supportsResultSetType(int type);
     /// JDBC's `getDefaultTransactionIsolation`.
     int getDefaultTransactionIsolation();
+
+    /++
+    The tables matching the given catalog, schema and table name patterns (`%` and `_` wildcards; null matches
+    any), and whose type is one of `types` (null for all). Each row has JDBC's columns `TABLE_CAT`, `TABLE_SCHEM`,
+    `TABLE_NAME`, `TABLE_TYPE` and `REMARKS`.
+    +/
+    ResultSet getTables(string catalog, string schemaPattern, string tableNamePattern, string[] types);
+
+    /++
+    The columns matching the given patterns, in table and ordinal order. Each row has JDBC's columns `TABLE_CAT`,
+    `TABLE_SCHEM`, `TABLE_NAME`, `COLUMN_NAME`, `DATA_TYPE` (a `Types` constant), `TYPE_NAME`, `COLUMN_SIZE`,
+    `DECIMAL_DIGITS`, `NULLABLE`, `ORDINAL_POSITION` and `IS_NULLABLE`.
+    +/
+    ResultSet getColumns(string catalog, string schemaPattern, string tableNamePattern, string columnNamePattern);
     /// JDBC's `getConnection`.
     Connection getConnection();
 }

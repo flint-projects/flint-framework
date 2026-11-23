@@ -20,6 +20,7 @@ case. Callbacks also accept delegates (R9). `rowSet()` and `stream()` are deferr
 +/
 module flint.jdbc.core.simple;
 
+import flint.dao : InvalidDataAccessApiUsageException;
 import flint.dao.support : DataAccessUtils;
 import flint.engine.aot.any : Any;
 import flint.java.lang : IllegalArgumentException, IllegalStateException;
@@ -827,3 +828,585 @@ private final class DefaultBatchEntry : JdbcClient.BatchEntry
 
     alias param = JdbcClient.BatchEntry.param;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// SimpleJdbcInsert
+
+/++
+Abstract class to provide base functionality for easy inserts based on configuration options and database
+meta-data. This class provides the base SPI for `SimpleJdbcInsert`.
++/
+abstract class AbstractJdbcInsert
+{
+    import flint.jdbc.core.metadata : TableMetaDataContext;
+
+    /// Logger available to subclasses.
+    protected imported!"flint.slf4j".Logger logger;
+
+    private JdbcTemplate jdbcTemplate;
+    private TableMetaDataContext tableMetaDataContext;
+    private string[] declaredColumns;
+    private string[] generatedKeyNames;
+    private bool compiled;
+    private string insertString = "";
+    private int[] insertTypes;
+
+    /// Constructor to be used when initializing using a `DataSource`.
+    protected this(DataSource dataSource)
+    {
+        this(new JdbcTemplate(dataSource));
+    }
+
+    /// Constructor to be used when initializing using a `JdbcTemplate`.
+    protected this(JdbcTemplate jdbcTemplate)
+    {
+        import flint.slf4j : LoggerFactory;
+
+        if (jdbcTemplate is null)
+            throw new IllegalArgumentException("JdbcTemplate must not be null");
+        this.jdbcTemplate = jdbcTemplate;
+        tableMetaDataContext = new TableMetaDataContext;
+        logger = LoggerFactory.getLogger(typeid(this).name);
+    }
+
+    /// Get the configured `JdbcTemplate`.
+    JdbcTemplate getJdbcTemplate()
+    {
+        return jdbcTemplate;
+    }
+
+    /// Set the name of the table for this insert.
+    void setTableName(string tableName)
+    {
+        checkIfConfigurationModificationIsAllowed();
+        tableMetaDataContext.setTableName(tableName);
+    }
+
+    /// Get the name of the table for this insert.
+    string getTableName()
+    {
+        return tableMetaDataContext.getTableName();
+    }
+
+    /// Set the name of the schema for this insert.
+    void setSchemaName(string schemaName)
+    {
+        checkIfConfigurationModificationIsAllowed();
+        tableMetaDataContext.setSchemaName(schemaName);
+    }
+
+    /// Get the name of the schema for this insert.
+    string getSchemaName()
+    {
+        return tableMetaDataContext.getSchemaName();
+    }
+
+    /// Set the name of the catalog for this insert.
+    void setCatalogName(string catalogName)
+    {
+        checkIfConfigurationModificationIsAllowed();
+        tableMetaDataContext.setCatalogName(catalogName);
+    }
+
+    /// Get the name of the catalog for this insert.
+    string getCatalogName()
+    {
+        return tableMetaDataContext.getCatalogName();
+    }
+
+    /// Set the names of the columns to be used.
+    void setColumnNames(List!string columnNames)
+    {
+        checkIfConfigurationModificationIsAllowed();
+        declaredColumns = columnNames.toArray();
+    }
+
+    /// Get the names of the columns used.
+    List!string getColumnNames()
+    {
+        auto columns = new ArrayList!string;
+        foreach (column; declaredColumns)
+            columns.add(column);
+        return columns;
+    }
+
+    /// Specify the name of a single generated key column.
+    void setGeneratedKeyName(string generatedKeyName)
+    {
+        checkIfConfigurationModificationIsAllowed();
+        generatedKeyNames = [generatedKeyName];
+    }
+
+    /// Set the names of any generated keys.
+    void setGeneratedKeyNames(string[] generatedKeyNames...)
+    {
+        checkIfConfigurationModificationIsAllowed();
+        this.generatedKeyNames = generatedKeyNames.dup;
+    }
+
+    /// Get the names of any generated keys.
+    string[] getGeneratedKeyNames()
+    {
+        return generatedKeyNames;
+    }
+
+    /// Specify whether the parameter meta-data for the call should be used. The default is true.
+    void setAccessTableColumnMetaData(bool accessTableColumnMetaData)
+    {
+        tableMetaDataContext.setAccessTableColumnMetaData(accessTableColumnMetaData);
+    }
+
+    /// Specify whether the default for including synonyms should be changed. The default is false.
+    void setOverrideIncludeSynonymsDefault(bool override_)
+    {
+        tableMetaDataContext.setOverrideIncludeSynonymsDefault(override_);
+    }
+
+    /// Get the insert string to be used.
+    string getInsertString()
+    {
+        return insertString;
+    }
+
+    /// Get the array of `Types` to be used for insert.
+    int[] getInsertTypes()
+    {
+        return insertTypes;
+    }
+
+    /// Specify whether SQL identifiers should be quoted.
+    void setQuoteIdentifiers(bool quoteIdentifiers)
+    {
+        tableMetaDataContext.setQuoteIdentifiers(quoteIdentifiers);
+    }
+
+    /// Get the quoteIdentifiers flag.
+    bool isQuoteIdentifiers()
+    {
+        return tableMetaDataContext.isQuoteIdentifiers();
+    }
+
+    /// Compile this JdbcInsert using provided parameters and meta-data plus other settings. This finalizes the
+    /// configuration for this object and subsequent attempts to compile are ignored.
+    final void compile()
+    {
+        synchronized (this)
+        {
+            if (isCompiled())
+                return;
+            if (getTableName() is null)
+                throw new InvalidDataAccessApiUsageException("Table name is required");
+            if (isQuoteIdentifiers() && declaredColumns.length == 0)
+                throw new InvalidDataAccessApiUsageException(
+                        "Explicit column names must be provided when using quoted identifiers");
+            try
+                jdbcTemplate.afterPropertiesSet();
+            catch (IllegalArgumentException ex)
+                throw new InvalidDataAccessApiUsageException(ex.msg);
+            compileInternal();
+            compiled = true;
+            if (logger.isDebugEnabled())
+                logger.debug_("JdbcInsert for table [" ~ getTableName() ~ "] compiled");
+        }
+    }
+
+    /// Delegate method to perform the actual compilation. Subclasses can override this template method to perform
+    /// their own compilation. Invoked after this base class's compilation is complete.
+    protected void compileInternal()
+    {
+        auto dataSource = getJdbcTemplate().getDataSource();
+        if (dataSource is null)
+            throw new IllegalStateException("No DataSource set");
+        tableMetaDataContext.processMetaData(dataSource, declaredColumns, getGeneratedKeyNames());
+        insertString = tableMetaDataContext.createInsertString(getGeneratedKeyNames());
+        insertTypes = tableMetaDataContext.createInsertTypes();
+        if (logger.isDebugEnabled())
+            logger.debug_("Compiled insert object: insert string is [" ~ insertString ~ "]");
+        onCompileInternal();
+    }
+
+    /// Hook method that subclasses may override to react to compilation. This implementation does nothing.
+    protected void onCompileInternal()
+    {
+    }
+
+    /// Is this operation "compiled"?
+    bool isCompiled()
+    {
+        return compiled;
+    }
+
+    /// Check whether this operation has been compiled already; lazily compile it if not already compiled.
+    protected void checkCompiled()
+    {
+        if (!isCompiled())
+        {
+            logger.debug_("JdbcInsert not compiled before execution - invoking compile");
+            compile();
+        }
+    }
+
+    /// Method to check whether we are allowed to make any configuration changes at this time.
+    protected void checkIfConfigurationModificationIsAllowed()
+    {
+        if (isCompiled())
+            throw new InvalidDataAccessApiUsageException(
+                    "Configuration cannot be altered once the class has been compiled or used");
+    }
+
+    /// Delegate method that executes the insert using the passed-in `Map` of parameters.
+    protected int doExecute(Map!(string, Any) args)
+    {
+        checkCompiled();
+        return executeInsertInternal(matchInParameterValuesWithInsertColumns(args));
+    }
+
+    /// Delegate method that executes the insert using the passed-in `SqlParameterSource`.
+    protected int doExecute(SqlParameterSource parameterSource)
+    {
+        checkCompiled();
+        return executeInsertInternal(matchInParameterValuesWithInsertColumns(parameterSource));
+    }
+
+    private int executeInsertInternal(List!Any values)
+    {
+        return getJdbcTemplate().update(getInsertString(), values.toArray(), getInsertTypes());
+    }
+
+    /// Method that provides execution of the insert using the passed-in `Map` of parameters and returning a
+    /// generated key (Java's `Number`, an `Any` holding the driver's integral type).
+    protected Any doExecuteAndReturnKey(Map!(string, Any) args)
+    {
+        checkCompiled();
+        return executeInsertAndReturnKeyInternal(matchInParameterValuesWithInsertColumns(args));
+    }
+
+    /// Method that provides execution of the insert using the passed-in `SqlParameterSource` and returning a
+    /// generated key.
+    protected Any doExecuteAndReturnKey(SqlParameterSource parameterSource)
+    {
+        checkCompiled();
+        return executeInsertAndReturnKeyInternal(matchInParameterValuesWithInsertColumns(parameterSource));
+    }
+
+    /// Method that provides execution of the insert using the passed-in `Map` of parameters and returning all
+    /// generated keys.
+    protected KeyHolder doExecuteAndReturnKeyHolder(Map!(string, Any) args)
+    {
+        checkCompiled();
+        return executeInsertAndReturnKeyHolderInternal(matchInParameterValuesWithInsertColumns(args));
+    }
+
+    /// Method that provides execution of the insert using the passed-in `SqlParameterSource` and returning all
+    /// generated keys.
+    protected KeyHolder doExecuteAndReturnKeyHolder(SqlParameterSource parameterSource)
+    {
+        checkCompiled();
+        return executeInsertAndReturnKeyHolderInternal(matchInParameterValuesWithInsertColumns(parameterSource));
+    }
+
+    private Any executeInsertAndReturnKeyInternal(List!Any values)
+    {
+        import flint.dao : DataIntegrityViolationException;
+
+        auto kh = executeInsertAndReturnKeyHolderInternal(values);
+        auto key = kh.getKey();
+        if (key.isNull)
+            throw new DataIntegrityViolationException(
+                    "Unable to retrieve the generated key for the insert: " ~ getInsertString());
+        return key;
+    }
+
+    private KeyHolder executeInsertAndReturnKeyHolderInternal(List!Any values)
+    {
+        import flint.jdbc.support : GeneratedKeyHolder;
+
+        auto keyHolder = new GeneratedKeyHolder;
+        auto array = values.toArray();
+        if (tableMetaDataContext.isGetGeneratedKeysSupported())
+        {
+            getJdbcTemplate().update(new class PreparedStatementCreator
+                {
+                override imported!"flint.java.sql".PreparedStatement createPreparedStatement(
+                    imported!"flint.java.sql".Connection con)
+                {
+                    auto ps = prepareStatementForGeneratedKeys(con); setParameterValues(ps, array, getInsertTypes());
+                        return ps;}
+                }
+, keyHolder);
+                return keyHolder;
+            }
+            return simulatedGeneratedKey(array, keyHolder);
+        }
+
+        /// The generated key through the database's simple query, when the driver has no `getGeneratedKeys`.
+        private KeyHolder simulatedGeneratedKey(Any[] values, KeyHolder keyHolder)
+        {
+            import flint.dao : InvalidDataAccessResourceUsageException;
+            import flint.dao.support : DataAccessUtils;
+            import flint.java.util : LinkedHashMap;
+            import flint.jdbc.core : ArgumentPreparedStatementSetter;
+
+            if (!tableMetaDataContext.isGetGeneratedKeysSimulated())
+                throw new InvalidDataAccessResourceUsageException(
+                        "The getGeneratedKeys feature is not supported by this database");
+            if (getGeneratedKeyNames().length != 1)
+                throw new InvalidDataAccessApiUsageException(
+                        "Current database only supports retrieving the key for a "
+                        ~ "single column, and the generated key name must be specified");
+            const keyQuery = tableMetaDataContext.getSimpleQueryForGetGeneratedKey(getTableName(),
+                    getGeneratedKeyNames()[0]);
+            if (keyQuery is null || !startsWithIgnoreCase(keyQuery, "RETURNING"))
+                throw new InvalidDataAccessResourceUsageException(
+                        "Only a RETURNING clause can simulate generated keys on Flint's drivers");
+            const key = DataAccessUtils.nullableSingleResult(getJdbcTemplate().query(getInsertString() ~ " " ~ keyQuery,
+                    new ArgumentPreparedStatementSetter(values),
+                    new RowMapperResultSetExtractor!long(new SingleColumnRowMapper!long, 1)));
+            auto keys = new LinkedHashMap!(string, Any);
+            keys.put(getGeneratedKeyNames()[0], Any.of(key));
+            keyHolder.getKeyList().add(keys);
+            return keyHolder;
+        }
+
+        /// Create a `PreparedStatement` to be used for an insert operation with generated keys.
+        private imported!"flint.java.sql".PreparedStatement prepareStatementForGeneratedKeys(
+                imported!"flint.java.sql".Connection con)
+        {
+            if (getGeneratedKeyNames().length < 1)
+                throw new InvalidDataAccessApiUsageException(
+                        "Generated Key Name(s) not specified. Using the generated "
+                        ~ "keys features requires specifying the name(s) of the generated column(s).");
+            if (tableMetaDataContext.isGeneratedKeysColumnNameArraySupported())
+                return con.prepareStatement(getInsertString(), getGeneratedKeyNames());
+            return con.prepareStatement(getInsertString(), imported!"flint.java.sql".Statement.RETURN_GENERATED_KEYS);
+        }
+
+        /// Delegate method that executes a batch insert using the passed-in `Map`s of parameters.
+        protected int[] doExecuteBatch(Map!(string, Any)[] batch...)
+        {
+            checkCompiled();
+            Any[][] batchValues;
+            foreach (args; batch)
+                batchValues ~= matchInParameterValuesWithInsertColumns(args).toArray();
+            return executeBatchInternal(batchValues);
+        }
+
+        /// Delegate method that executes a batch insert using the passed-in `SqlParameterSource`s.
+        protected int[] doExecuteBatch(SqlParameterSource[] batch...)
+        {
+            checkCompiled();
+            Any[][] batchValues;
+            foreach (parameterSource; batch)
+                batchValues ~= matchInParameterValuesWithInsertColumns(parameterSource).toArray();
+            return executeBatchInternal(batchValues);
+        }
+
+        private int[] executeBatchInternal(Any[][] batchValues)
+        {
+            return getJdbcTemplate().batchUpdate(getInsertString(), batchValues, getInsertTypes());
+        }
+
+        private static void setParameterValues(imported!"flint.java.sql".PreparedStatement ps,
+                Any[] values, int[] columnTypes)
+        {
+            import flint.jdbc.core : SqlTypeValue, StatementCreatorUtils;
+
+            foreach (index, value; values)
+            {
+                const colIndex = cast(int) index + 1;
+                StatementCreatorUtils.setParameterValue(ps, colIndex, colIndex > columnTypes.length
+                        ? SqlTypeValue.TYPE_UNKNOWN : columnTypes[colIndex - 1], value);
+            }
+        }
+
+        /// Match the provided in parameter values with registered parameters and parameters defined via meta-data
+        /// processing.
+        protected List!Any matchInParameterValuesWithInsertColumns(SqlParameterSource parameterSource)
+        {
+            return tableMetaDataContext.matchInParameterValuesWithInsertColumns(parameterSource);
+        }
+
+        /// Match the provided in parameter values with registered parameters and parameters defined via meta-data
+        /// processing.
+        protected List!Any matchInParameterValuesWithInsertColumns(Map!(string, Any) args)
+        {
+            return tableMetaDataContext.matchInParameterValuesWithInsertColumns(args);
+        }
+    }
+
+    private bool startsWithIgnoreCase(string text, string prefix) pure nothrow @nogc
+    {
+        if (text.length < prefix.length)
+            return false;
+        foreach (i, c; prefix)
+        {
+            const t = text[i] >= 'a' && text[i] <= 'z' ? cast(char)(text[i] - 32) : text[i];
+            if (t != c)
+                return false;
+        }
+        return true;
+    }
+
+    /// Interface specifying the API for a Simple JDBC Insert implemented by `SimpleJdbcInsert`.
+    interface SimpleJdbcInsertOperations
+    {
+        /// Specify the table name to be used for the insert.
+        SimpleJdbcInsertOperations withTableName(string tableName);
+
+        /// Specify the schema name, if any, to be used for the insert.
+        SimpleJdbcInsertOperations withSchemaName(string schemaName);
+
+        /// Specify the catalog name, if any, to be used for the insert.
+        SimpleJdbcInsertOperations withCatalogName(string catalogName);
+
+        /// Specify the column names that the insert statement should be limited to use.
+        SimpleJdbcInsertOperations usingColumns(string[] columnNames...);
+
+        /// Specify the names of any columns that have auto-generated keys.
+        SimpleJdbcInsertOperations usingGeneratedKeyColumns(string[] columnNames...);
+
+        /// Specify that SQL identifiers should be quoted.
+        SimpleJdbcInsertOperations usingQuotedIdentifiers();
+
+        /// Turn off any processing of column meta-data information obtained via JDBC.
+        SimpleJdbcInsertOperations withoutTableColumnMetaDataAccess();
+
+        /// Include synonyms for the column meta-data lookups via JDBC.
+        SimpleJdbcInsertOperations includeSynonymsForTableColumnMetaData();
+
+        /// Execute the insert using the values passed in.
+        int execute(Map!(string, Any) args);
+
+        /// Execute the insert using the values passed in.
+        int execute(SqlParameterSource parameterSource);
+
+        /// Execute the insert using the values passed in and return the generated key.
+        Any executeAndReturnKey(Map!(string, Any) args);
+
+        /// Execute the insert using the values passed in and return the generated key.
+        Any executeAndReturnKey(SqlParameterSource parameterSource);
+
+        /// Execute the insert using the values passed in and return the generated keys.
+        KeyHolder executeAndReturnKeyHolder(Map!(string, Any) args);
+
+        /// Execute the insert using the values passed in and return the generated keys.
+        KeyHolder executeAndReturnKeyHolder(SqlParameterSource parameterSource);
+
+        /// Execute a batch insert using the batch of values passed in.
+        int[] executeBatch(Map!(string, Any)[] batch...);
+
+        /// Execute a batch insert using the batch of values passed in.
+        int[] executeBatch(SqlParameterSource[] batch...);
+    }
+
+    /++
+A `SimpleJdbcInsert` is a multithreaded, reusable object providing easy (batch) insert capabilities for a table. It
+provides meta-data processing to simplify the code needed to construct a basic insert statement. All you need to
+provide is the name of the table and a `Map` containing the column names and the column values.
++/
+    class SimpleJdbcInsert : AbstractJdbcInsert, SimpleJdbcInsertOperations
+    {
+        /// Constructor that takes one parameter with the JDBC `DataSource` to use when creating the underlying
+        /// `JdbcTemplate`.
+        this(DataSource dataSource)
+        {
+            super(dataSource);
+        }
+
+        /// Alternative constructor that takes one parameter with the `JdbcTemplate` to be used.
+        this(JdbcTemplate jdbcTemplate)
+        {
+            super(jdbcTemplate);
+        }
+
+        override SimpleJdbcInsert withTableName(string tableName)
+        {
+            setTableName(tableName);
+            return this;
+        }
+
+        override SimpleJdbcInsert withSchemaName(string schemaName)
+        {
+            setSchemaName(schemaName);
+            return this;
+        }
+
+        override SimpleJdbcInsert withCatalogName(string catalogName)
+        {
+            setCatalogName(catalogName);
+            return this;
+        }
+
+        override SimpleJdbcInsert usingColumns(string[] columnNames...)
+        {
+            auto columns = new ArrayList!string;
+            foreach (column; columnNames)
+                columns.add(column);
+            setColumnNames(columns);
+            return this;
+        }
+
+        override SimpleJdbcInsert usingGeneratedKeyColumns(string[] columnNames...)
+        {
+            setGeneratedKeyNames(columnNames);
+            return this;
+        }
+
+        override SimpleJdbcInsert usingQuotedIdentifiers()
+        {
+            setQuoteIdentifiers(true);
+            return this;
+        }
+
+        override SimpleJdbcInsert withoutTableColumnMetaDataAccess()
+        {
+            setAccessTableColumnMetaData(false);
+            return this;
+        }
+
+        override SimpleJdbcInsert includeSynonymsForTableColumnMetaData()
+        {
+            setOverrideIncludeSynonymsDefault(true);
+            return this;
+        }
+
+        override int execute(Map!(string, Any) args)
+        {
+            return doExecute(args);
+        }
+
+        override int execute(SqlParameterSource parameterSource)
+        {
+            return doExecute(parameterSource);
+        }
+
+        override Any executeAndReturnKey(Map!(string, Any) args)
+        {
+            return doExecuteAndReturnKey(args);
+        }
+
+        override Any executeAndReturnKey(SqlParameterSource parameterSource)
+        {
+            return doExecuteAndReturnKey(parameterSource);
+        }
+
+        override KeyHolder executeAndReturnKeyHolder(Map!(string, Any) args)
+        {
+            return doExecuteAndReturnKeyHolder(args);
+        }
+
+        override KeyHolder executeAndReturnKeyHolder(SqlParameterSource parameterSource)
+        {
+            return doExecuteAndReturnKeyHolder(parameterSource);
+        }
+
+        override int[] executeBatch(Map!(string, Any)[] batch...)
+        {
+            return doExecuteBatch(batch);
+        }
+
+        override int[] executeBatch(SqlParameterSource[] batch...)
+        {
+            return doExecuteBatch(batch);
+        }
+    }
