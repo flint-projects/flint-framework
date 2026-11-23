@@ -1,4 +1,4 @@
-/// Linux Wasmtime shim with synchronous borrowed input and generation-checked instances.
+/// Wasmtime shim (Linux, macOS and Windows) with synchronous borrowed input and generation-checked instances.
 module flint.engine.wasi.ffi.native;
 
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
@@ -13,6 +13,10 @@ version (linux)
 else version (OSX)
 {
     version (FlintNativeWasmtime) version = FlintWasiNative; // ADR-024
+}
+else version (Windows)
+{
+    version (FlintNativeWasmtime) version = FlintWasiNative; // ADR-026
 }
 
 private struct NativeModule;

@@ -166,13 +166,14 @@ if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND FLINT_MQ_SOCKET_C)
 endif()
 
 flint_engine_file(flint_wasi.h FLINT_WASI_H)
-if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND EXISTS "${CMAKE_INSTALL_PREFIX}/include/wasmtime.h" AND
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE OR WIN32) AND EXISTS "${CMAKE_INSTALL_PREFIX}/include/wasmtime.h" AND
     FLINT_WASI_H)
   target_compile_definitions(flint_ffi_framework PRIVATE FLINT_HAS_WASMTIME=1)
   if(EXISTS "${CMAKE_INSTALL_PREFIX}/include/flint_wasmtime_extensions.h")
     target_compile_definitions(flint_ffi_framework PRIVATE FLINT_HAS_WASMTIME_EXTENSIONS=1)
     get_filename_component(FLINT_WASI_REFERENCE "${FLINT_WASI_H}/../../../bench/baseline/native/direct.c" ABSOLUTE)
-    if(EXISTS "${FLINT_WASI_REFERENCE}")
+    # The direct-provider bench reference is built on Linux and macOS only; no Windows bench lane uses it yet.
+    if(NOT WIN32 AND EXISTS "${FLINT_WASI_REFERENCE}")
       add_library(flint_wasi_reference STATIC "${FLINT_WASI_REFERENCE}")
       target_include_directories(flint_wasi_reference PRIVATE "${CMAKE_INSTALL_PREFIX}/include")
       install(TARGETS flint_wasi_reference ARCHIVE DESTINATION lib)

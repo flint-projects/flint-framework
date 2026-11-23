@@ -2,19 +2,28 @@
 #include "flint_wasi.h"
 #include "flint_clock.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_WASMTIME)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_WASMTIME)
 
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread, clock_gettime and nanosleep on Win32 (ADR-026) */
+#include <wchar.h>
+/* Wasmtime's output callback returns ptrdiff_t, POSIX's ssize_t. */
+typedef ptrdiff_t ssize_t;
+#define NAME_MAX 255
+#else
+#include <fcntl.h>
+#include <pthread.h>
 #include <unistd.h>
+#endif
 #include <wasmtime.h>
 
 #ifdef FLINT_HAS_WASMTIME_EXTENSIONS
@@ -277,6 +286,131 @@ static bool guest_path_valid(flint_wasi_span path)
     return true;
 }
 
+#if defined(_WIN32)
+/* Windows: the host path is walked one directory at a time from its root, as on POSIX. Each component is opened
+   itself (FILE_FLAG_OPEN_REPARSE_POINT), never followed, and must be a plain directory, so a symbolic link or a
+   junction anywhere below the root is refused. Every handle of the walk stays open, without FILE_SHARE_DELETE,
+   until Wasmtime has opened the preopen: a directory open without delete sharing cannot be renamed, replaced or
+   deleted, so the path Wasmtime resolves reaches exactly the directories the walk verified (ADR-026). UNC and
+   device paths, drive-relative paths, alternate data streams and components the Win32 layer would rewrite (a
+   trailing dot or space) are refused outright. */
+enum { MAX_HOST_DEPTH = MAX_PATH_BYTES / 2 + 2 };
+
+typedef struct host_walk {
+    HANDLE handles[MAX_HOST_DEPTH];
+    size_t depth;
+    wchar_t source[MAX_PATH_BYTES + 1];
+    wchar_t path[MAX_PATH_BYTES + 8];
+    char utf8[3 * (MAX_PATH_BYTES + 8)];
+} host_walk;
+
+static void release_walk(host_walk *walk)
+{
+    for (size_t i = 0; i < walk->depth; ++i)
+        CloseHandle(walk->handles[i]);
+    free(walk);
+}
+
+static bool is_separator(wchar_t ch)
+{
+    return ch == L'/' || ch == L'\\';
+}
+
+/* Opens walk->path as the walk's next directory. Only the root may be reached through a link. */
+static bool open_step(host_walk *walk, bool root)
+{
+    if (walk->depth == MAX_HOST_DEPTH)
+        return false;
+    const DWORD flags = FILE_FLAG_BACKUP_SEMANTICS | (root ? 0 : FILE_FLAG_OPEN_REPARSE_POINT);
+    const HANDLE handle = CreateFileW(walk->path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                      OPEN_EXISTING, flags, NULL);
+    if (handle == INVALID_HANDLE_VALUE)
+        return false;
+    walk->handles[walk->depth++] = handle;
+    BY_HANDLE_FILE_INFORMATION info;
+    return GetFileInformationByHandle(handle, &info) && (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        && !(info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
+}
+
+static bool component_valid(const wchar_t *name, size_t length)
+{
+    return length <= NAME_MAX && name[length - 1] != L'.' && name[length - 1] != L' '
+        && !wmemchr(name, L':', length);
+}
+
+static size_t walk_root(host_walk *walk, size_t units)
+{
+    const wchar_t *source = walk->source;
+    const wchar_t drive = (wchar_t)(source[0] | 0x20);
+    if (units >= 3 && drive >= L'a' && drive <= L'z' && source[1] == L':' && is_separator(source[2])) {
+        wmemcpy(walk->path, L"?:\\", 4);
+        walk->path[0] = source[0];
+        return 3;
+    }
+    if (is_separator(source[0])) {
+        wmemcpy(walk->path, L"\\", 2);
+        return 1;
+    }
+    wmemcpy(walk->path, L".", 2);
+    return 0;
+}
+
+static host_walk *walk_host_directory(flint_wasi_span host)
+{
+    if (!span_valid(host, MAX_PATH_BYTES, false))
+        return NULL;
+    host_walk *walk = calloc(1, sizeof(*walk));
+    if (!walk)
+        return NULL;
+    const int converted = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, host.data, (int)host.length,
+                                              walk->source, MAX_PATH_BYTES);
+    const size_t units = converted > 0 ? (size_t)converted : 0;
+    if (!units || (units > 1 && is_separator(walk->source[0]) && is_separator(walk->source[1])))
+        goto refuse;
+    size_t start = walk_root(walk, units);
+    size_t length = wcslen(walk->path);
+    if (!open_step(walk, true))
+        goto refuse;
+    for (size_t i = start; i <= units; ++i) {
+        if (i < units && !is_separator(walk->source[i]))
+            continue;
+        const wchar_t *name = walk->source + start;
+        const size_t part = i - start;
+        start = i + 1;
+        if (!part || (part == 1 && name[0] == L'.'))
+            continue;
+        if (!component_valid(name, part) || length + part + 2 > sizeof(walk->path) / sizeof(walk->path[0]))
+            goto refuse;
+        if (!is_separator(walk->path[length - 1]))
+            walk->path[length++] = L'\\';
+        wmemcpy(walk->path + length, name, part);
+        length += part;
+        walk->path[length] = 0;
+        if (!open_step(walk, false))
+            goto refuse;
+    }
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, walk->path, -1, walk->utf8, (int)sizeof(walk->utf8),
+                            NULL, NULL) > 0)
+        return walk;
+refuse:
+    release_walk(walk);
+    return NULL;
+}
+
+static bool apply_preopen(wasi_config_t *config, const flint_wasi_preopen *entry)
+{
+    host_walk *walk = walk_host_directory(entry->host);
+    if (!walk)
+        return false;
+    char guest[MAX_PATH_BYTES + 1];
+    memcpy(guest, entry->guest.data, entry->guest.length);
+    guest[entry->guest.length] = 0;
+    /* Wasmtime opens the directory here, while the walk's handles pin every component. */
+    const bool applied = wasi_config_preopen_dir(config, walk->utf8, guest, entry->writable != 0);
+    release_walk(walk);
+    return applied;
+}
+#else
 #if defined(__APPLE__)
 /* Darwin has no O_PATH: each component is opened for reading. */
 #define FLINT_DIRECTORY_ACCESS O_RDONLY
@@ -368,6 +502,7 @@ static bool apply_preopen(wasi_config_t *config, const flint_wasi_preopen *entry
     close(directory);
     return applied;
 }
+#endif
 #endif
 
 static bool env_name_valid(flint_wasi_span name)
