@@ -9,7 +9,7 @@ dependency "webmvc" path="../webmvc"
 dependency "web" path="../web"
 dependency "p1-interim" path="../p1-interim"
 dependency "jakarta-servlet" path="../jakarta-servlet"
-dependency "engine-aot" path="../../packages/engine-aot"
+dependency "engine-aot" path="../engine-aot"
 
 configuration "library" {
     targetType "library"
