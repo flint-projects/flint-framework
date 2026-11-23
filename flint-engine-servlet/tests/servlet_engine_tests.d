@@ -1,0 +1,441 @@
+/++
+The servlet engine over real sockets, with a plain `HttpServlet`: Tomcat's framing, field order, error-page
+forward, exception handling, parameters and keep-alive.
++/
+module servlet_engine_tests;
+
+import core.time : MonoTime, dur;
+import flint.engine.aot.any : Any;
+import flint.engine.servlet : ServletEngine, ServletEngineException, ServletEngineOptions;
+import flint.engine.servlet.response : ServletEngineResponse;
+import flint.jakarta.servlet : DispatcherType, RequestDispatcher;
+import flint.jakarta.servlet.http : HttpServlet, HttpServletRequest, HttpServletResponse;
+import flint.java.lang : IllegalStateException;
+import std.socket : InternetAddress, Socket, SocketOption, SocketOptionLevel, TcpSocket;
+
+@safe:
+
+private final class Probe : HttpServlet
+{
+    long counter;
+
+    protected override string[] getDeclaredMethods()
+    {
+        return ["GET", "POST"];
+    }
+
+    protected override void doGet(HttpServletRequest request, HttpServletResponse response)
+    {
+        if (request.getDispatcherType() == DispatcherType.ERROR)
+            return errorPage(request, response);
+        alias Page = void delegate(HttpServletRequest, HttpServletResponse) @safe;
+        const Page[string] pages = [
+            "/greeting": &greeting, "/committed": &committed, "/empty": &empty,
+            "/fields": &fields, "/throw": &fail, "/headers": &headers, "/large": &large
+        ];
+        if (auto page = request.getServletPath() in pages)
+            return (*page)(request, response);
+        response.setHeader("Allow", "GET");
+        response.sendError(request.getServletPath() == "/nope" ? 404 : 405);
+    }
+
+    private void greeting(HttpServletRequest request, HttpServletResponse response)
+    {
+        ++counter;
+        string joined;
+        foreach (index, value; request.getParameterValues("name"))
+            joined ~= (index != 0 ? "," : "") ~ value;
+        if (joined.length == 0)
+            joined = "World";
+        response.setContentType("application/json");
+        response.getOutputStream()
+            .write(cast(const(ubyte)[])(`{"id":` ~ decimal(counter) ~ `,"content":"Hello, ` ~ joined ~ `!"}`));
+    }
+
+    private void committed(HttpServletRequest, HttpServletResponse response)
+    {
+        response.setHeader("X-First", "1");
+        response.setContentType("application/json");
+        response.getOutputStream().write(cast(const(ubyte)[]) `{"committed":true}`);
+        response.flushBuffer();
+        response.setHeader("X-Late", "ignored");
+    }
+
+    private void empty(HttpServletRequest, HttpServletResponse response)
+    {
+        response.setStatus(406);
+        response.setHeader("Accept", "application/json, application/*+json");
+    }
+
+    private void fields(HttpServletRequest, HttpServletResponse response)
+    {
+        response.addHeader("Vary", "Origin");
+        response.addHeader("Vary", "Access-Control-Request-Method");
+        response.setHeader("X-Replaced", "a");
+        response.setHeader("X-Replaced", "b");
+        response.setContentType("text/html;charset=UTF-8");
+        (cast(ServletEngineResponse) response).setContentLanguage("en-US");
+        response.getWriter().print("<p>é</p>");
+    }
+
+    private void fail(HttpServletRequest, HttpServletResponse)
+    {
+        throw new IllegalStateException("boom");
+    }
+
+    private void headers(HttpServletRequest request, HttpServletResponse response)
+    {
+        response.setContentType("text/plain");
+        response.getWriter()
+            .print(request.getHeader("X-Trace") ~ "|" ~ request.getHeader(
+                    "x-trace") ~ "|" ~ request.getServerName() ~ "|" ~ decimal(
+                    request.getServerPort()) ~ "|" ~ request.getRequestURL() ~ "|" ~ request.getQueryString()
+                    ~ "|" ~ request.getProtocol());
+    }
+
+    private void large(HttpServletRequest, HttpServletResponse response)
+    {
+        response.setContentType("text/plain");
+        auto writer = response.getWriter();
+        foreach (_; 0 .. 1000)
+            writer.print("0123456789");
+    }
+
+    protected override void doPost(HttpServletRequest request, HttpServletResponse response)
+    {
+        if (request.getDispatcherType() == DispatcherType.ERROR)
+            return errorPage(request, response);
+        response.setHeader("Allow", "GET");
+        response.sendError(405, "Method 'POST' is not supported.");
+    }
+
+    /// Stands in for Boot's BasicErrorController: echoes the error attributes, then commits (chunked).
+    private void errorPage(HttpServletRequest request, HttpServletResponse response)
+    {
+        const code = request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE).get!int;
+        const uri = request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI).get!string;
+        const message = request.getAttribute(RequestDispatcher.ERROR_MESSAGE).get!string;
+        auto exception = request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+        response.setStatus(code);
+        response.setContentType("application/json");
+        response.getOutputStream()
+            .write(cast(const(ubyte)[])(`{"status":` ~ decimal(
+                    code) ~ `,"path":"` ~ uri ~ `","message":"` ~ message ~ `","exception":` ~ (exception.isNull()
+                    ? "null" : `"` ~ request.getAttribute(RequestDispatcher.ERROR_EXCEPTION_TYPE).get!string ~ `"`)
+                    ~ `,"at":"` ~ request.getRequestURI() ~ `"}`));
+        response.flushBuffer();
+    }
+}
+
+private string decimal(long value)
+{
+    import std.conv : to;
+
+    return value.to!string;
+}
+
+private struct Fixture
+{
+    ServletEngine engine;
+    Probe probe;
+    ushort port;
+
+    void open()
+    {
+        ServletEngineOptions options;
+        options.address = "127.0.0.1";
+        options.port = 0;
+        engine = new ServletEngine(options);
+        probe = new Probe;
+        engine.addServlet("dispatcherServlet", probe);
+        engine.start();
+        port = cast(ushort) engine.getPort();
+        assert(port != 0);
+    }
+
+    void close()
+    {
+        engine.stop();
+    }
+
+    Socket connect()
+    {
+        auto socket = new TcpSocket(new InternetAddress("127.0.0.1", port));
+        socket.setOption(SocketOptionLevel.SOCKET, SocketOption.RCVTIMEO, dur!"msecs"(3_000));
+        return socket;
+    }
+}
+
+private bool interrupted() @trusted
+{
+    import core.stdc.errno : EINTR, errno;
+
+    return errno == EINTR;
+}
+
+private void sendAll(Socket socket, scope const(char)[] text)
+{
+    const(ubyte)[] bytes = cast(const(ubyte)[]) text;
+    while (bytes.length != 0)
+    {
+        const sent = socket.send(bytes);
+        if (sent == Socket.ERROR && interrupted())
+            continue;
+        assert(sent > 0);
+        bytes = bytes[sent .. $];
+    }
+}
+
+private ptrdiff_t find(scope const(char)[] text, scope const(char)[] needle, size_t from = 0)
+{
+    foreach (index; from .. text.length >= needle.length ? text.length - needle.length + 1 : from)
+        if (text[index .. index + needle.length] == needle)
+            return index;
+    return -1;
+}
+
+/// One response, head and decoded content, read off a keep-alive connection.
+private struct Exchange
+{
+    string head;
+    string content;
+
+    /// The head without its Date line, which the suites do not compare either.
+    string headWithoutDate() const
+    {
+        const at = find(head, "Date: ");
+        if (at < 0)
+            return head;
+        const end = find(head, "\r\n", at);
+        return head[0 .. at] ~ head[end + 2 .. $];
+    }
+}
+
+private Exchange exchange(Socket socket, ref char[] received, scope const(char)[] request, bool head = false)
+{
+    sendAll(socket, request);
+    char[4096] chunk;
+    const deadline = MonoTime.currTime + dur!"seconds"(5);
+    for (;;)
+    {
+        const end = find(received, "\r\n\r\n");
+        if (end >= 0)
+        {
+            const headText = received[0 .. end + 4];
+            const start = end + 4;
+            const lengthAt = find(headText, "\r\nContent-Length: ");
+            if (head)
+            {
+                auto result = Exchange(headText.idup, "");
+                received = received[start .. $].dup;
+                return result;
+            }
+            if (lengthAt >= 0)
+            {
+                size_t length;
+                foreach (c; headText[lengthAt + 18 .. $])
+                {
+                    if (c < '0' || c > '9')
+                        break;
+                    length = length * 10 + (c - '0');
+                }
+                if (received.length >= start + length)
+                {
+                    auto result = Exchange(headText.idup, received[start .. start + length].idup);
+                    received = received[start + length .. $].dup;
+                    return result;
+                }
+            }
+            else
+            {
+                const last = find(received, "\r\n0\r\n\r\n", start - 2);
+                if (last >= 0)
+                {
+                    auto result = Exchange(headText.idup, dechunk(received[start .. last + 7]));
+                    received = received[last + 7 .. $].dup;
+                    return result;
+                }
+            }
+        }
+        assert(MonoTime.currTime < deadline, "timed out: " ~ received.idup);
+        ptrdiff_t count;
+        do
+            count = socket.receive(chunk[]);
+        while (count == Socket.ERROR && interrupted());
+        assert(count > 0, "connection closed: " ~ received.idup);
+        received ~= chunk[0 .. count];
+    }
+}
+
+private string dechunk(scope const(char)[] text)
+{
+    string decoded;
+    size_t at;
+    for (;;)
+    {
+        size_t size;
+        while (text[at] != '\r')
+        {
+            const c = text[at++];
+            size = size * 16 + (c <= '9' ? c - '0' : c - 'a' + 10);
+        }
+        at += 2;
+        if (size == 0)
+            return decoded;
+        decoded ~= text[at .. at + size];
+        at += size + 2;
+    }
+}
+
+@("an uncommitted response is sent whole with Content-Length and no reason phrase")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    char[] pending;
+
+    auto reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nContent-Type: application/json\r\nContent-Length: 34\r\n\r\n",
+            reply.head);
+    assert(reply.content == `{"id":1,"content":"Hello, World!"}`, reply.content);
+
+    // Query parameters: '+' is a space, UTF-8 percent bytes decode, repeated values join, empty is the default.
+    reply = exchange(socket, pending, "GET /greeting?name=Jane+Q%20Public HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":2,"content":"Hello, Jane Q Public!"}`, reply.content);
+    reply = exchange(socket, pending, "GET /greeting?name=%C3%A9t%C3%A9 HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":3,"content":"Hello, été!"}`, reply.content);
+    reply = exchange(socket, pending, "GET /greeting?name=a&name=b HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":4,"content":"Hello, a,b!"}`, reply.content);
+
+    // An empty response that was never committed: Content-Length: 0 after the application's fields.
+    reply = exchange(socket, pending, "GET /empty HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 406 \r\nAccept: application/json, application/*+json\r\n"
+            ~ "Content-Length: 0\r\n\r\n", reply.head);
+
+    // HEAD: the handler runs, Content-Length is the length of the body that is not sent.
+    reply = exchange(socket, pending, "HEAD /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n", true);
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nContent-Type: application/json\r\nContent-Length: 34\r\n\r\n",
+            reply.head);
+    reply = exchange(socket, pending, "GET /greeting?name=again HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":6,"content":"Hello, again!"}`, reply.content);
+}
+
+@("flushBuffer commits with chunked framing and freezes the fields; a full buffer commits too")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    char[] pending;
+
+    auto reply = exchange(socket, pending, "GET /committed HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nX-First: 1\r\nContent-Type: application/json\r\n"
+            ~ "Transfer-Encoding: chunked\r\n\r\n", reply.head);
+    assert(reply.content == `{"committed":true}`, reply.content);
+
+    // 10,000 bytes overflow Tomcat's 8 KiB buffer: committed early, so chunked.
+    reply = exchange(socket, pending, "GET /large HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(find(reply.head, "Transfer-Encoding: chunked\r\n") > 0, reply.head);
+    assert(reply.content.length == 10_000 && reply.content[0 .. 10] == "0123456789");
+}
+
+@("sendError forwards once to the error page with Tomcat's attributes, keeping fields set before it")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    char[] pending;
+
+    auto reply = exchange(socket, pending, "GET /nope HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 404 \r\nAllow: GET\r\nContent-Type: application/json\r\n"
+            ~ "Transfer-Encoding: chunked\r\n\r\n", reply.head);
+    assert(reply.content == `{"status":404,"path":"/nope","message":"","exception":null,"at":"/error"}`, reply.content);
+
+    reply = exchange(socket, pending, "POST /greeting HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n");
+    assert(reply.head[0 .. 15] == "HTTP/1.1 405 \r\n", reply.head);
+    assert(reply.content == `{"status":405,"path":"/greeting","message":"Method 'POST' is not supported.",`
+            ~ `"exception":null,"at":"/error"}`, reply.content);
+
+    // An uncaught exception is a 500 forwarded with the exception's type.
+    reply = exchange(socket, pending, "GET /throw HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.head[0 .. 15] == "HTTP/1.1 500 \r\n", reply.head);
+    assert(reply.content == `{"status":500,"path":"/throw","message":"boom",`
+            ~ `"exception":"flint.java.lang.IllegalStateException","at":"/error"}`, reply.content);
+
+    // The connection is still in step after the error dispatches.
+    reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":1,"content":"Hello, World!"}`, reply.content);
+}
+
+@("request fields, host, URL and query reach the servlet as copies; field order follows Tomcat")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    char[] pending;
+
+    auto reply = exchange(socket, pending,
+            "GET /headers?a=1&b HTTP/1.1\r\nHost: example.test:8443\r\n" ~ "X-Trace: 7\r\n\r\n");
+    assert(reply.content == "7|7|example.test|8443|http://example.test:8443/headers|a=1&b|HTTP/1.1", reply.content);
+
+    // Repeated fields keep their order; a replaced field keeps its first position; Content-Type, then
+    // Content-Language, follow the application's fields, as Tomcat writes them.
+    reply = exchange(socket, pending, "GET /fields HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nVary: Origin\r\nVary: Access-Control-Request-Method\r\n"
+            ~ "X-Replaced: b\r\nContent-Type: text/html;charset=UTF-8\r\nContent-Language: en-US\r\n"
+            ~ "Content-Length: 9\r\n\r\n", reply.head);
+    assert(reply.content == "<p>é</p>", reply.content);
+
+    // A request naming keep-alive gets Tomcat's Keep-Alive field with the 60 s timeout.
+    reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n");
+    assert(find(reply.head, "\r\nKeep-Alive: timeout=60\r\nConnection: keep-alive\r\n") > 0, reply.head);
+}
+
+@("a second engine on a bound port fails to start with ServletEngineException")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    ServletEngineOptions options;
+    options.address = "127.0.0.1";
+    options.port = fixture.port;
+    auto second = new ServletEngine(options);
+    second.addServlet("dispatcherServlet", new Probe);
+    bool failed;
+    try
+        second.start();
+    catch (ServletEngineException e)
+        failed = e.port == fixture.port;
+    assert(failed);
+    assert(second.getPort() == -1);
+}
+
+@("graceful shutdown with no requests in flight reports idle")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    assert(fixture.engine.shutDownGracefully(5_000_000_000L));
+    fixture.engine.stop();
+}

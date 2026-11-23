@@ -948,7 +948,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         connection.fiberHead = connection.parser.metadata.method == Method.head;
         const index = cast(ulong) connection.id.ownerCore * limits.maxConnectionsPerCore + connection.id.slot;
         const generation = connection.id.generation;
-        scope response = FiberResponse(this, index, generation);
+        auto response = FiberResponse(this, index, generation);
         scope request = Request.fromMetadata(&connection.parser.metadata);
         const returned = invokeFiber(handler, request, connection.request, response);
         if (!connection.closing && !requestCancelled(connection))

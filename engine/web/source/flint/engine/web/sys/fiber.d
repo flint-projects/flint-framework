@@ -8,7 +8,7 @@ import flint.engine.web.types : Request, RequestContext;
 
 // dfmt off
 private alias Invoker = bool function(FiberHandler, ref scope Request, ref scope RequestContext,
-        scope FiberResponse) @safe nothrow @nogc;
+        FiberResponse) @safe nothrow @nogc;
 // dfmt on
 
 // Only RuntimeDriver.dispatchFiber calls this, from a request task that the reactor runs on a druntime Fiber of
@@ -17,14 +17,14 @@ private alias Invoker = bool function(FiberHandler, ref scope Request, ref scope
 // SAFETY: the conversion adds only @nogc. callFiber is @safe and nothrow, catches every Exception, and lets an
 // Error escape as any nothrow function may; arguments pass through unchanged, so their scope checks stand.
 @trusted package(flint.engine.web) bool invokeFiber(FiberHandler handler, ref scope Request request,
-        ref scope RequestContext context, scope FiberResponse response) nothrow @nogc
+        ref scope RequestContext context, FiberResponse response) nothrow @nogc
 {
     return (cast(Invoker)&callFiber)(handler, request, context, response);
 }
 
 /// Run the handler, reporting whether it returned rather than threw.
 private bool callFiber(FiberHandler handler, ref scope Request request, ref scope RequestContext context,
-        scope FiberResponse response) nothrow
+        FiberResponse response) nothrow
 {
     try
     {

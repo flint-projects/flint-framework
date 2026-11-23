@@ -36,7 +36,7 @@ private final class Handlers
     }
 
     /// The fiber route: full D, with the GC and exceptions.
-    void serve(ref scope Request request, ref scope RequestContext context, scope FiberResponse response)
+    void serve(ref scope Request request, ref scope RequestContext context, FiberResponse response)
     {
         import core.memory : GC;
 

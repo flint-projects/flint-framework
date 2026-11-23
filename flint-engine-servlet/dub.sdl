@@ -1,0 +1,21 @@
+name "engine-servlet"
+description "flint.engine.servlet: Flint's servlet container over flint:engine-web fiber routes, the counterpart of embedded Tomcat for Spring Web MVC"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "jakarta-servlet" path="../jakarta-servlet"
+dependency "p1-interim" path="../p1-interim"
+dependency "flint:engine-web" path="../.."
+dependency "flint:arena" path="../.."
+dependency "flint:conc" path="../.."
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

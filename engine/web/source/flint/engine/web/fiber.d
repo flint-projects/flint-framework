@@ -16,7 +16,7 @@ servlet does on a virtual thread. The request, its arena and the context are val
 must outlive it into GC memory, and never hand arena memory to user code. When an `Exception` escapes, the
 engine answers 500 if no response has begun and otherwise closes the connection.
 +/
-alias FiberHandler = void delegate(ref scope Request, ref scope RequestContext, scope FiberResponse) @safe;
+alias FiberHandler = void delegate(ref scope Request, ref scope RequestContext, FiberResponse) @safe;
 
 /// Explicit startup registration of a fiber route. It serves every request, of any method and target, that no
 /// owner-loop or stream route serves, as a servlet container's default mapping (`/`) does.
@@ -31,8 +31,9 @@ struct FiberRoute
 enum long unknownLength = -1;
 
 /++
-Generation-checked capability for one fiber route's response. A copied token cannot extend the response's
-lifetime. The engine owns the framing fields (`Content-Length`, `Transfer-Encoding`, `Connection`,
+Generation-checked capability for one fiber route's response. It holds no request storage, so a servlet
+response object may keep it to commit on `flushBuffer`; a copy used after its request ended, or from another
+task, fails with `unavailable` instead of reaching the next request. The engine owns the framing fields (`Content-Length`, `Transfer-Encoding`, `Connection`,
 `Keep-Alive`) and writes them as an embedded Tomcat does:
 - the status line has no reason phrase (`HTTP/1.1 200 `);
 - the application's fields come first, in the order given, then the framing field, `Date` (unless given) and
