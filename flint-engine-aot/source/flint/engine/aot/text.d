@@ -180,6 +180,46 @@ private size_t whiteAt(scope const(char)[] text, size_t i) pure nothrow @nogc
     return 0;
 }
 
+/// A parse result for `ulong`.
+struct ParsedULong
+{
+    /// The text was a valid number.
+    bool ok;
+    /// The number, when ok.
+    ulong value;
+}
+
+/// Reads a whole decimal number as `to!ulong` does: digits only, no sign; not ok for malformed text or overflow.
+ParsedULong tryParseULong(scope const(char)[] text) pure nothrow @nogc
+{
+    ParsedULong result;
+    if (text.length == 0)
+        return result;
+    ulong value;
+    foreach (c; text)
+    {
+        if (!isDigit(c))
+            return result;
+        const digit = c - '0';
+        if (value > (ulong.max - digit) / 10)
+            return result;
+        value = value * 10 + digit;
+    }
+    result.ok = true;
+    result.value = value;
+    return result;
+}
+
+/// The name of `value`'s constant, as `to!string` prints an enum, including `cast(E)n` for a value that names no
+/// constant. A small template per enum type, where `to!string` instantiates `std.format` for it.
+string enumName(E)(E value) pure nothrow if (is(E Base == enum) && __traits(isIntegral, Base))
+{
+    foreach (member; __traits(allMembers, E))
+        if (value == __traits(getMember, E, member))
+            return member;
+    return "cast(" ~ E.stringof ~ ")" ~ decimal(cast(long) value);
+}
+
 /// Reads a whole floating-point number as `to!double` does: decimal with optional fraction, exponent and single
 /// underscores after digits, hexadecimal with a binary exponent, and `inf` and `nan` in any case. False where
 /// `to!double` throws, for malformed text or a finite number out of range.
@@ -613,4 +653,40 @@ unittest
         if (expected)
             assert(reference.isNaN ? result.value.isNaN : result.value is reference, text);
     }
+}
+
+unittest
+{
+    import std.conv : to;
+
+    foreach (text; [
+        "5", "+5", "-0", "-1", "18446744073709551615", "18446744073709551616", "", "+", "007", "1_0"
+    ])
+    {
+        bool expected = true;
+        ulong reference;
+        try
+            reference = text.to!ulong;
+        catch (Exception)
+            expected = false;
+        const result = tryParseULong(text);
+        assert(result.ok == expected, text);
+        if (expected)
+            assert(result.value == reference, text);
+    }
+}
+
+unittest
+{
+    import std.conv : to;
+
+    enum Color
+    {
+        red,
+        GREEN,
+        blueSky
+    }
+
+    foreach (value; [Color.red, Color.GREEN, Color.blueSky, cast(Color) 7])
+        assert(enumName(value) == value.to!string);
 }
