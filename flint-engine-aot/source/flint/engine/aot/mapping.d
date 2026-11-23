@@ -56,6 +56,10 @@ interface HandlerArguments
 /// A generated handler invoker.
 alias HandlerInvoker = void function(Object bean, HandlerArguments arguments, ref Any result) @safe;
 
+/// Contract 4: a generated handler invoker over the resolved arguments themselves, converted to each
+/// `ArgumentSpec.type`, so dispatch needs no `HandlerArguments` object and may pass stack storage.
+alias HandlerArrayInvoker = void function(Object bean, scope Any[] arguments, ref Any result) @safe;
+
 /// One request mapping.
 struct HandlerMapping
 {
@@ -96,10 +100,15 @@ struct HandlerMapping
     /// Contract 3: the return type's descriptor; null for scalars, `void`, and older generated code (callers then
     /// look up `returnType`).
     Descriptor returnDescriptor;
+    /// Contract 4: `invoke` over an argument array; null in older generated code (callers then use `invoke`).
+    HandlerArrayInvoker invokeArguments;
 }
 
 /// A generated exception-handler invoker: `(bean, exception, arguments, ref result)`.
 alias ExceptionInvoker = void function(Object, Exception, HandlerArguments, ref Any) @safe;
+
+/// Contract 4: `ExceptionInvoker` over an argument array.
+alias ExceptionArrayInvoker = void function(Object, Exception, scope Any[], ref Any) @safe;
 
 /// One `@ExceptionHandler` method.
 struct ExceptionHandlerSpec
@@ -132,4 +141,6 @@ struct ExceptionHandlerSpec
     ExceptionInvoker invoke;
     /// Where the handler was declared.
     string source;
+    /// Contract 4: `invoke` over an argument array; null in older generated code (callers then use `invoke`).
+    ExceptionArrayInvoker invokeArguments;
 }

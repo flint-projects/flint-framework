@@ -662,3 +662,25 @@ unittest
     mapping.returnDescriptor = descriptorOf!OwnerService;
     assert(argument.descriptor.name == mapping.returnDescriptor.name);
 }
+
+unittest
+{
+    import flint.engine.aot.any : Any;
+    import flint.engine.aot.mapping : ExceptionHandlerSpec, HandlerArrayInvoker, HandlerMapping;
+
+    // Contract 4: the array invoker reads converted arguments straight from caller storage.
+    static void invoke(Object, scope Any[] arguments, ref Any result) @safe
+    {
+        result = Any.of(arguments[0].get!long + arguments[1].get!long);
+    }
+
+    HandlerMapping mapping;
+    assert(mapping.invokeArguments is null);
+    mapping.invokeArguments = &invoke;
+    Any[2] arguments = [Any.of(40L), Any.of(2L)];
+    Any result;
+    mapping.invokeArguments(null, arguments[], result);
+    assert(result.get!long == 42);
+    const ExceptionHandlerSpec spec;
+    assert(spec.invokeArguments is null);
+}
