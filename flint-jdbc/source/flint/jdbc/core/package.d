@@ -484,6 +484,14 @@ abstract class StatementCreatorUtils
             return Types.VARCHAR;
         case "immutable(ubyte)[]", "ubyte[]", "const(ubyte)[]":
             return Types.VARBINARY;
+        case "flint.java.time.LocalDate":
+            return Types.DATE;
+        case "flint.java.time.LocalTime":
+            return Types.TIME;
+        case "flint.java.time.LocalDateTime":
+            return Types.TIMESTAMP;
+        case "flint.java.time.OffsetDateTime":
+            return Types.TIMESTAMP_WITH_TIMEZONE;
         default:
             return SqlTypeValue.TYPE_UNKNOWN;
         }
@@ -2115,12 +2123,12 @@ class PreparedStatementCreatorFactory
                 }
                 if (declaredParameter is null)
                     StatementCreatorUtils.setParameterValue(ps, sqlColIndx++, SqlTypeValue.TYPE_UNKNOWN, value);
-                else if (value.holds!(Any[]) && declaredParameter.getSqlType() != Types.ARRAY)
+                else if (!value.isNull && value.holds!(Any[]) && declaredParameter.getSqlType() != Types.ARRAY)
                 {
                     // An IN-list value: one placeholder per element (and per value of an element row).
                     foreach (entry; value.get!(Any[]))
                     {
-                        if (entry.holds!(Any[]))
+                        if (!entry.isNull && entry.holds!(Any[]))
                         {
                             foreach (argValue; entry.get!(Any[]))
                                 StatementCreatorUtils.setParameterValue(ps, sqlColIndx++, declaredParameter, argValue);

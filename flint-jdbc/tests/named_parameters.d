@@ -74,6 +74,32 @@ unittest
     assert(NamedParameterUtils.substituteNamedParameters("xxx :a :b :c xx :a :a", namedParams) == "xxx ? ? ? xx ? ?");
 }
 
+@("a null named parameter is one placeholder, not an empty IN list")
+unittest
+{
+    auto namedParams = new MapSqlParameterSource;
+    namedParams.addValue("a", Any.init).addValue("id", 1);
+    assert(NamedParameterUtils.substituteNamedParameters("UPDATE T SET A = :a WHERE ID = :id",
+            namedParams) == "UPDATE T SET A = ? WHERE ID = ?");
+
+    auto f = Fixture.create();
+    f.namedParameterTemplate.update("UPDATE T SET A = :a WHERE ID = :id", namedParams);
+    assert(f.log.entries[0] == "prepareStatement(UPDATE T SET A = ? WHERE ID = ?)");
+}
+
+@("java.time values map to DATE, TIME and TIMESTAMP, as StatementCreatorUtils.javaTypeToSqlTypeMap")
+unittest
+{
+    import flint.java.sql : Types;
+    import flint.jdbc.core : StatementCreatorUtils;
+
+    assert(StatementCreatorUtils.javaTypeToSqlParameterType("flint.java.time.LocalDate") == Types.DATE);
+    assert(StatementCreatorUtils.javaTypeToSqlParameterType("flint.java.time.LocalTime") == Types.TIME);
+    assert(StatementCreatorUtils.javaTypeToSqlParameterType("flint.java.time.LocalDateTime") == Types.TIMESTAMP);
+    assert(StatementCreatorUtils.javaTypeToSqlParameterType(
+            "flint.java.time.OffsetDateTime") == Types.TIMESTAMP_WITH_TIMEZONE);
+}
+
 @("convertParamMapToArray")
 unittest
 {

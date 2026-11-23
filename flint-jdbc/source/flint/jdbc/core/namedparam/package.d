@@ -335,7 +335,7 @@ abstract class NamedParameterUtils
                 auto value = paramSource.getValue(paramName);
                 if (auto parameterValue = parameterValueOf(value))
                     value = parameterValue.getValue();
-                actualSql ~= value.holds!(Any[]) ? placeholders(value.get!(Any[])) : "?";
+                actualSql ~= !value.isNull && value.holds!(Any[]) ? placeholders(value.get!(Any[])) : "?";
             }
             else
                 actualSql ~= "?";
@@ -352,7 +352,7 @@ abstract class NamedParameterUtils
         {
             if (k > 0)
                 result ~= ", ";
-            if (entry.holds!(Any[]))
+            if (!entry.isNull && entry.holds!(Any[]))
             {
                 result ~= "(";
                 foreach (m; 0 .. entry.get!(Any[]).length)
