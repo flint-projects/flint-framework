@@ -1,0 +1,16 @@
+name "jackson-annotations"
+description "Jackson 2.21 annotations for Flint: @JsonProperty, @JsonIgnore, @JsonInclude, @JsonFormat, @JsonCreator, @JsonAlias and the rest (com.fasterxml.jackson.annotation)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}
