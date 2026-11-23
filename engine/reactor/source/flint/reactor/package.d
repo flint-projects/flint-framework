@@ -48,7 +48,8 @@ else version (OSX)
 else version (Windows)
     import flint.reactor.sys.windows : CompletionPort, KernelEvent, Socket, bindListener,
         cancelKernel, closeCompletionPort,
-        closeSocket, openCompletionPort, pollCompletion, socketPort, submitAccept, submitRead, submitWrite;
+        closeSocket, openCompletionPort, pollCompletion, sendImmediately, socketPort, submitAccept,
+        submitRead, submitWrite;
 
 private enum State : ubyte
 {
@@ -1253,11 +1254,8 @@ private struct Worker
             fail(Error(Status.resourceExhausted, "connection identities exhausted"));
             return;
         }
-        version (Posix)
-        {
-            // Best effort: a refused option changes latency only, never correctness.
-            sendImmediately(incoming);
-        }
+        // Best effort: a refused option changes latency only, never correctness.
+        sendImmediately(incoming);
         const slot = nextFree;
         auto connection = &connections[slot];
         nextFree = connection.next;
@@ -1767,15 +1765,13 @@ version (unittest)
     package(flint.reactor) bool connectionSendsImmediately(ConnectionId id) nothrow @nogc
     {
         version (Posix)
-        {
             import flint.reactor.sys.sockets : sendsImmediately;
+        else version (Windows)
+            import flint.reactor.sys.windows : sendsImmediately;
 
-            if (currentRuntime is null || id.ownerCore != currentWorkerIndex)
-                return false;
-            auto worker = &currentRuntime.workers[currentWorkerIndex];
-            return worker.validConnection(id) && sendsImmediately(worker.connections[id.slot].socket);
-        }
-        else
+        if (currentRuntime is null || id.ownerCore != currentWorkerIndex)
             return false;
+        auto worker = &currentRuntime.workers[currentWorkerIndex];
+        return worker.validConnection(id) && sendsImmediately(worker.connections[id.slot].socket);
     }
 }

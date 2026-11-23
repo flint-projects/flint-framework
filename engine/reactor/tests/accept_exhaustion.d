@@ -9,7 +9,17 @@ import flint.conc : Deadline;
 import flint.reactor : Backend, ConnectionId, ListenOptions, Reactor, ReactorOptions;
 import std.socket : InternetAddress, TcpSocket;
 
-// Linux epoll and io_uring, and macOS kqueue (ADR-024).
+private void giveUp() @safe nothrow @nogc
+{
+    Reactor.current().stop();
+}
+
+private void armWatchdog() @safe nothrow @nogc
+{
+    assert(Reactor.current().schedule(Deadline.afterMillis(3_000), &giveUp).ok);
+}
+
+// Descriptor exhaustion: Linux epoll and io_uring, and macOS kqueue (ADR-024).
 version (Posix)
 {
     private shared uint admitted;
@@ -20,16 +30,6 @@ version (Posix)
         auto reactor = Reactor.current();
         reactor.close(id);
         reactor.stop();
-    }
-
-    private void giveUp() @safe nothrow @nogc
-    {
-        Reactor.current().stop();
-    }
-
-    private void armWatchdog() @safe nothrow @nogc
-    {
-        assert(Reactor.current().schedule(Deadline.afterMillis(3_000), &giveUp).ok);
     }
 
     /// Occupy every descriptor below a reduced soft limit and return the fillers.
@@ -142,6 +142,11 @@ version (Posix)
         }
     }
 
+}
+
+// Every backend: Linux epoll and io_uring, macOS kqueue (ADR-024) and Windows IOCP (ADR-026).
+version (all)
+{
     private shared bool acceptedWithoutDelay;
     private shared bool acceptChecked;
 
@@ -185,7 +190,7 @@ version (Posix)
         assert(atomicLoad(acceptedWithoutDelay), "an accepted socket still coalesces small writes (Nagle)");
     }
 
-    @("epoll admits connections with TCP_NODELAY set")
+    @("the default readiness or completion backend admits connections with TCP_NODELAY set")
     unittest
     {
         acceptOneAndInspect(readinessBackend);

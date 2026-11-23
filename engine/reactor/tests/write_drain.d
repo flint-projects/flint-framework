@@ -126,3 +126,11 @@ version (Posix)
         }
     }
 }
+else version (Windows)
+{
+    @("IOCP closes a socket only after its backpressured write completion retires")
+    unittest
+    {
+        testDrain(Backend.iocp);
+    }
+}

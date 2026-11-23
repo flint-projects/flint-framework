@@ -57,8 +57,8 @@ private void armWatchdog() @safe nothrow @nogc
     assert(reactor.schedule(Deadline.afterMillis(3000), &watchdog).ok);
 }
 
-// Linux epoll and io_uring, and macOS kqueue (ADR-024).
-version (Posix)
+// Linux epoll and io_uring, macOS kqueue (ADR-024) and Windows IOCP (ADR-026).
+version (all)
 {
     @("foreign worker sends close through the owner mailbox and the owner retires the read")
     unittest

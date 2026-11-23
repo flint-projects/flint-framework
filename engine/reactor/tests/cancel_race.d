@@ -159,3 +159,13 @@ version (Posix)
         }
     }
 }
+else version (Windows)
+{
+    @("IOCP read completed with data before cancellation is delivered as success")
+    unittest
+    {
+        race(Backend.iocp);
+        // CancelIoEx no longer finds a completed request, so its packet carries the data.
+        assert(atomicLoad(cancelledCompletions) == 0, "the completed read was reported as cancelled");
+    }
+}

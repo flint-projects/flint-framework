@@ -1,6 +1,7 @@
 module flint.reactor.sys.windows;
 
 import flint.arena : Error, Result, Status;
+import flint.reactor.internal.operations : operationSlotBits;
 
 @safe:
 
@@ -27,6 +28,7 @@ version (Windows)
     private enum wsaIoPending = 997; // WSA_IO_PENDING
     private enum uint acceptAddressBytes = sockaddr_storage.sizeof + 16;
     private enum ulong acceptToken = 1;
+    private enum ulong slotMask = (1UL << operationSlotBits) - 1;
 
     private struct WsaBuffer
     {
@@ -95,6 +97,42 @@ version (Windows)
         Socket accepted;
     }
 
+    private extern (Windows) alias TimerPeriod = uint function(uint) @system nothrow @nogc;
+    private shared uint resolutionUsers;
+    private __gshared TimerPeriod beginPeriod, endPeriod;
+
+    // GetQueuedCompletionStatus rounds its timeout to the system timer tick, 15.6 ms by default, which would
+    // stretch every millisecond deadline. While any completion port is open the process asks for 1 ms ticks;
+    // since Windows 10 2004 the request affects only this process. winmm is loaded at run time, so programs
+    // linking the reactor need no winmm.lib.
+    // SAFETY: LoadLibraryExW searches System32 only, and GetProcAddress returns null or the named export,
+    // whose signature TimerPeriod states. The first user loads both pointers before publishing its count.
+    private void raiseTimerResolution() @trusted nothrow @nogc
+    {
+        import core.atomic : atomicOp;
+        import core.sys.windows.winbase : GetProcAddress, LoadLibraryExW;
+
+        enum uint searchSystem32 = 0x800; // LOAD_LIBRARY_SEARCH_SYSTEM32
+        if (atomicOp!"+="(resolutionUsers, 1) != 1)
+            return;
+        auto winmm = LoadLibraryExW("winmm.dll"w.ptr, null, searchSystem32);
+        if (winmm is null)
+            return;
+        beginPeriod = cast(TimerPeriod) GetProcAddress(winmm, "timeBeginPeriod");
+        endPeriod = cast(TimerPeriod) GetProcAddress(winmm, "timeEndPeriod");
+        if (beginPeriod !is null && endPeriod !is null)
+            beginPeriod(1);
+    }
+
+    // SAFETY: The pointers were set by the first raise and winmm stays loaded for the process lifetime.
+    private void restoreTimerResolution() @trusted nothrow @nogc
+    {
+        import core.atomic : atomicOp;
+
+        if (atomicOp!"-="(resolutionUsers, 1) == 0 && beginPeriod !is null && endPeriod !is null)
+            endPeriod(1);
+    }
+
     private Status windowsError(uint code) pure nothrow @nogc
     {
         switch (code)
@@ -143,6 +181,29 @@ version (Windows)
         closesocket(owned.descriptor);
         if (owned.ownsWinsock)
             WSACleanup();
+    }
+
+    /// Turn off Nagle coalescing so small writes leave immediately, as on Linux and macOS.
+    // SAFETY: setsockopt copies one local integer synchronously for the owner's live socket.
+    package(flint.reactor) Status sendImmediately(Socket socket) @trusted nothrow @nogc
+    {
+        import core.sys.windows.winsock2 : IPPROTO_TCP, TCP_NODELAY;
+
+        const int enabled = 1;
+        if (setsockopt(socket.descriptor, IPPROTO_TCP, TCP_NODELAY, &enabled, enabled.sizeof) != 0)
+            return windowsError(WSAGetLastError());
+        return Status.ok;
+    }
+
+    /// Whether sendImmediately is in effect for the socket.
+    // SAFETY: getsockopt writes at most one local integer and its local length for the live socket.
+    package(flint.reactor) bool sendsImmediately(Socket socket) @trusted nothrow @nogc
+    {
+        import core.sys.windows.winsock2 : IPPROTO_TCP, TCP_NODELAY, getsockopt;
+
+        int enabled;
+        int length = enabled.sizeof;
+        return getsockopt(socket.descriptor, IPPROTO_TCP, TCP_NODELAY, &enabled, &length) == 0 && enabled != 0;
     }
 
     package(flint.reactor) Result!Socket bindListener(string host, ushort port, uint backlog) nothrow @nogc
@@ -258,6 +319,7 @@ version (Windows)
             return Result!CompletionPort(CompletionPort.init, Error(Status.outOfMemory,
                     "could not allocate IOCP slots"));
         }
+        raiseTimerResolution();
         return Result!CompletionPort(CompletionPort(handle, slots[0 .. count]));
     }
 
@@ -271,6 +333,7 @@ version (Windows)
         port = CompletionPort.init;
         CloseHandle(owned.handle);
         free(owned.slots.ptr);
+        restoreTimerResolution();
         WSACleanup();
     }
 
@@ -298,8 +361,9 @@ version (Windows)
         --listenerIndex; // A valid port always has a final reserved accept slot.
         if (token == acceptToken)
             return listenerIndex;
-        const slot = cast(uint) token;
-        return (token >> 32) != 0 && slot < listenerIndex ? slot : size_t.max;
+        // Operation tokens are the generation above the operation table's slot bits (OperationId.token).
+        const slot = cast(size_t)(token & slotMask);
+        return (token >> operationSlotBits) != 0 && slot < listenerIndex ? slot : size_t.max;
     }
 
     // SAFETY: The synchronous WSAIoctl copies the GUID and writes one function pointer into a live local.
@@ -459,10 +523,8 @@ version (Windows)
 
     version (unittest)
     {
+        import core.sys.windows.winbase : Sleep;
         import core.sys.windows.winsock2 : IPPROTO_TCP, connect, htonl, htons, send;
-
-        private extern (Windows) BOOL WSAGetOverlappedResult(SOCKET socket, OVERLAPPED* overlapped,
-                DWORD* transferred, BOOL wait, DWORD* flags) @system nothrow @nogc;
 
         @("IOCP retains a completed read when CancelIoEx reports ERROR_NOT_FOUND")
         @system unittest
@@ -502,9 +564,10 @@ version (Windows)
             assert(port.value.valid);
             ubyte payload = 42;
             assert(send(client.descriptor, &payload, 1, 0) == 1);
-            DWORD transferred, flags;
-            auto slot = &port.value.slots[0];
-            assert(WSAGetOverlappedResult(server.descriptor, &slot.overlapped, &transferred, 1, &flags));
+            // The kernel finishes the loopback read and queues its packet. With a completion port the
+            // OVERLAPPED's status is written only when the packet is dequeued, so the test gives the
+            // kernel time instead of observing it; CancelIoEx then no longer finds the request.
+            Sleep(200);
             assert(cancelKernel(port.value, first) == Status.notFound);
             event = pollCompletion(port.value, 5000);
             assert(event.ok && event.value.received && event.value.token == first);
