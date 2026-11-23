@@ -261,8 +261,7 @@ class InvocableHandlerMethod : HandlerMethod
     ///
     this(HandlerMethod handlerMethod)
     {
-        // The resolvers are set per invocation (setHandlerMethodArgumentResolvers); an empty composite is made only
-        // when none were, on first use.
+        // The resolvers are set by the adapter (setHandlerMethodArgumentResolvers); none is Spring's empty composite.
         super(handlerMethod);
         standardInvocation = typeid(this) is typeid(InvocableHandlerMethod);
     }
@@ -341,9 +340,9 @@ class InvocableHandlerMethod : HandlerMethod
         {
             if (findProvidedArgument(parameter, providedArgs, args[i]))
                 continue;
-            if (resolvers is null)
-                resolvers = new HandlerMethodArgumentResolverComposite;
-            if (!resolvers.supportsParameter(parameter))
+            // Without resolvers (Spring's empty composite) nothing is supported. Nothing here is written while
+            // requests run: the adapter's prepared invocable is shared by every reactor thread.
+            if (resolvers is null || !resolvers.supportsParameter(parameter))
                 throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
             args[i] = resolvers.resolveArgument(parameter, mavContainer, request, dataBinderFactory);
         }

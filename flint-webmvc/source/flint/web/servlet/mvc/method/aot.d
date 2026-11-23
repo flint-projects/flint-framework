@@ -82,6 +82,7 @@ HandlerMapping[] requestMappingsOf(C)(string beanName)
                         descriptor.annotations = methodAnnotations;
                         row.method = descriptor;
                         row.invoke = &invokeHandler!(C, overload);
+                        row.invokeArguments = &invokeHandlerArray!(C, overload);
                         row.source = __traits(identifier, C) ~ "." ~ member;
                         rows ~= row;
                     }
@@ -150,6 +151,7 @@ ExceptionHandlerSpec[] exceptionHandlersOf(C)(string beanName)
                         if (auto status = findAnnotation(methodAnnotations, typeNameOf!ResponseStatus))
                             row.responseStatus = status.value.get!ResponseStatus.code.value();
                         row.invoke = &invokeExceptionHandler!(C, overload);
+                        row.invokeArguments = &invokeExceptionHandlerArray!(C, overload);
                         row.source = __traits(identifier, C) ~ "." ~ member;
                         rows ~= row;
                     }
@@ -336,9 +338,35 @@ private void invokeExceptionHandler(C, alias method)(Object bean, Exception exce
     invokeHandler!(C, method)(bean, arguments, result);
 }
 
+/// Contract 4: `invokeHandler` over the argument array itself, as the generated code does.
+private void invokeHandlerArray(C, alias method)(Object bean, scope Any[] arguments, ref Any result) @safe
+{
+    auto controller = cast(C) bean;
+    static if (is(typeof(method) Params == __parameters))
+    {
+        Params args;
+        static foreach (i; 0 .. Params.length)
+            args[i] = argumentValue!(Params[i])(arguments[i]);
+        static if (is(typeof(method) R == return) && !is(R == void))
+            result = Any.of(__traits(child, controller, method)(args));
+        else
+            __traits(child, controller, method)(args);
+    }
+}
+
+private void invokeExceptionHandlerArray(C, alias method)(Object bean, Exception exception,
+        scope Any[] arguments, ref Any result) @safe
+{
+    invokeHandlerArray!(C, method)(bean, arguments, result);
+}
+
 private T argument(T)(HandlerArguments arguments, size_t index)
 {
-    auto value = arguments.get(index);
+    return argumentValue!T(arguments.get(index));
+}
+
+private T argumentValue(T)(Any value)
+{
     if (value.isNull())
         return T.init;
     static if (is(T == class) || is(T == interface))
