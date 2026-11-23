@@ -97,3 +97,17 @@ unittest
     // ArrayToObjectConverter: a single-valued target takes the first value.
     assert(factory.convertIfNecessary(Any.of(["5", "6"]), "int", null).get!int == 5);
 }
+
+@("DefaultDataBinderFactory fills a list through an erased descriptor (create and addAny, no fromElements)")
+unittest
+{
+    import flint.java.util : ArrayList;
+    import flint.java.util.descriptors : rawListDescriptor;
+
+    auto descriptors = new DescriptorTable;
+    descriptors.add(rawListDescriptor(typeNameOf!(List!long), "long",
+            () @safe => Any.of!(List!long)(new ArrayList!long)));
+    auto factory = new DefaultDataBinderFactory(descriptors);
+    auto list = factory.convertIfNecessary(Any.of(["7", "8"]), typeNameOf!(List!long), null).get!(List!long);
+    assert(list.toArray() == [7L, 8L]);
+}

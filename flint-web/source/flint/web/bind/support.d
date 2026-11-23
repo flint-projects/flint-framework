@@ -15,6 +15,7 @@ import flint.core : MethodParameter;
 import flint.core.convert : ConversionFailedException, TypeDescriptor;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : DescriptorTable;
+import flint.java.util.descriptors : buildElements, isListLike;
 import flint.web.context.request : NativeWebRequest;
 
 @safe:
@@ -86,12 +87,14 @@ class DefaultDataBinderFactory : WebDataBinderFactory
             return SimpleConversion.convertEach(values, targetType);
         // ArrayToArrayConverter and ArrayToCollectionConverter through the target type's descriptor.
         auto descriptor = descriptors is null ? null : descriptors.find(targetType);
-        if (descriptor !is null && descriptor.fromElements !is null && descriptor.elementType.length)
+        // Generated descriptors of collections may be erased (flint.java.util.descriptors, decision 2670d5be): no
+        // fromElements, but create() and addAny, which buildElements fills.
+        if (descriptor !is null && isListLike(descriptor) && descriptor.elementType.length)
         {
             Any[] elements;
             foreach (v; values)
                 elements ~= SimpleConversion.convert(v, descriptor.elementType);
-            return descriptor.fromElements(elements);
+            return buildElements(descriptor, elements);
         }
         // ArrayToObjectConverter: the first element.
         return values.length == 0 ? Any.init : SimpleConversion.convert(values[0], targetType);
