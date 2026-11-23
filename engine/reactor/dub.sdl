@@ -7,6 +7,8 @@ importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
 dependency "flint:conc" version="*"
+// The IOCP backend calls Winsock (ADR-026).
+libs "ws2_32" platform="windows"
 
 configuration "library" {
     targetType "library"

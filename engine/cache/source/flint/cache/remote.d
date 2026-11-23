@@ -28,6 +28,8 @@ package(flint.cache) struct RemoteStore
         reactor.cores = 1;
         version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
             reactor.backend = Backend.kqueue;
+        else version (Windows) // IOCP, the one Windows backend (ADR-026)
+            reactor.backend = Backend.iocp;
         else
             reactor.backend = Backend.epoll;
         reactor.fiberPoolSize = 1;

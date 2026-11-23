@@ -183,6 +183,8 @@ version (FlintNativeCurl)
         ReactorOptions config;
         version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
             config.backend = Backend.kqueue;
+        else version (Windows) // IOCP, the one Windows backend (ADR-026)
+            config.backend = Backend.iocp;
         else
             config.backend = Backend.epoll;
         config.cores = 1;

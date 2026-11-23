@@ -21,7 +21,8 @@ unittest
     assert(payload.length == 512 && reader.metadata.headers.length == maximumFields);
     scope (exit)
         releaseBytes(owned);
-    assert(reader.open(617, payload, 512, 100).code == Status.ok);
+    const opened = reader.open(617, payload, 512, 100);
+    assert(opened.code == Status.ok, opened.message);
     scope (exit)
         reader.close();
     assert(reader.begin());

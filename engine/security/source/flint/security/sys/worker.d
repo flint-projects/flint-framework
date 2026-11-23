@@ -1,15 +1,56 @@
-/// Linux and macOS descriptors and druntime ownership for the private JWKS worker.
+/// Linux, macOS and Windows wake-ups and druntime ownership for the private JWKS worker.
 module flint.security.sys.worker;
 
-import core.stdc.errno : EINTR, errno;
-import core.sys.posix.poll : POLLIN, poll, pollfd;
-import core.sys.posix.unistd : close;
 import flint.arena : Error, Status;
 
 @safe:
 
-version (OSX)
+version (Windows)
 {
+    import core.sys.windows.winbase : CloseHandle, CreateEventW, INFINITE, SetEvent, WaitForSingleObject;
+    import core.sys.windows.windef : FALSE, HANDLE;
+
+    // An auto-reset event: signals before a wait collapse into one wake-up, as an eventfd drain does (ADR-026).
+    package(flint.security) struct Wake
+    {
+        private HANDLE event;
+
+        // SAFETY: CreateEventW creates a new owned, unnamed, non-inheritable event and receives no borrowed memory.
+        Error open() @trusted nothrow @nogc
+        {
+            event = CreateEventW(null, FALSE, FALSE, null);
+            return event !is null ? Error.init : Error(Status.ioError, "unable to start the JWKS wake event");
+        }
+
+        // SAFETY: The caller serializes signaling and release, so the handle is live.
+        void signal() @trusted nothrow @nogc
+        {
+            if (event !is null)
+                SetEvent(event);
+        }
+
+        // SAFETY: Only the owner waits. Release runs after its final wait.
+        void listen() @trusted nothrow @nogc
+        {
+            WaitForSingleObject(event, INFINITE);
+        }
+
+        // SAFETY: The owner has stopped waiting and signaling is serialized with handle retirement.
+        void release() @trusted nothrow @nogc
+        {
+            if (event !is null)
+            {
+                CloseHandle(event);
+                event = null;
+            }
+        }
+    }
+}
+else version (OSX)
+{
+    import core.stdc.errno : EINTR, errno;
+    import core.sys.posix.poll : POLLIN, poll, pollfd;
+    import core.sys.posix.unistd : close;
     import core.sys.posix.fcntl : FD_CLOEXEC, F_SETFD, F_SETFL, O_NONBLOCK, fcntl;
     import core.sys.posix.unistd : pipe, read, write;
 
@@ -77,7 +118,10 @@ version (OSX)
 }
 else
 {
+    import core.stdc.errno : EINTR, errno;
     import core.sys.linux.sys.eventfd : EFD_CLOEXEC, EFD_NONBLOCK, eventfd, eventfd_read, eventfd_write;
+    import core.sys.posix.poll : POLLIN, poll, pollfd;
+    import core.sys.posix.unistd : close;
 
     package(flint.security) struct Wake
     {

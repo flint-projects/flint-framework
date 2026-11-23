@@ -1,13 +1,55 @@
 module flint.cache.sys.wake;
 
-import core.sys.posix.poll : POLLIN, poll, pollfd;
-import core.sys.posix.unistd : close;
 import flint.arena : Error, Status;
 
 @safe:
 
-version (OSX)
+version (Windows)
 {
+    import core.sys.windows.winbase : CloseHandle, CreateEventW, INFINITE, SetEvent, WaitForSingleObject;
+    import core.sys.windows.windef : FALSE, HANDLE;
+
+    // An auto-reset event: notifications before a wait collapse into one wake-up, as an eventfd drain does
+    // (ADR-026).
+    package(flint.cache) struct Wake
+    {
+        private HANDLE event;
+
+        // SAFETY: CreateEventW creates a new owned, unnamed, non-inheritable event and retains no caller memory.
+        Error open() @trusted nothrow @nogc
+        {
+            event = CreateEventW(null, FALSE, FALSE, null);
+            return event !is null ? Error.init : Error(Status.ioError, "could not open cache wake event");
+        }
+
+        // SAFETY: The caller holds the monitor lock through the signal and the handle lifetime.
+        void notify() @trusted nothrow @nogc
+        {
+            if (event !is null)
+                SetEvent(event);
+        }
+
+        // SAFETY: Only the owner thread waits or closes. A negative timeout waits without limit, as poll does.
+        void wait(int millis) @trusted nothrow @nogc
+        {
+            WaitForSingleObject(event, millis < 0 ? INFINITE : cast(uint) millis);
+        }
+
+        // SAFETY: The monitor has stopped waiting and producers hold the same lock when notifying.
+        void release() @trusted nothrow @nogc
+        {
+            if (event !is null)
+            {
+                CloseHandle(event);
+                event = null;
+            }
+        }
+    }
+}
+else version (OSX)
+{
+    import core.sys.posix.poll : POLLIN, poll, pollfd;
+    import core.sys.posix.unistd : close;
     import core.sys.posix.fcntl : FD_CLOEXEC, F_SETFD, F_SETFL, O_NONBLOCK, fcntl;
     import core.sys.posix.unistd : pipe, read, write;
 
@@ -74,6 +116,8 @@ version (OSX)
 else
 {
     import core.sys.linux.sys.eventfd : EFD_CLOEXEC, EFD_NONBLOCK, eventfd, eventfd_read, eventfd_write;
+    import core.sys.posix.poll : POLLIN, poll, pollfd;
+    import core.sys.posix.unistd : close;
 
     package(flint.cache) struct Wake
     {

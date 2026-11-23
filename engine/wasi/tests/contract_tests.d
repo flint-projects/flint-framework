@@ -38,8 +38,34 @@ import flint.wasi : CompiledPlugin, GuestEnvironment, Preopen;
 import flint.wasi.fixture_bytes : coreGuest = core, preview1Guest = preview1,
     unexpectedGuest = unexpected, component02 = wasi02, component03 = wasi03;
 import std.conv : to;
-import std.file : exists, mkdirRecurse, rmdirRecurse, symlink, tempDir, write;
+import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.path : buildPath;
+
+version (Posix) import std.file : symlink;
+
+/// A link at `at` to the relative `target`. Windows needs no privilege for a directory junction; a file
+/// symbolic link needs Developer Mode, and without it the link is absent, so reading it fails either way.
+private void link(string target, string at, bool directory) @system
+{
+    version (Posix)
+        symlink(target, at);
+    else version (Windows)
+    {
+        import core.sys.windows.winbase : CreateSymbolicLinkW;
+        import std.array : replace;
+        import std.path : dirName;
+        import std.process : execute;
+        import std.utf : toUTF16z;
+
+        if (directory)
+        {
+            const made = execute(["cmd", "/c", "mklink", "/J", at, buildPath(dirName(at), target)]);
+            assert(made.status == 0, made.output);
+        }
+        else
+            CreateSymbolicLinkW(at.toUTF16z, target.replace("/", "\\").toUTF16z, 0x2); // ALLOW_UNPRIVILEGED_CREATE
+    }
+}
 
 @("core store bounds, signature validation, traps and fuel")
 unittest
@@ -191,8 +217,8 @@ unittest
     mkdirRecurse(buildPath(path, "outside"));
     write(buildPath(path, "cap", "allowed"), "Q");
     write(buildPath(path, "outside", "secret"), "Z");
-    symlink("../outside/secret", buildPath(path, "cap", "escape"));
-    symlink("cap", buildPath(path, "linked"));
+    link("../outside/secret", buildPath(path, "cap", "escape"), false);
+    link("cap", buildPath(path, "linked"), true);
 
     auto options = previewOptions();
     options.preopens = [Preopen(buildPath(path, "linked"), "/sandbox")];
@@ -342,7 +368,23 @@ unittest
 @("WASI-04 no ambient environment or network: core rejects capabilities and Preview1 ignores process env")
 @system unittest
 {
-    import core.sys.posix.stdlib : setenv, unsetenv;
+    version (Windows)
+    {
+        import std.process : environment;
+
+        static int setenv(string name, string value, int) @system
+        {
+            environment[name] = value;
+            return 0;
+        }
+
+        static void unsetenv(string name) @system
+        {
+            environment.remove(name);
+        }
+    }
+    else
+        import core.sys.posix.stdlib : setenv, unsetenv;
 
     PluginOptions core;
     core.allowNetwork = true;
@@ -435,6 +477,19 @@ unittest
 // The temporary directory with symbolic links resolved. A preopen path may contain none, and macOS
 // reaches its temporary directory through /var, a link to /private/var (ADR-024).
 private string realTempDir() @trusted
+{
+    version (Windows)
+    {
+        import std.file : tempDir;
+        import std.path : buildNormalizedPath;
+
+        return buildNormalizedPath(tempDir());
+    }
+    else
+        return realPosixTempDir();
+}
+
+version (Posix) private string realPosixTempDir() @trusted
 {
     import core.stdc.stdlib : free;
     import core.sys.posix.stdlib : realpath;

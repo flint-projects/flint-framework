@@ -340,6 +340,8 @@ version (FlintNativeHiredis)
         ReactorOptions reactors;
         version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
             reactors.backend = Backend.kqueue;
+        else version (Windows) // IOCP, the one Windows backend (ADR-026)
+            reactors.backend = Backend.iocp;
         else
             reactors.backend = Backend.epoll;
         reactors.cores = 1;
@@ -421,6 +423,8 @@ version (FlintNativeHiredis)
         ReactorOptions reactors;
         version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
             reactors.backend = Backend.kqueue;
+        else version (Windows) // IOCP, the one Windows backend (ADR-026)
+            reactors.backend = Backend.iocp;
         else
             reactors.backend = Backend.epoll;
         reactors.cores = 1;

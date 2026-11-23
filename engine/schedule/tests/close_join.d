@@ -87,6 +87,8 @@ private void runOnReactor(bool ignoreCancellation) @system
     ReactorOptions options;
     version (OSX) // the readiness backend: kqueue on macOS, epoll on Linux (ADR-024)
         options.backend = Backend.kqueue;
+    else version (Windows) // IOCP, the one Windows backend (ADR-026)
+        options.backend = Backend.iocp;
     else
         options.backend = Backend.epoll;
     options.cores = 1;

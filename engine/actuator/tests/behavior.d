@@ -170,7 +170,8 @@ unittest
     assert(registry.open(options).code == Status.ok);
     const time = Deadline.afterMillis(0).monotonicNanoseconds;
     const root = registry.beginSpan("root", TraceContext.init, time);
-    assert(root.ok && root.value.context.traceId != TraceContext.init.traceId);
+    assert(root.ok, root.error.message);
+    assert(root.value.context.traceId != TraceContext.init.traceId);
     auto child = registry.beginSpan("child", root.value.context, time + 1);
     assert(child.ok && child.value.context.traceId == root.value.context.traceId);
     assert(child.value.context.spanId != root.value.context.spanId);

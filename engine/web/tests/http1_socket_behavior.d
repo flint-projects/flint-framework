@@ -93,7 +93,8 @@ private struct Fixture
         options.cores = 1;
         options.maxConnectionsPerCore = 16;
         options.http2 = false;
-        assert(server.start(options).code == Status.ok);
+        const started = server.start(options);
+        assert(started.code == Status.ok, started.message);
         auto routes = new Routes;
         assert(server.route(Method.get, "/large", &routes.large).code == Status.ok);
         assert(server.route(Method.post, "/echo", &routes.echo).code == Status.ok);
@@ -396,15 +397,29 @@ unittest
 }
 
 /// User plus system CPU time of the whole test process.
-// SAFETY: getrusage writes only the local rusage it is given and retains no pointer to it.
+// SAFETY: getrusage (GetProcessTimes on Windows) writes only the locals it is given and retains no pointer.
 private Duration processCpu() @trusted
 {
-    import core.sys.posix.sys.resource : getrusage, rusage, RUSAGE_SELF;
+    version (Windows)
+    {
+        import core.sys.windows.winbase : FILETIME, GetCurrentProcess, GetProcessTimes;
 
-    rusage usage;
-    assert(getrusage(RUSAGE_SELF, &usage) == 0);
-    return dur!"seconds"(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + dur!"usecs"(
-            usage.ru_utime.tv_usec + usage.ru_stime.tv_usec);
+        FILETIME created, exited, kernel, user;
+        assert(GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user) != 0);
+        // FILETIME counts 100 ns units.
+        const units = ((cast(ulong) kernel.dwHighDateTime << 32) | kernel.dwLowDateTime) + (
+                (cast(ulong) user.dwHighDateTime << 32) | user.dwLowDateTime);
+        return dur!"hnsecs"(units);
+    }
+    else
+    {
+        import core.sys.posix.sys.resource : getrusage, rusage, RUSAGE_SELF;
+
+        rusage usage;
+        assert(getrusage(RUSAGE_SELF, &usage) == 0);
+        return dur!"seconds"(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + dur!"usecs"(
+                usage.ru_utime.tv_usec + usage.ru_stime.tv_usec);
+    }
 }
 
 @("HTTP/1 upgraded echoes from a peer slower than 200 µs are neither paced by a 1 ms poll nor spun for")

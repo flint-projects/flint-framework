@@ -1,10 +1,20 @@
 /// Length-checked IP literals for origin comparisons.
 module flint.security.sys.address;
 
-import core.sys.posix.arpa.inet : inet_pton;
-import core.sys.posix.netinet.in_ : AF_INET, AF_INET6;
-
 @safe:
+
+version (Windows)
+{
+    import core.sys.windows.winsock2 : AF_INET, AF_INET6;
+
+    // Winsock's inet_pton (InetPtonA in the headers); a pure conversion that needs no WSAStartup (ADR-026).
+    private extern (Windows) int inet_pton(int family, const(char)* text, void* output) @system nothrow @nogc;
+}
+else
+{
+    import core.sys.posix.arpa.inet : inet_pton;
+    import core.sys.posix.netinet.in_ : AF_INET, AF_INET6;
+}
 
 // SAFETY: inet_pton reads only the terminated local input and writes 4 or 16 bytes to
 // the caller-owned output. It cannot retain pointers, invoke callbacks, or throw.

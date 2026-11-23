@@ -280,7 +280,8 @@ private shared bool allowManagement = true;
     limits.port = port;
     limits.maxConnectionsPerCore = 4;
     Server listener;
-    assert(listener.start(limits).code == Status.ok);
+    const started = listener.start(limits);
+    assert(started.code == Status.ok, started.message);
     scope (exit)
         listener.shutdown(Deadline.afterMillis(1000).monotonicNanoseconds);
     assert(registry.attach(listener).code == Status.ok);
