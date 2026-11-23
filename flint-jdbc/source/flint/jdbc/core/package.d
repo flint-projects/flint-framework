@@ -2443,6 +2443,24 @@ final class BeanPropertyRowMapping
         case "double":
             return Any.of(rs.getDouble(index));
         default:
+            return temporalValue(rs, index, typeName, value);
+        }
+    }
+
+    // The java.time types JDBC 4.2 drivers convert DATE, TIME and TIMESTAMP columns to; `value` otherwise.
+    private static Any temporalValue(ResultSet rs, int index, string typeName, Any value)
+    {
+        import flint.java.time : LocalDate, LocalDateTime, LocalTime;
+
+        switch (typeName)
+        {
+        case "flint.java.time.LocalDate":
+            return Any.of(rs.getObject!LocalDate(index));
+        case "flint.java.time.LocalTime":
+            return Any.of(rs.getObject!LocalTime(index));
+        case "flint.java.time.LocalDateTime":
+            return Any.of(rs.getObject!LocalDateTime(index));
+        default:
             return value;
         }
     }

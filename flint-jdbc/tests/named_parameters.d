@@ -783,6 +783,37 @@ unittest
     });
 }
 
+/// A bean with a `java.time` property, as petclinic-rest's `Pet.birthDate`.
+class Dated
+{
+    import flint.java.time : LocalDate;
+
+    private LocalDate birthDate;
+
+    LocalDate getBirthDate()
+    {
+        return birthDate;
+    }
+
+    void setBirthDate(LocalDate birthDate)
+    {
+        this.birthDate = birthDate;
+    }
+}
+
+@("BeanPropertyRowMapper: a DATE column's ISO text maps to a LocalDate property")
+unittest
+{
+    import flint.java.time : LocalDate;
+    import flint.jdbc.core : BeanPropertyRowMapper;
+
+    auto f = Fixture.create();
+    auto template_ = f.namedParameterTemplate.getJdbcTemplate();
+    f.connection.results = new Rows(["birth_date"], [[Any.of("2010-09-07")]]);
+    auto rows = template_.query("select birth_date from pets", new BeanPropertyRowMapper!Dated);
+    assert(rows.get(0).getBirthDate() == LocalDate.of(2010, 9, 7));
+}
+
 @("DataClassRowMapper: constructor parameters by column name")
 unittest
 {
