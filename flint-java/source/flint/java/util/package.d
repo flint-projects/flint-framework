@@ -2209,3 +2209,215 @@ class Properties : LinkedHashMap!(string, string)
         return buffer[0 .. n].idup;
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Locale
+
+/++
+Java's `Locale` (clean room, from the Java SE specification): a language, a country (region) and a variant,
+normalized as Java does (the language lower case, the country upper case). Like flint.java's `Charset`, it is a
+value type, so its constants are `static immutable`. Scripts and extensions are not modeled: `forLanguageTag`
+skips a script subtag and stops at the first extension or private-use subtag. `getDefault` reads the POSIX locale
+(`LC_ALL`, then `LANG`) once per call; `setDefault` is not provided, because framework modules keep no mutable
+module state.
++/
+struct Locale
+{
+    private string language;
+    private string country;
+    private string variant;
+
+    /// A locale for `language`, `country` and `variant`.
+    this(string language, string country = "", string variant = "") pure nothrow
+    {
+        this.language = asciiCase(language, false);
+        this.country = asciiCase(country, true);
+        this.variant = variant;
+    }
+
+    static immutable Locale ROOT = Locale(""); ///
+    static immutable Locale ENGLISH = Locale("en"); ///
+    static immutable Locale FRENCH = Locale("fr"); ///
+    static immutable Locale GERMAN = Locale("de"); ///
+    static immutable Locale ITALIAN = Locale("it"); ///
+    static immutable Locale JAPANESE = Locale("ja"); ///
+    static immutable Locale CHINESE = Locale("zh"); ///
+    static immutable Locale US = Locale("en", "US"); ///
+    static immutable Locale UK = Locale("en", "GB"); ///
+    static immutable Locale CANADA = Locale("en", "CA"); ///
+    static immutable Locale FRANCE = Locale("fr", "FR"); ///
+    static immutable Locale GERMANY = Locale("de", "DE"); ///
+    static immutable Locale ITALY = Locale("it", "IT"); ///
+    static immutable Locale JAPAN = Locale("ja", "JP"); ///
+
+    /// The language code, lower case; empty when absent.
+    string getLanguage() const pure nothrow @nogc
+    {
+        return language;
+    }
+
+    /// The country (region) code, upper case; empty when absent.
+    string getCountry() const pure nothrow @nogc
+    {
+        return country;
+    }
+
+    /// The variant; empty when absent.
+    string getVariant() const pure nothrow @nogc
+    {
+        return variant;
+    }
+
+    /// Equal language, country and variant.
+    bool equals(const Locale other) const pure nothrow @nogc
+    {
+        return opEquals(other);
+    }
+
+    /// Equal language, country and variant.
+    bool opEquals(const Locale other) const pure nothrow @nogc
+    {
+        return language == other.language && country == other.country && variant == other.variant;
+    }
+
+    /// The hash of the language, country and variant.
+    size_t toHash() const pure nothrow
+    {
+        return hashOf(variant, hashOf(country, hashOf(language)));
+    }
+
+    /// Java's `hashCode`.
+    int hashCode() const pure nothrow
+    {
+        return cast(int) toHash();
+    }
+
+    /// `language_COUNTRY_variant`, leaving out empty trailing parts: `en_US`, `en`, `_US`; empty for `ROOT`.
+    string toString() const pure nothrow
+    {
+        if (!country.length && !variant.length)
+            return language;
+        string result = language ~ "_" ~ country;
+        return variant.length ? result ~ "_" ~ variant : result;
+    }
+
+    /// The BCP 47 tag: `en-US`, `en`, or `und` without a language.
+    string toLanguageTag() const pure nothrow
+    {
+        string result = language.length ? language : "und";
+        if (country.length)
+            result ~= "-" ~ country;
+        if (variant.length)
+            result ~= "-" ~ variant;
+        return result;
+    }
+
+    /// The locale of a BCP 47 tag (`en-US`, `de`, `und`, `zh-Hant-TW`); an ill-formed subtag ends the parse.
+    static Locale forLanguageTag(string languageTag) pure nothrow
+    {
+        string[] subtags;
+        size_t start;
+        foreach (i; 0 .. languageTag.length + 1)
+            if (i == languageTag.length || languageTag[i] == '-')
+            {
+                subtags ~= languageTag[start .. i];
+                start = i + 1;
+            }
+        string lang, region, variantTag;
+        size_t next;
+        if (subtags.length && isAlpha(subtags[0], 2, 8))
+        {
+            lang = subtags[0] == "und" ? "" : subtags[0];
+            next = 1;
+            while (next < subtags.length && next <= 3 && isAlpha(subtags[next], 3, 3))
+                next++; // extended language subtags
+        }
+        else
+            return Locale.init;
+        if (next < subtags.length && isAlpha(subtags[next], 4, 4))
+            next++; // script: not modeled
+        if (next < subtags.length && (isAlpha(subtags[next], 2, 2) || isDigits(subtags[next], 3)))
+            region = subtags[next++];
+        if (next < subtags.length && isVariant(subtags[next]))
+            variantTag = subtags[next];
+        return Locale(lang, region, variantTag);
+    }
+
+    /// The default locale: the POSIX locale of `LC_ALL`, else `LANG` (`en_US.UTF-8` gives en-US); `C`, `POSIX` or
+    /// none gives `en_US`, as the JDK does.
+    static Locale getDefault()
+    {
+        import std.process : environment;
+
+        string posix = environment.get("LC_ALL", "");
+        if (!posix.length)
+            posix = environment.get("LANG", "");
+        return fromPosix(posix);
+    }
+
+    /// The locale of a POSIX locale name: `language_COUNTRY.charset@modifier`.
+    static Locale fromPosix(string name) pure nothrow
+    {
+        size_t end = name.length;
+        foreach (i, c; name)
+            if (c == '.' || c == '@')
+            {
+                end = i;
+                break;
+            }
+        const base = name[0 .. end];
+        if (!base.length || base == "C" || base == "POSIX")
+            return Locale("en", "US");
+        foreach (i, c; base)
+            if (c == '_')
+                return Locale(base[0 .. i], base[i + 1 .. $]);
+        return Locale(base);
+    }
+
+    private static string asciiCase(string text, bool upper) pure nothrow
+    {
+        foreach (i, c; text)
+            if (upper ? (c >= 'a' && c <= 'z') : (c >= 'A' && c <= 'Z'))
+            {
+                char[] result = text.dup;
+                foreach (ref r; result[i .. $])
+                    if (upper && r >= 'a' && r <= 'z')
+                        r -= 32;
+                    else if (!upper && r >= 'A' && r <= 'Z')
+                        r += 32;
+                return result.idup;
+            }
+        return text;
+    }
+
+    private static bool isAlpha(string s, size_t min, size_t max) pure nothrow @nogc
+    {
+        if (s.length < min || s.length > max)
+            return false;
+        foreach (c; s)
+            if (!((c | 0x20) >= 'a' && (c | 0x20) <= 'z'))
+                return false;
+        return true;
+    }
+
+    private static bool isDigits(string s, size_t length) pure nothrow @nogc
+    {
+        if (s.length != length)
+            return false;
+        foreach (c; s)
+            if (c < '0' || c > '9')
+                return false;
+        return true;
+    }
+
+    private static bool isVariant(string s) pure nothrow @nogc
+    {
+        const digitLed = s.length == 4 && s[0] >= '0' && s[0] <= '9';
+        if (!digitLed && (s.length < 5 || s.length > 8))
+            return false;
+        foreach (c; s)
+            if (!((c >= '0' && c <= '9') || ((c | 0x20) >= 'a' && (c | 0x20) <= 'z')))
+                return false;
+        return true;
+    }
+}

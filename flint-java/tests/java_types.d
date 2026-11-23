@@ -542,3 +542,25 @@ unittest
     ints.add([1, 2]);
     assert(ints.contains([1, 2]) && ints.indexOf([1, 2]) == 0);
 }
+
+unittest
+{
+    // java.util.Locale: normalization, toString, language tags, constants and the POSIX default.
+    import flint.java.util : Locale;
+
+    auto us = Locale("EN", "us");
+    assert(us == Locale.US && us.getLanguage() == "en" && us.getCountry() == "US");
+    assert(us.toString() == "en_US" && us.toLanguageTag() == "en-US"
+            && us.hashCode() == Locale.US.hashCode() && us.equals(Locale.US));
+    assert(Locale.ENGLISH.toString() == "en" && Locale.ENGLISH.toLanguageTag() == "en");
+    assert(Locale("", "US").toString() == "_US" && Locale.ROOT.toLanguageTag() == "und");
+    assert(Locale("de", "DE", "POSIX").toString() == "de_DE_POSIX");
+    assert(Locale.forLanguageTag("en-US") == Locale.US && Locale.forLanguageTag("de") == Locale.GERMAN);
+    assert(Locale.forLanguageTag("und") == Locale.ROOT && Locale.forLanguageTag("zh-Hant-TW") == Locale("zh", "TW"));
+    assert(Locale.forLanguageTag("es-419").getCountry() == "419" && Locale.forLanguageTag("en_US") == Locale.ROOT);
+    assert(Locale.forLanguageTag("de-DE-1996").getVariant() == "1996");
+    assert(Locale.fromPosix("en_US.UTF-8") == Locale.US && Locale.fromPosix("fr_FR@euro") == Locale.FRANCE);
+    assert(Locale.fromPosix("C") == Locale.US && Locale.fromPosix("") == Locale.US
+            && Locale.fromPosix("de") == Locale.GERMAN);
+    assert(Locale.getDefault().toLanguageTag().length >= 2);
+}
