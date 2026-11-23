@@ -1,8 +1,8 @@
 module flint.java.time_test;
 
 import flint.java.lang : IllegalArgumentException;
-import flint.java.time : DateTimeException, DayOfWeek, Duration, Instant, LocalDate, LocalDateTime, LocalTime, Month,
-    OffsetDateTime, ZoneId, ZoneOffset, ZonedDateTime, getValue, isLeap;
+import flint.java.time : DateTimeException, DayOfWeek, Duration, Instant, LocalDate, LocalDateTime,
+    LocalTime, Month, OffsetDateTime, ZoneId, ZoneOffset, ZonedDateTime, getValue, isLeap;
 import flint.java.time.format : DateTimeFormatter, DateTimeParseException;
 
 @safe:
@@ -22,89 +22,65 @@ private string[][] rows(string tsv) pure
 // The values GoldenTime.java writes, by label.
 private string[2] goldenValue(string label)
 {
-    switch (label)
-    {
-    case "date":
-        return value(LocalDate.of(2010, 9, 7), DateTimeFormatter.ISO_LOCAL_DATE);
-    case "date_min4":
-        return value(LocalDate.of(1, 1, 1), DateTimeFormatter.ISO_LOCAL_DATE);
-    case "date_leap":
-        return value(LocalDate.of(2024, 2, 29), DateTimeFormatter.ISO_LOCAL_DATE);
-    case "date_big":
-        return value(LocalDate.of(10_000, 1, 1), DateTimeFormatter.ISO_LOCAL_DATE);
-    case "date_neg":
-        return value(LocalDate.of(-1, 12, 31), DateTimeFormatter.ISO_LOCAL_DATE);
-    case "time_hm":
-        return value(LocalTime.of(10, 15), DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_hms":
-        return value(LocalTime.of(10, 15, 30), DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_milli":
-        return value(LocalTime.of(10, 15, 30, 100_000_000), DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_milli3":
-        return value(LocalTime.of(10, 15, 30, 123_000_000), DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_micro":
-        return value(LocalTime.of(10, 15, 30, 123_456_000), DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_nano":
-        return value(LocalTime.of(10, 15, 30, 123_456_789), DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_midnight":
-        return value(LocalTime.MIDNIGHT, DateTimeFormatter.ISO_LOCAL_TIME);
-    case "time_max":
-        return value(LocalTime.MAX, DateTimeFormatter.ISO_LOCAL_TIME);
-    case "datetime":
-        return value(LocalDateTime.of(2013, 1, 1, 9, 30), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-    case "datetime_nano":
-        return value(LocalDateTime.of(2013, 1, 1, 9, 30, 5, 7000), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-    case "instant_epoch":
-        return value(Instant.EPOCH, DateTimeFormatter.ISO_INSTANT);
-    case "instant":
-        return value(Instant.ofEpochSecond(1_700_000_000L, 123_000_000), DateTimeFormatter.ISO_INSTANT);
-    case "instant_whole":
-        return value(Instant.ofEpochSecond(1_700_000_000L), DateTimeFormatter.ISO_INSTANT);
-    case "instant_nano":
-        return value(Instant.ofEpochSecond(-1L, 999_999_999), DateTimeFormatter.ISO_INSTANT);
-    default:
-        return goldenValue2(label);
-    }
+    const string[2]delegate() @safe[string] table = [
+        "date": () => value(LocalDate.of(2010, 9, 7), DateTimeFormatter.ISO_LOCAL_DATE),
+        "date_min4": () => value(LocalDate.of(1, 1, 1), DateTimeFormatter.ISO_LOCAL_DATE),
+        "date_leap": () => value(LocalDate.of(2024, 2, 29), DateTimeFormatter.ISO_LOCAL_DATE),
+        "date_big": () => value(LocalDate.of(10_000, 1, 1), DateTimeFormatter.ISO_LOCAL_DATE),
+        "date_neg": () => value(LocalDate.of(-1, 12, 31), DateTimeFormatter.ISO_LOCAL_DATE),
+        "time_hm": () => value(LocalTime.of(10, 15), DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_hms": () => value(LocalTime.of(10, 15, 30), DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_milli": () => value(LocalTime.of(10, 15, 30, 100_000_000),
+                DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_milli3": () => value(LocalTime.of(10, 15, 30, 123_000_000),
+                DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_micro": () => value(LocalTime.of(10, 15, 30, 123_456_000),
+                DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_nano": () => value(LocalTime.of(10, 15, 30, 123_456_789),
+                DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_midnight": () => value(LocalTime.MIDNIGHT, DateTimeFormatter.ISO_LOCAL_TIME),
+        "time_max": () => value(LocalTime.MAX, DateTimeFormatter.ISO_LOCAL_TIME),
+        "datetime": () => value(LocalDateTime.of(2013, 1, 1, 9, 30),
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+        "datetime_nano": () => value(LocalDateTime.of(2013, 1, 1, 9, 30, 5, 7000),
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+    ];
+    if (auto entry = label in table)
+        return (*entry)();
+    return goldenValue2(label);
 }
 
 private string[2] goldenValue2(string label)
 {
-    switch (label)
-    {
-    case "offset_utc":
-        return value(OffsetDateTime.of(2026, 11, 23, 5, 51, 34, 123_000_000, ZoneOffset.UTC),
-                DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-    case "offset_plus":
-        return value(OffsetDateTime.of(2026, 11, 23, 5, 51, 34, 0, ZoneOffset.ofHours(2)),
-                DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-    case "offset_minus":
-        return value(OffsetDateTime.of(2026, 11, 23, 5, 51, 0, 0, ZoneOffset.ofHoursMinutes(-5, -30)),
-                DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-    case "zoned_offset":
-        return value(ZonedDateTime.of(2026, 11, 23, 5, 51, 34, 0, ZoneOffset.ofHours(1)),
-                DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-    case "zoned_utc":
-        return value(ZonedDateTime.of(2026, 11, 23, 5, 51, 34, 0, ZoneOffset.UTC),
-                DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-    case "duration_zero":
-        return plain(Duration.ZERO);
-    case "duration":
-        return plain(Duration.ofHours(8).plusMinutes(6).plusSeconds(12).plusMillis(345));
-    case "duration_neg":
-        return plain(Duration.ofMillis(-1500));
-    case "duration_day":
-        return plain(Duration.ofDays(1));
-    case "duration_neg_frac":
-        return plain(Duration.ofSeconds(-1, 999_999_999));
-    case "duration_nanos":
-        return plain(Duration.ofNanos(1));
-    case "zoneoffset":
-        return plain(ZoneOffset.ofHoursMinutesSeconds(1, 0, 30));
-    case "zoneoffset_utc":
-        return plain(ZoneOffset.UTC);
-    default:
-        assert(false, label);
-    }
+    const string[2]delegate() @safe[string] table = [
+        "instant_epoch": () => value(Instant.EPOCH, DateTimeFormatter.ISO_INSTANT),
+        "instant": () => value(Instant.ofEpochSecond(1_700_000_000L, 123_000_000),
+                DateTimeFormatter.ISO_INSTANT),
+        "instant_whole": () => value(Instant.ofEpochSecond(1_700_000_000L),
+                DateTimeFormatter.ISO_INSTANT),
+        "instant_nano": () => value(Instant.ofEpochSecond(-1L, 999_999_999),
+                DateTimeFormatter.ISO_INSTANT),
+        "offset_utc": () => value(OffsetDateTime.of(2026, 11, 23, 5, 51, 34, 123_000_000,
+                ZoneOffset.UTC), DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+        "offset_plus": () => value(OffsetDateTime.of(2026, 11, 23, 5, 51, 34, 0,
+                ZoneOffset.ofHours(2)), DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+        "offset_minus": () => value(OffsetDateTime.of(2026, 11, 23, 5, 51, 0, 0,
+                ZoneOffset.ofHoursMinutes(-5, -30)), DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+        "zoned_offset": () => value(ZonedDateTime.of(2026, 11, 23, 5, 51, 34, 0,
+                ZoneOffset.ofHours(1)), DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+        "zoned_utc": () => value(ZonedDateTime.of(2026, 11, 23, 5, 51, 34, 0, ZoneOffset.UTC),
+                DateTimeFormatter.ISO_OFFSET_DATE_TIME), "duration_zero": () => plain(Duration.ZERO),
+        "duration": () => plain(Duration.ofHours(8).plusMinutes(6).plusSeconds(12).plusMillis(345)),
+        "duration_neg": () => plain(Duration.ofMillis(-1500)),
+        "duration_day": () => plain(Duration.ofDays(1)),
+        "duration_neg_frac": () => plain(Duration.ofSeconds(-1, 999_999_999)),
+        "duration_nanos": () => plain(Duration.ofNanos(1)),
+        "zoneoffset": () => plain(ZoneOffset.ofHoursMinutesSeconds(1, 0, 30)),
+        "zoneoffset_utc": () => plain(ZoneOffset.UTC),
+    ];
+    if (auto entry = label in table)
+        return (*entry)();
+    assert(false, label);
 }
 
 private string[2] value(T)(T v, DateTimeFormatter iso)
@@ -132,31 +108,20 @@ unittest
 
 private DateTimeFormatter formatterNamed(string name)
 {
-    switch (name)
-    {
-    case "ISO_LOCAL_DATE":
-        return DateTimeFormatter.ISO_LOCAL_DATE;
-    case "ISO_LOCAL_TIME":
-        return DateTimeFormatter.ISO_LOCAL_TIME;
-    case "ISO_LOCAL_DATE_TIME":
-        return DateTimeFormatter.ISO_LOCAL_DATE_TIME;
-    case "ISO_OFFSET_DATE_TIME":
-        return DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-    case "ISO_ZONED_DATE_TIME":
-        return DateTimeFormatter.ISO_ZONED_DATE_TIME;
-    case "ISO_DATE_TIME":
-        return DateTimeFormatter.ISO_DATE_TIME;
-    case "ISO_DATE":
-        return DateTimeFormatter.ISO_DATE;
-    case "ISO_TIME":
-        return DateTimeFormatter.ISO_TIME;
-    case "ISO_INSTANT":
-        return DateTimeFormatter.ISO_INSTANT;
-    case "BASIC_ISO_DATE":
-        return DateTimeFormatter.BASIC_ISO_DATE;
-    default:
-        return DateTimeFormatter.ofPattern(name);
-    }
+    const DateTimeFormatter delegate() @safe[string] table = [
+        "ISO_LOCAL_DATE": () => DateTimeFormatter.ISO_LOCAL_DATE,
+        "ISO_LOCAL_TIME": () => DateTimeFormatter.ISO_LOCAL_TIME,
+        "ISO_LOCAL_DATE_TIME": () => DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+        "ISO_OFFSET_DATE_TIME": () => DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+        "ISO_ZONED_DATE_TIME": () => DateTimeFormatter.ISO_ZONED_DATE_TIME,
+        "ISO_DATE_TIME": () => DateTimeFormatter.ISO_DATE_TIME,
+        "ISO_DATE": () => DateTimeFormatter.ISO_DATE, "ISO_TIME": () => DateTimeFormatter.ISO_TIME,
+        "ISO_INSTANT": () => DateTimeFormatter.ISO_INSTANT,
+        "BASIC_ISO_DATE": () => DateTimeFormatter.BASIC_ISO_DATE,
+    ];
+    if (auto entry = name in table)
+        return (*entry)();
+    return DateTimeFormatter.ofPattern(name);
 }
 
 private string formatKind(DateTimeFormatter f, string kind)
@@ -165,62 +130,38 @@ private string formatKind(DateTimeFormatter f, string kind)
     const time = LocalTime.of(14, 5, 9, 120_000_000);
     const ldt = LocalDateTime.of(date, time);
     const odt = OffsetDateTime.of(ldt, ZoneOffset.ofHoursMinutes(5, 30));
-    switch (kind)
-    {
-    case "LocalDate":
-        return f.format(date);
-    case "LocalTime":
-        return f.format(time);
-    case "LocalDateTime":
-        return f.format(ldt);
-    case "OffsetDateTime":
-        return f.format(odt);
-    case "OffsetDateTimeUtc":
-        return f.format(OffsetDateTime.of(ldt, ZoneOffset.UTC));
-    case "ZonedDateTimeUtc":
-        return f.format(ZonedDateTime.of(ldt, ZoneId.of("UTC")));
-    case "ZonedDateTimePlus":
-        return f.format(ZonedDateTime.of(ldt, ZoneId.of("UTC+2")));
-    case "Instant":
-        return f.format(odt.toInstant());
-    case "LocalDateBig":
-        return f.format(LocalDate.of(12_345, 1, 2));
-    case "LocalDateNeg":
-        return f.format(LocalDate.of(-44, 3, 15));
-    case "LocalTimeMidnight":
-        return f.format(LocalTime.MIDNIGHT);
-    case "LocalTimeNano":
-        return f.format(LocalTime.of(0, 0, 0, 1));
-    default:
-        assert(false, kind);
-    }
+    const string delegate() @safe[string] table = [
+        "LocalDate": () => f.format(date), "LocalTime": () => f.format(time),
+        "LocalDateTime": () => f.format(ldt), "OffsetDateTime": () => f.format(odt),
+        "OffsetDateTimeUtc": () => f.format(OffsetDateTime.of(ldt, ZoneOffset.UTC)),
+        "ZonedDateTimeUtc": () => f.format(ZonedDateTime.of(ldt, ZoneId.of("UTC"))),
+        "ZonedDateTimePlus": () => f.format(ZonedDateTime.of(ldt, ZoneId.of("UTC+2"))),
+        "Instant": () => f.format(odt.toInstant()),
+        "LocalDateBig": () => f.format(LocalDate.of(12_345, 1, 2)),
+        "LocalDateNeg": () => f.format(LocalDate.of(-44, 3, 15)),
+        "LocalTimeMidnight": () => f.format(LocalTime.MIDNIGHT),
+        "LocalTimeNano": () => f.format(LocalTime.of(0, 0, 0, 1)),
+    ];
+    if (auto entry = kind in table)
+        return (*entry)();
+    assert(false, kind);
 }
 
 private string parseKind(string kind, string name, string text)
 {
-    switch (kind)
-    {
-    case "LocalDate":
-        return LocalDate.parse(text, formatterNamed(name)).toString();
-    case "LocalTime":
-        return LocalTime.parse(text, formatterNamed(name)).toString();
-    case "LocalDateTime":
-        return LocalDateTime.parse(text, formatterNamed(name)).toString();
-    case "OffsetDateTime":
-        return OffsetDateTime.parse(text, formatterNamed(name)).toString();
-    case "ZonedDateTime":
-        return ZonedDateTime.parse(text, formatterNamed(name)).toString();
-    case "Instant":
-        return Instant.parse(text).toString();
-    case "Duration":
-        return Duration.parse(text).toString();
-    case "ZoneOffset":
-        return ZoneOffset.of(text).toString();
-    case "ZoneId":
-        return ZoneId.of(text).toString();
-    default:
-        assert(false, kind);
-    }
+    const string delegate() @safe[string] table = [
+        "LocalDate": () => LocalDate.parse(text, formatterNamed(name)).toString(),
+        "LocalTime": () => LocalTime.parse(text, formatterNamed(name)).toString(),
+        "LocalDateTime": () => LocalDateTime.parse(text, formatterNamed(name)).toString(),
+        "OffsetDateTime": () => OffsetDateTime.parse(text, formatterNamed(name)).toString(),
+        "ZonedDateTime": () => ZonedDateTime.parse(text, formatterNamed(name)).toString(),
+        "Instant": () => Instant.parse(text).toString(),
+        "Duration": () => Duration.parse(text).toString(),
+        "ZoneOffset": () => ZoneOffset.of(text).toString(), "ZoneId": () => ZoneId.of(text).toString(),
+    ];
+    if (auto entry = kind in table)
+        return (*entry)();
+    assert(false, kind);
 }
 
 @("java.time.format: ISO constants and ofPattern format, parse and fail like JDK 21 (time_format.tsv)")
@@ -252,8 +193,8 @@ unittest
                 got = parseKind(row[1], row[2], row.length > 4 ? text : "");
             catch (DateTimeException e)
                 got = "!" ~ e.msg;
-            assert(got == (row.length > 4 ? expected : row[3]), row[1] ~ " " ~ row[2] ~ " '" ~ text ~ "': " ~ got
-                    ~ " != " ~ (row.length > 4 ? expected : row[3]));
+            assert(got == (row.length > 4 ? expected : row[3]),
+                    row[1] ~ " " ~ row[2] ~ " '" ~ text ~ "': " ~ got ~ " != " ~ (row.length > 4 ? expected : row[3]));
             ++parses;
         }
     }
