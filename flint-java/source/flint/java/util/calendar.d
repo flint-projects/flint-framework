@@ -480,6 +480,39 @@ private string text(long value) pure nothrow
 
 private alias FieldValues = int[Calendar.FIELD_COUNT];
 
+/// Flint: the calendar fields of `millis` (milliseconds since the epoch) at `offset` milliseconds from UTC, exactly as
+/// `GregorianCalendar` computes them, without a calendar object, for code that only formats (no vtable keeps the
+/// field resolution linked). `values` is indexed by `Calendar`'s field numbers (`Calendar.YEAR`, `Calendar.MONTH`...).
+package(flint) void gregorianFields(long millis, long offset, ref FieldValues values) pure nothrow @nogc
+{
+    long weekYear;
+    fieldsFor(millis, offset, values, weekYear);
+}
+
+@("gregorianFields agrees with GregorianCalendar.get across the cutover and at a negative offset")
+unittest
+{
+    import flint.java.util.timezone : TimeZone;
+
+    static immutable long[5] samples = [
+        -12_219_292_800_001L, -12_219_292_800_000L, 1_234_567_890_123L, 0L, -62_198_755_200_000L
+    ];
+    foreach (zone; ["UTC", "GMT-05:30"])
+    {
+        auto cal = new GregorianCalendar(TimeZone.getTimeZone(zone));
+        // The last Julian and first Gregorian milliseconds, a day that carries back across midnight at -05:30, and
+        // a BC year.
+        foreach (millis; samples)
+        {
+            cal.setTimeInMillis(millis);
+            FieldValues values;
+            gregorianFields(millis, cal.getTimeZone().getRawOffset(), values);
+            foreach (field; 0 .. Calendar.FIELD_COUNT)
+                assert(values[field] == cal.get(field), Calendar.fieldName(field));
+        }
+    }
+}
+
 // Every Calendar field of `millis` at `offset` (milliseconds), and the week-based year.
 private void fieldsFor(long millis, long offset, ref FieldValues values, out long weekYear) pure nothrow @nogc
 {
