@@ -64,6 +64,18 @@ def refused(port):
         raise
 
 
+WINDOWS = sys.platform == 'win32'
+
+
+def stop(process, number):
+    """Deliver a shutdown signal. On Windows that is Ctrl+Break to the child's own process group, which flint.os
+    reads as SIGTERM: Windows has no kill(2), and Ctrl+C cannot be sent to a single process group (ADR-026)."""
+    if WINDOWS:
+        process.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        os.kill(process.pid, number)
+
+
 class Request(threading.Thread):
     """One GET on its own connection, recording the status or the failure."""
 
@@ -86,13 +98,13 @@ class Request(threading.Thread):
             client.close()
 
 
-@unittest.skipIf(sys.platform == 'win32', 'os.kill on Windows is TerminateProcess, not a graceful stop; a graceful stop '
-                 'needs CTRL_BREAK to a CREATE_NEW_PROCESS_GROUP child (ADR-026, Python suite on Windows)')
 class GracefulShutdownTests(unittest.TestCase):
     def start(self, grace_ms):
         port = free_port()
+        # Its own process group on Windows, so Ctrl+Break reaches the fixture and not this test.
         process = subprocess.Popen([str(BINARY), str(port), str(grace_ms)], stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, text=True)
+                                   stderr=subprocess.STDOUT, text=True,
+                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if WINDOWS else 0)
         self.addCleanup(self.reap, process)
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
@@ -126,7 +138,7 @@ class GracefulShutdownTests(unittest.TestCase):
     def drains(self, number):
         process, port = self.start(10_000)
         request = self.in_flight(port, '/slow?ms=1500')
-        os.kill(process.pid, number)
+        stop(process, number)
         self.wait_refused(port)
         self.assertIsNone(process.poll(), 'the application stopped before its request finished')
         request.join(10)
@@ -137,13 +149,15 @@ class GracefulShutdownTests(unittest.TestCase):
     def test_sigterm_finishes_the_in_flight_request_refuses_new_connections_and_exits_0(self):
         self.drains(signal.SIGTERM)
 
+    @unittest.skipIf(WINDOWS, 'Ctrl+C, the SIGINT of a Windows console, cannot be sent to a single process group; '
+                     'the other tests deliver Ctrl+Break (ADR-026)')
     def test_sigint_behaves_the_same(self):
         self.drains(signal.SIGINT)
 
     def test_an_idle_application_exits_0_at_once(self):
         process, port = self.start(10_000)
         began = time.monotonic()
-        os.kill(process.pid, signal.SIGTERM)
+        stop(process, signal.SIGTERM)
         self.assertEqual(process.wait(5), 0)
         self.assertLess(time.monotonic() - began, 2)
 
@@ -151,7 +165,7 @@ class GracefulShutdownTests(unittest.TestCase):
         process, port = self.start(300)
         request = self.in_flight(port, '/slow?ms=20000')
         began = time.monotonic()
-        os.kill(process.pid, signal.SIGTERM)
+        stop(process, signal.SIGTERM)
         self.assertEqual(process.wait(5), 124)
         self.assertGreaterEqual(time.monotonic() - began, 0.3)
         request.join(5)
@@ -160,11 +174,11 @@ class GracefulShutdownTests(unittest.TestCase):
     def test_a_second_signal_forces_the_exit_with_130(self):
         process, port = self.start(30_000)
         request = self.in_flight(port, '/slow?ms=20000')
-        os.kill(process.pid, signal.SIGTERM)
+        stop(process, signal.SIGTERM)
         self.wait_refused(port)
         time.sleep(0.2)
         self.assertIsNone(process.poll(), 'one signal did not leave the drain running')
-        os.kill(process.pid, signal.SIGINT)
+        stop(process, signal.SIGINT)
         self.assertEqual(process.wait(5), 130)
         self.assertIn('exit 130 after 2 signal(s)', process.communicate()[0])
         request.join(5)
@@ -174,7 +188,7 @@ class GracefulShutdownTests(unittest.TestCase):
         process, port = self.start(300)
         self.in_flight(port, '/worker/stuck')
         began = time.monotonic()
-        os.kill(process.pid, signal.SIGTERM)
+        stop(process, signal.SIGTERM)
         self.assertEqual(process.wait(10), 124)
         self.assertLess(time.monotonic() - began, 8)
 

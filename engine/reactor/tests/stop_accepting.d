@@ -83,11 +83,7 @@ private void stopAccepting(Backend backend, uint cores)
             waitFor(() => atomicLoad(accepted) == 1);
             reactor.stopAccepting();
             waitFor(() => reactor.acceptStopped());
-            version (Windows)
-            {
-            }
-            else
-                assert(refused(port), "a connection was admitted after the listener closed");
+            assert(refused(port), "a connection was admitted after the listener closed");
             ubyte[1] byteValue = [42];
             assert(peer.send(byteValue[]) == 1);
             ubyte[1] answer;
@@ -129,7 +125,6 @@ else version (Windows)
     @("stopAccepting retires the IOCP accept while an admitted connection keeps serving")
     unittest
     {
-        // Windows keeps the listening socket until release, so this checks admission only.
         stopAccepting(Backend.iocp, 1);
     }
 }

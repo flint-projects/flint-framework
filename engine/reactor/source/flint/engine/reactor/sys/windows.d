@@ -174,13 +174,23 @@ version (Windows)
 
     package(flint.engine.reactor) void closeSocket(ref Socket socket) nothrow @nogc
     {
-        if (!socket.valid)
-            return;
         auto owned = socket;
         socket = Socket.init;
-        closesocket(owned.descriptor);
+        if (owned.valid)
+            closesocket(owned.descriptor);
+        // A listener closed by `closeListening` still holds the process's Winsock reference until here.
         if (owned.ownsWinsock)
             WSACleanup();
+    }
+
+    /// Close a listener so the kernel refuses new connections, but keep its Winsock reference for `closeSocket`
+    /// at release: admitted connections still use Winsock while they drain (ADR-028 section 10, ADR-026).
+    package(flint.engine.reactor) void closeListening(ref Socket socket) nothrow @nogc
+    {
+        if (!socket.valid)
+            return;
+        closesocket(socket.descriptor);
+        socket.descriptor = INVALID_SOCKET;
     }
 
     /// Turn off Nagle coalescing so small writes leave immediately, as on Linux and macOS.

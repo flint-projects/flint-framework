@@ -52,8 +52,9 @@ else version (OSX)
 }
 else version (Windows)
 {
-    import flint.engine.reactor.sys.windows : CompletionPort, KernelEvent, Socket, bindListener, cancelKernel,
-        closeCompletionPort, closeSocket, openCompletionPort, pollCompletion, sendImmediately,
+    import flint.engine.reactor.sys.windows : CompletionPort, KernelEvent, Socket, bindListener,
+        cancelKernel, closeCompletionPort,
+        closeListening, closeSocket, openCompletionPort, pollCompletion, sendImmediately,
         socketPort, submitAccept, submitRead, submitWrite;
     import flint.engine.reactor.sys.nativewatch : NativeWatches;
 }
@@ -1466,11 +1467,10 @@ private struct Worker
         acceptClosed = true;
         if (atomicOp!"+="(runtime.acceptRetired, 1U) != runtime.workers.length)
             return;
-        // Every other owner has stopped reading the listener. Windows keeps the socket until release,
-        // because closing it also gives up the process's Winsock reference.
+        // Every other owner has stopped reading the listener. On Windows the listener also holds the process's
+        // Winsock reference, which admitted connections still need, so release gives that up later.
         version (Windows)
-        {
-        }
+            closeListening(runtime.listener);
         else
             closeSocket(runtime.listener);
     }
