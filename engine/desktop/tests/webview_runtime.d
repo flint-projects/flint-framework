@@ -8,7 +8,16 @@ import flint.desktop : Asset, Capability, Command, DesktopBackend, DesktopComman
     EventKind, InvokeContext, Listen, Window, WindowOptions;
 import flint.desktop.runtime : nativeAddress, nativeRequestClose, nativeResize;
 
-version (FlintNativeWebkitgtk) import flint.desktop.ffi.webkit : displayBackend;
+version (FlintNativeWebkitgtk)
+{
+    version = FlintSystemWebView;
+    import flint.desktop.ffi.webkit : displayBackend;
+}
+else version (FlintNativeWkwebview)
+{
+    version = FlintSystemWebView;
+    import flint.desktop.ffi.wkwebview : displayBackend;
+}
 
 @safe:
 
@@ -44,7 +53,7 @@ unittest
     assert(window.open(origin).code == Status.invalidArgument);
 }
 
-version (FlintNativeWebkitgtk)
+version (FlintSystemWebView)
 {
     private ref Context deadline(return ref Context context) @safe
     {
@@ -96,8 +105,13 @@ version (FlintNativeWebkitgtk)
         scope (exit)
             window.close();
         assert(window.open(page("again", files)).code == Status.conflict);
-        if (getenv("WAYLAND_DISPLAY") !is null)
-            assert(displayBackend() == "GdkWaylandDisplay", "GTK must use its native Wayland backend");
+        version (FlintNativeWkwebview)
+            assert(displayBackend() == "AppKit");
+        else
+        {
+            if (getenv("WAYLAND_DISPLAY") !is null)
+                assert(displayBackend() == "GdkWaylandDisplay", "GTK must use its native Wayland backend");
+        }
 
         auto alias_ = window;
         Status openCode, closeCode, emitCode, postCode;

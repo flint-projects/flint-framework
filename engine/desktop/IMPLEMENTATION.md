@@ -12,6 +12,8 @@ dub test :desktop --compiler=ldc2
 
 The `desktop` profile resolves `webkit2gtk-4.1` and `gtk+-3.0` through `pkg-config` (override with `--pkg-config` or `PKG_CONFIG`). It refuses versions older than the locked minimums and refuses static archives. The install receipt records the resolved versions, each `.pc` file's SHA256 and the link flags, with an rpath for every non-standard library directory, so NixOS needs no `LD_LIBRARY_PATH`. Emitted DUB blocks re-check those digests and set version `FlintNativeWebkitgtk`. The suite needs a real display and fails without one. On NixOS, `nix-shell -p cmake ninja gcc pkg-config webkitgtk_4_1 gtk3` provides the build inputs.
 
+On macOS the `desktop` profile selects the `wkwebview` provider instead: AppKit and WKWebView, bound from D through the Objective-C runtime in `flint.desktop.ffi.wkwebview`, with the same IPC, asset, capability and navigation behaviour. The receipt records the macOS SDK and the SHA256 of each framework stub, and emitted DUB blocks set version `FlintNativeWkwebview`. The suite needs the user's GUI session (ADR-024).
+
 ## Application model
 
 ```d

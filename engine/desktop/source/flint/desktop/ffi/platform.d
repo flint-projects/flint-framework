@@ -6,8 +6,19 @@ import flint.desktop.types : DesktopBackend, DesktopEvent, EventKind, WindowOpti
 
 @safe:
 
-version (FlintNativeWebkitgtk) import flint.desktop.ffi.webkit : Webview, WebviewEvent, webviewClose, webviewEvaluate,
-    webviewEvent, webviewOpen, webviewPump, webviewRequestClose, webviewResize, webviewTake, webviewUri;
+// The system webview: WebKitGTK on Linux, WKWebView on macOS (ADR-020, ADR-024).
+version (FlintNativeWebkitgtk)
+{
+    version = FlintSystemWebView;
+    import flint.desktop.ffi.webkit : Webview, WebviewEvent, webviewClose, webviewEvaluate, webviewEvent,
+        webviewOpen, webviewPump, webviewRequestClose, webviewResize, webviewTake, webviewUri;
+}
+else version (FlintNativeWkwebview)
+{
+    version = FlintSystemWebView;
+    import flint.desktop.ffi.wkwebview : Webview, WebviewEvent, webviewClose, webviewEvaluate,
+        webviewEvent, webviewOpen, webviewPump, webviewRequestClose, webviewResize, webviewTake, webviewUri;
+}
 
 nothrow @nogc:
 
@@ -64,7 +75,11 @@ version (linux)
 }
 else version (OSX)
 {
-    version (FlintNativeSdl3) version = FlintDesktopQueues; // the SDL canvas backend (ADR-024)
+    // The SDL canvas backend and the WKWebView backend (ADR-024).
+    version (FlintNativeSdl3)
+        version = FlintDesktopQueues;
+    else version (FlintNativeWkwebview)
+        version = FlintDesktopQueues;
 }
 
 /// Stable native status mapping.
@@ -103,7 +118,7 @@ package(flint.desktop) bool backendAvailable(DesktopBackend backend)
         else
             return false;
     case DesktopBackend.systemWebView:
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
             return true;
         else
             return false;
@@ -158,7 +173,7 @@ package(flint.desktop) struct NativeWindow
 nothrow @nogc:
 
     private SdlWindow* sdl;
-    version (FlintNativeWebkitgtk) private Webview* webview;
+    version (FlintSystemWebView) private Webview* webview;
 
     // SAFETY: The owner thread has validated the bounded inputs. C copies the title during this
     // call. The webview borrows option slices that the owner slot retains until close.
@@ -172,7 +187,7 @@ nothrow @nogc:
                 sdl = flint_window_new(title.ptr, options.width, options.height, options.resizable);
             return sdl is null ? desktopError(Status.unavailable) : Error.init;
         }
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             webview = webviewOpen(title[0 .. options.title.length + 1], options);
             return webview is null ? desktopError(Status.unavailable) : Error.init;
@@ -192,7 +207,7 @@ nothrow @nogc:
             if (sdl !is null)
                 code = flint_window_poll(sdl, &event);
         }
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
                 return pollWebview();
@@ -204,7 +219,7 @@ nothrow @nogc:
         return Result!DesktopEvent(DesktopEvent(cast(EventKind) event.kind, event.x, event.y, event.keyCode));
     }
 
-    version (FlintNativeWebkitgtk)
+    version (FlintSystemWebView)
     {
         private Result!DesktopEvent pollWebview()
         {
@@ -228,7 +243,7 @@ nothrow @nogc:
     /// Copy the next frontend frame and its page origin, if any.
     bool takeFrame(scope ubyte[] bytes, out size_t length, scope char[] origin, out size_t originLength)
     {
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
                 return webviewTake(webview, bytes, length, origin, originLength);
@@ -239,7 +254,7 @@ nothrow @nogc:
     /// Evaluate trusted Flint bridge source in the page.
     Error evaluate(scope const(char)[] script)
     {
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
             {
@@ -253,7 +268,7 @@ nothrow @nogc:
     /// Ask the native window to resize, as a window manager would.
     void resize(int width, int height)
     {
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
                 webviewResize(webview, width, height);
@@ -263,7 +278,7 @@ nothrow @nogc:
     /// Ask the native window to close, as a window manager would.
     void requestClose()
     {
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
                 webviewRequestClose(webview);
@@ -273,7 +288,7 @@ nothrow @nogc:
     /// Current page address copied into the caller's span.
     const(char)[] location(return scope char[] storage)
     {
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
                 return webviewUri(webview, storage);
@@ -284,7 +299,7 @@ nothrow @nogc:
     /// Navigations and frames refused by the webview policy.
     ulong refusals()
     {
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             if (webview !is null)
                 return webview.deniedNavigations + webview.droppedFrames;
@@ -315,7 +330,7 @@ nothrow @nogc:
             if (owned !is null)
                 flint_window_free(owned);
         }
-        version (FlintNativeWebkitgtk)
+        version (FlintSystemWebView)
         {
             auto web = webview;
             webview = null;

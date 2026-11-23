@@ -180,9 +180,12 @@ version (FlintNativeSdl3)
 version (FlintNativeWebkitgtk)
 {
 }
+else version (FlintNativeWkwebview)
+{
+}
 else
 {
-    @("A profile without the WebKitGTK provider leaves the webview unavailable")
+    @("A profile without a system webview provider leaves the webview unavailable")
     unittest
     {
         static immutable Asset[] files = [Asset("index.html", "<p>x")];
