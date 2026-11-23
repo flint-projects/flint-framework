@@ -1,0 +1,24 @@
+write	shapes	-	{"absent":null,"bytes":"AQID/w==","color":"GREEN","counts":[1,2,3],"empty":[],"names":["a","b"],"number":7,"palette":["BLUE","RED"],"point":{"x":1,"y":2,"label":"p"},"points":[{"x":3,"y":4,"label":null}],"present":"here","scores":{"ann":3}}
+write	color	-	"BLUE"
+write	point	-	{"x":5,"y":6,"label":"q"}
+write	ints	-	[4,5]
+write	bytes_empty	-	""
+write	optional_empty	-	null
+read	Color	"GREEN"	GREEN
+read	Color	2	BLUE
+read	Color	"PURPLE"	!Cannot deserialize value of type `GoldenShapes$Color` from String "PURPLE": not one of the values accepted for Enum class: [RED, BLUE, GREEN]
+read	Color	7	!Cannot deserialize value of type `GoldenShapes$Color` from number 7: index value outside legal index range [0..2]
+read	Color	null	null
+read	Color	""	!Cannot coerce empty String ("") to `GoldenShapes$Color` value (but could if coercion was enabled using `CoercionConfig`)
+read	Color	"green"	!Cannot deserialize value of type `GoldenShapes$Color` from String "green": not one of the values accepted for Enum class: [RED, BLUE, GREEN]
+read	Ints	[1,2,3]	[1, 2, 3]
+read	Ints	[]	[]
+read	Ints	5	!Cannot deserialize value of type `int[]` from Integer value (token `JsonToken.VALUE_NUMBER_INT`)
+read	Strings	["x",null,"z"]	[x, null, z]
+read	Bytes	"AQID/w=="	[1, 2, 3, -1]
+read	Bytes	[1,2,255]	[1, 2, -1]
+read	Point	{"y":2,"x":1,"label":"p"}	Point[x=1, y=2, label=p]
+read	Point	{"x":1}	!Cannot map `null` into type `int` (set `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to 'false' to allow)
+read	Point	{"x":null,"y":1}	!Cannot map `null` into type `int` (set `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to 'false' to allow)
+read	Shapes	{"absent":null,"bytes":"AQID/w==","color":"GREEN","counts":[1,2,3],"empty":[],"names":["a","b"],"number":7,"palette":["BLUE","RED"],"point":{"x":1,"y":2,"label":"p"},"points":[{"x":3,"y":4,"label":null}],"present":"here","scores":{"ann":3}}	[1, 2, 3] [a, b] [1, 2, 3, -1] [] Optional[here] Optional.empty Optional[7] {ann=3} GREEN [BLUE, RED] Point[x=1, y=2, label=p] [Point[x=3, y=4, label=null]]
+read	Shapes	{"present":null,"absent":"now","color":"RED","palette":["GREEN"],"scores":{"bob":1},"counts":[],"points":[{"x":9,"y":8,"label":"r"}]}	[] [a, b] [1, 2, 3, -1] [] Optional.empty Optional[now] Optional[7] {bob=1} RED [GREEN] Point[x=1, y=2, label=p] [Point[x=9, y=8, label=r]]

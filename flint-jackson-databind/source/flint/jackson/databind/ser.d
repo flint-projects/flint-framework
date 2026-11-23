@@ -35,20 +35,24 @@ import flint.java.util : RawCollection, RawMap;
 void serializeValue(MapperConfig config, ref Any value, string declaredType, JsonGenerator g,
         JavaTimeFormat format = JavaTimeFormat.init)
 {
-    if (value.isNull())
-    {
-        g.writeNull();
-        return;
-    }
     const type = value.typeName().length ? value.typeName() : declaredType;
-    if (writeScalar(value, type, g) || writeJavaTime(config, value, type, g, format))
+    if (value.isNull())
+        return writeNull(type, g);
+    if (writeScalar(value, type, g) || writeBytes(value, type, g) || writeJavaTime(config, value, type, g, format))
         return;
-    if (writeContainer(config, value, g))
-        return;
+    if (!writeContainer(config, value, g))
+        writeDescribed(config, value, type, g, format);
+}
+
+// Values serialized through their descriptor: Optional, arrays, associative arrays, enums and beans.
+private void writeDescribed(MapperConfig config, ref Any value, string type, JsonGenerator g, JavaTimeFormat format)
+{
     const d = config.descriptor(type);
     if (d is null)
         throw new InvalidDefinitionException("No serializer found for class " ~ type
                 ~ ": no Flint AOT descriptor (register the type, or let Flint AOT generate it)", type);
+    if (writeShaped(config, d, value, g, format))
+        return;
     switch (d.kind)
     {
     case TypeKind.enum_:
@@ -62,6 +66,68 @@ void serializeValue(MapperConfig config, ref Any value, string declaredType, Jso
         throw new InvalidDefinitionException("Type " ~ type ~ " (" ~ kindName(
                 d.kind) ~ ") cannot be serialized until its descriptor carries element access", type);
     }
+}
+
+// D has no null array distinct from an empty one (`[]` is null), so an array writes as empty: `[]`, or "" for
+// Base64 bytes (deviation D-JACKSON-6). Every other null writes as null.
+private void writeNull(string type, JsonGenerator g)
+{
+    const array = type.length > 2 && type[$ - 2 .. $] == "[]";
+    if (array && (type == "byte[]" || type == "ubyte[]"))
+        g.writeString("");
+    else if (array)
+    {
+        g.writeStartArray();
+        g.writeEndArray();
+    }
+    else
+        g.writeNull();
+}
+
+// Types whose descriptors carry erased access: Optional (Jdk8OptionalSerializer writes the value or null), arrays and
+// collections without RawCollection (ObjectArraySerializer and the primitive array serializers), and associative
+// arrays (MapSerializer).
+private bool writeShaped(MapperConfig config, const Descriptor d, ref Any value, JsonGenerator g, JavaTimeFormat format)
+{
+    if (d.unwrap !is null)
+    {
+        auto inner = d.unwrap(value);
+        serializeValue(config, inner, d.elementType, g, format);
+    }
+    else if (d.length !is null && d.element !is null)
+    {
+        const count = d.length(value);
+        g.writeStartArray();
+        foreach (i; 0 .. count)
+        {
+            auto e = d.element(value, i);
+            withPath(Reference(null, cast(int) i, d.simpleName()), () {
+                serializeValue(config, e, d.elementType, g);
+            });
+        }
+        g.writeEndArray();
+    }
+    else if (d.toKeys !is null && d.toValues !is null)
+        writeEntries(config, d.toKeys(value), d.toValues(value), d.elementType, g);
+    else
+        return false;
+    return true;
+}
+
+private void writeEntries(MapperConfig config, Any[] keys, Any[] values, string valueType, JsonGenerator g)
+{
+    g.writeStartObject();
+    foreach (i, ref key; keys)
+    {
+        if (!includeContent(config, values[i]))
+            continue;
+        const name = keyText(config, key);
+        g.writeName(name);
+        withPath(Reference(name, -1, "java.util.Map"), () {
+            serializeValue(config, values[i], valueType, g);
+        });
+    }
+    g.writeEndObject();
 }
 
 // Trees, maps and collections, which describe themselves.
@@ -138,13 +204,37 @@ private bool writeScalar(ref Any value, string type, JsonGenerator g)
     }
 }
 
+// ByteArraySerializer: Base64 (MIME without line feeds, padded).
+private bool writeBytes(ref Any value, string type, JsonGenerator g)
+{
+    import std.base64 : Base64;
+
+    if (type == "byte[]")
+        g.writeString(Base64.encode(cast(const(ubyte)[]) value.get!(byte[])()).idup);
+    else if (type == "ubyte[]")
+        g.writeString(Base64.encode(value.get!(ubyte[])()).idup);
+    else
+        return false;
+    return true;
+}
+
+/// The declaration index of an enum value: the position of its bits in `Descriptor.enumValues`, or the bits
+/// themselves when the descriptor lists no values.
+size_t enumIndex(const Descriptor d, ref Any value)
+{
+    const bits = value.isEnum() ? value.enumBits() : value.get!long();
+    foreach (i, v; d.enumValues)
+        if (v == bits)
+            return i;
+    return cast(size_t) bits;
+}
+
 private void writeEnum(MapperConfig config, const Descriptor d, ref Any value, JsonGenerator g)
 {
     import std.conv : to;
     import std.uni : toLower;
 
-    // Any keeps an enum's value; Flint enums count from 0, so the value is the constant's index.
-    const index = cast(size_t) value.get!long();
+    const index = enumIndex(d, value);
     if (config.isEnabled(EnumFeature.WRITE_ENUMS_USING_INDEX))
     {
         g.writeNumber(cast(int) index);
@@ -215,7 +305,7 @@ private string keyText(MapperConfig config, ref Any key)
     const d = config.descriptor(key.typeName());
     if (d !is null && d.kind == TypeKind.enum_)
     {
-        const index = cast(size_t) key.get!long();
+        const index = enumIndex(d, key);
         if (index < d.enumConstants.length)
             return d.enumConstants[index];
     }

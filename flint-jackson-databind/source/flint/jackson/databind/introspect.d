@@ -222,6 +222,8 @@ struct POJOPropertiesCollector
 
     // _addCreators: an explicit @JsonCreator, else a constructor whose parameters are all named with
     // @JsonProperty, else a record's canonical constructor, else one public non-default constructor.
+    // Flint AOT marks a struct's field-wise constructor canonical; a hand-built struct descriptor without
+    // parameterized constructors is treated as a record over its fields.
     private void addCreator(BeanDescription bean)
     {
         const d = bean.descriptor;
@@ -248,6 +250,7 @@ struct POJOPropertiesCollector
     {
         const(ConstructorDescriptor)* named;
         const(ConstructorDescriptor)* implicit;
+        const(ConstructorDescriptor)* canonical;
         size_t candidates;
         foreach (i, ref c; d.constructors)
         {
@@ -260,11 +263,16 @@ struct POJOPropertiesCollector
                     return &d.constructors[i];
                 continue;
             }
+            if (c.canonical && canonical is null)
+                canonical = &d.constructors[i];
             ++candidates;
             implicit = &d.constructors[i];
             if (named is null && allParametersNamed(c))
                 named = &d.constructors[i];
         }
+        // A record's canonical constructor is its creator unless another is annotated (POJOPropertiesCollector).
+        if (canonical !is null)
+            return canonical;
         if (named !is null)
             return named;
         return implicitCreators && candidates == 1 ? implicit : null;

@@ -63,6 +63,8 @@ Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existin
         return scalar.value;
     if (isJavaTime(type))
         return readJavaTime(config, p, type, format);
+    if ((type == "byte[]" || type == "ubyte[]") && (t == JsonToken.VALUE_STRING || t == JsonToken.START_ARRAY))
+        return readBytes(p, type, t);
     if (isTreeType(type))
         return Any.ofObject(readTree(p, config.nodeFactory), type);
     if (type == "flint.engine.aot.any.Any" || type == "object.Object")
@@ -78,9 +80,9 @@ Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existin
 
 private Any readStructured(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t, Any existing)
 {
-    if (d.kind == TypeKind.enum_)
-        throw new InvalidDefinitionException(
-                "Cannot deserialize enum `" ~ d.name ~ "` until its descriptor carries enum values", d.name);
+    auto shaped = readShaped(config, p, d, t, existing);
+    if (shaped.done)
+        return shaped.value;
     if (d.kind != TypeKind.struct_ && d.kind != TypeKind.class_ && d.kind != TypeKind.interface_)
         throw new InvalidDefinitionException(
                 "Cannot deserialize `" ~ d.name ~ "` until its descriptor carries element access", d.name);
@@ -98,6 +100,26 @@ private Any readStructured(MapperConfig config, JsonParser p, const Descriptor d
     if (t != JsonToken.START_OBJECT)
         throw mismatch(d.name, t);
     return readBean(config, p, config.bean(d));
+}
+
+private struct Shaped
+{
+    bool done;
+    Any value;
+}
+
+// Enums, Optional, associative arrays, arrays and element-built collections, through their descriptor thunks.
+private Shaped readShaped(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t, Any existing)
+{
+    if (d.kind == TypeKind.enum_)
+        return Shaped(true, readEnum(p, d, t));
+    if (d.wrap !is null)
+        return Shaped(true, d.wrap(deserializeValue(config, p, d.elementType)));
+    if (d.fromEntries !is null && d.create is null)
+        return Shaped(true, readEntries(config, p, d, t));
+    if (d.fromElements !is null && (d.kind == TypeKind.array || (d.create is null && existing.isNull())))
+        return Shaped(true, readElements(config, p, d, t));
+    return Shaped.init;
 }
 
 // The descriptor of `type`, or of the concrete type Jackson's default abstract type mappings choose for it:
@@ -167,6 +189,8 @@ private bool isTreeType(string type) pure nothrow @nogc
 
 private Any nullValue(const Descriptor d)
 {
+    if (d.wrap !is null)
+        return d.wrap(Any.init); // Optional.empty()
     if (d.kind == TypeKind.struct_ && d.create !is null)
         return d.create();
     return Any.init;
@@ -273,14 +297,31 @@ private bool readBoolean(MapperConfig config, JsonParser p, JsonToken t)
     }
 }
 
+// NumberDeserializers.getNullValue for a primitive.
+private MismatchedInputException nullPrimitive(string type, JsonParser p)
+{
+    enum hint = " (set `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to 'false' to allow)";
+    return new MismatchedInputException("Cannot map `null` into type `" ~ javaTypeName(type) ~ "`" ~ hint,
+            type, p.currentLocation());
+}
+
+private bool isPrimitive(string type) pure nothrow @nogc
+{
+    switch (type)
+    {
+    case "bool", "byte", "short", "int", "long", "ubyte", "ushort", "uint", "ulong", "float",
+            "double", "real", "char", "wchar", "dchar":
+            return true;
+    default:
+        return false;
+    }
+}
+
 private void nullForPrimitive(MapperConfig config, JsonParser p, string type)
 {
     if (config.isEnabled(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES))
     {
-        enum hint = " (set DeserializationConfig.DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES"
-            ~ " to 'false' to allow)";
-        throw new MismatchedInputException("Cannot map `null` into type `" ~ javaTypeName(type) ~ "`" ~ hint,
-                type, p.currentLocation());
+        throw nullPrimitive(type, p);
     }
 }
 
@@ -476,6 +517,194 @@ private Any readMap(MapperConfig config, JsonParser p, RawMap target, const Desc
     return boxed;
 }
 
+// PrimitiveArrayDeserializers.ByteDeser: Base64 text, or numbers from -128 to 255 (wrapping to a byte).
+private Any readBytes(JsonParser p, string type, JsonToken t)
+{
+    import std.base64 : Base64, Base64Exception;
+
+    ubyte[] bytes;
+    if (t == JsonToken.VALUE_STRING)
+    {
+        const text = p.getString();
+        try
+            bytes = Base64.decode(text);
+        catch (Base64Exception e)
+            throw new InvalidFormatException("Cannot deserialize value of type `byte[]` from String \"" ~ text
+                    ~ "\": Failed to decode VALUE_STRING as base64 (MIME-NO-LINEFEEDS): " ~ e.msg,
+                    text, type, p.currentLocation());
+    }
+    else
+    {
+        for (auto e = p.nextToken(); e != JsonToken.END_ARRAY; e = p.nextToken())
+        {
+            const value = e == JsonToken.VALUE_NUMBER_INT ? p.getLongValue() : long.max;
+            enum overflow = ": overflow, value cannot be represented as 8-bit value";
+            if (value < -128 || value > 255)
+                throw new InvalidFormatException("Cannot deserialize value of type `byte` from " ~ (value == long.max
+                        ? "non-integer token" : "Integer value") ~ overflow, p.getString(),
+                        "byte", p.currentLocation());
+            bytes ~= cast(ubyte) value;
+        }
+    }
+    return type == "byte[]" ? Any.of(cast(byte[]) bytes) : Any.of(bytes);
+}
+
+// ObjectArrayDeserializer and the primitive array deserializers, and collections built from their elements.
+private Any readElements(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t)
+{
+    if (t != JsonToken.START_ARRAY)
+        throw mismatch(d.name, t);
+    Any[] elements;
+    int index;
+    for (auto e = p.nextToken(); e != JsonToken.END_ARRAY; e = p.nextToken())
+        withPath(Reference(null, index++, d.simpleName()), () {
+            elements ~= deserializeValue(config, p, d.elementType);
+        });
+    return d.fromElements(elements);
+}
+
+// MapDeserializer into an associative array: keys convert from property names (StdKeyDeserializer).
+private Any readEntries(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t)
+{
+    if (t != JsonToken.START_OBJECT)
+        throw mismatch(d.name, t);
+    Any[] keys, values;
+    for (auto e = p.nextToken(); e == JsonToken.PROPERTY_NAME; e = p.nextToken())
+    {
+        const name = p.currentName();
+        p.nextToken();
+        keys ~= keyFrom(config, name, d.keyType, p);
+        withPath(Reference(name, -1, d.simpleName()), () {
+            values ~= deserializeValue(config, p, d.elementType);
+        });
+    }
+    return d.fromEntries(keys, values);
+}
+
+private Any keyFrom(MapperConfig config, string name, string keyType, JsonParser p)
+{
+    import std.conv : ConvException, to;
+
+    if (keyType == "string")
+        return Any.of(name);
+    try
+    {
+        switch (keyType)
+        {
+        case "int":
+            return Any.of(name.to!int);
+        case "long":
+            return Any.of(name.to!long);
+        case "bool":
+            return Any.of(name.to!bool);
+        default:
+            break;
+        }
+    }
+    catch (ConvException)
+        throw new InvalidFormatException("Cannot deserialize Map key of type `" ~ javaTypeName(
+                keyType) ~ "` from String \"" ~ name ~ "\": not a valid representation", name,
+                keyType, p.currentLocation());
+    const d = config.descriptor(keyType);
+    if (d !is null && d.kind == TypeKind.enum_)
+        foreach (i, constant; d.enumConstants)
+            if (constant == name)
+                return enumConstant(d, i);
+    throw new InvalidDefinitionException(
+            "Cannot find a (Map) Key deserializer for type `" ~ javaTypeName(keyType) ~ "`", keyType);
+}
+
+private Any enumConstant(const Descriptor d, size_t index)
+{
+    if (d.enumValue !is null)
+        return d.enumValue(cast(long) index);
+    return Any.ofEnum(d.name, index < d.enumValues.length ? d.enumValues[index] : cast(long) index);
+}
+
+// EnumDeserializer: by name (READ_ENUMS_USING_TO_STRING reads Java's toString, the name), by index, or by a
+// stringified index; Jackson's messages list the names in CompactStringObjectMap order.
+private Any readEnum(JsonParser p, const Descriptor d, JsonToken t)
+{
+    import std.conv : to;
+
+    if (t == JsonToken.VALUE_NUMBER_INT)
+    {
+        const index = p.getLongValue();
+        if (index >= 0 && index < d.enumConstants.length)
+            return enumConstant(d, cast(size_t) index);
+        throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaTypeName(
+                d.name) ~ "` from number " ~ index.to!string ~ ": index value outside legal index range [0.." ~ (
+                cast(long) d.enumConstants.length - 1).to!string ~ "]", index.to!string, d.name, p.currentLocation());
+    }
+    if (t != JsonToken.VALUE_STRING)
+        throw mismatch(d.name, t);
+    return enumFromString(p, d, p.getString());
+}
+
+private Any enumFromString(JsonParser p, const Descriptor d, string text)
+{
+    import std.string : strip;
+
+    const name = text.strip;
+    foreach (i, constant; d.enumConstants)
+        if (constant == text || constant == name)
+            return enumConstant(d, i);
+    if (name.length == 0)
+        throw new InvalidFormatException("Cannot coerce " ~ (text.length
+                ? "blank String (all whitespace)" : `empty String ("")`) ~ " to `" ~ javaTypeName(
+                d.name) ~ "` value (but could if coercion was enabled using `CoercionConfig`)",
+                text, d.name, p.currentLocation());
+    const index = stringifiedIndex(name);
+    if (index >= 0 && index < d.enumConstants.length)
+        return enumConstant(d, cast(size_t) index);
+    const accepted = "not one of the values accepted for Enum class: [" ~ compactKeyOrder(d.enumConstants) ~ "]";
+    throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaTypeName(
+            d.name) ~ "` from String \"" ~ name ~ "\": " ~ accepted, name, d.name, p.currentLocation());
+}
+
+// A quoted enum index such as "1" (not "01"); -1 when the text is not one.
+private long stringifiedIndex(string name) pure nothrow @nogc
+{
+    if (name[0] < '0' || name[0] > '9' || (name[0] == '0' && name.length > 1) || name.length > 9)
+        return -1;
+    long index;
+    foreach (c; name)
+    {
+        if (c < '0' || c > '9')
+            return -1;
+        index = index * 10 + (c - '0');
+    }
+    return index;
+}
+
+/// The keys of a CompactStringObjectMap built from `keys`, in its hash-area order, joined with ", ".
+string compactKeyOrder(scope const(string)[] keys) pure nothrow
+{
+    import flint.java.lang : stringHashCode;
+
+    size_t size = keys.length <= 5 ? 8 : keys.length <= 12 ? 16 : 32;
+    while (keys.length > 12 && size < keys.length + (keys.length >> 2))
+        size += size;
+    const mask = cast(int)(size - 1);
+    auto area = new string[size + (size >> 1)];
+    string[] spill;
+    foreach (key; keys)
+    {
+        const slot = cast(size_t)(stringHashCode(key) & mask);
+        if (area[slot] is null)
+            area[slot] = key;
+        else if (area[size + (slot >> 1)] is null)
+            area[size + (slot >> 1)] = key;
+        else
+            spill ~= key;
+    }
+    string text;
+    foreach (key; area ~ spill)
+        if (key !is null)
+            text ~= (text.length ? ", " : "") ~ key;
+    return text;
+}
+
 // BeanDeserializer: a properties-based creator buffers its arguments; otherwise the default instance is
 // created first and properties are set as they arrive.
 private Any readBean(MapperConfig config, JsonParser p, BeanDescription bean)
@@ -552,8 +781,14 @@ private Any readWithCreator(MapperConfig config, JsonParser p, BeanDescription b
             pending ~= Pending(property, value);
     }
     foreach (i, parameter; bean.creator.parameters)
-        if (!seen[i])
-            arguments[i] = defaultFor(config, parameter.type);
+    {
+        if (seen[i])
+            continue;
+        // PropertyValueBuffer: a missing primitive takes its deserializer's null value, which may fail.
+        if (isPrimitive(parameter.type) && config.isEnabled(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES))
+            throw nullPrimitive(parameter.type, p);
+        arguments[i] = defaultFor(config, parameter.type);
+    }
     auto instance = construct(bean, arguments);
     foreach (ref item; pending)
         item.property.accessor.set(instance, item.value);
