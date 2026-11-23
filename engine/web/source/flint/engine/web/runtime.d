@@ -10,17 +10,21 @@ import flint.conc : CancelSource, Context, Deadline;
 import flint.engine.reactor : AcceptDelegate, Completion, CompletionDelegate, ConnectionId,
     ListenOptions, ReadDelegate, Reactor, ReactorOptions, TaskContext, TaskDelegate, TaskWaker;
 import flint.engine.web.dispatch : executeMatched, executeStream, failureResponse, lookupRoute;
+import flint.engine.web.fiber : FiberEndpoint, FiberHandler, FiberResponse, FiberRoute,
+    hasConnectionToken, unknownLength;
 import flint.engine.web.http2 : H2Runtime;
 import flint.engine.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
 import flint.engine.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.engine.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
+import flint.engine.web.sys.fiber : invokeFiber;
 import flint.engine.web.sys.ownership : launchDriver, releaseBytes, releaseConnectionSlots,
     reserveConnectionSlots, reserveH1;
 import flint.engine.web.transport : TlsTransport, awaitStream, closePlain, readPlain, wakeStream, writePlain;
-import flint.engine.web.types : ErrorAdvice, Handler, Method, RequestContext, Response,
-    RouteRegistration, ServerOptions;
+import flint.engine.web.types : ErrorAdvice, Handler, Method, Request, RequestContext, Response,
+    RouteRegistration, ServerOptions, sameName;
 import flint.engine.web.worker : WorkerLifecycle;
-import flint.engine.web.wire : responseCode, validMediaType, writeChunk, writeHeader, writeStreamHeader;
+import flint.engine.web.wire : FiberFraming, FiberPersistence, responseCode, validMediaType,
+    writeChunk, writeFiberHeader, writeHeader, writeStreamHeader;
 
 @safe:
 
@@ -88,6 +92,13 @@ private struct Connection
     size_t writeBytes;
     /// The streaming handler fiber while it waits for a read, write or close.
     TaskWaker streamWaiter;
+    /// A fiber route's handler is running; the stream fields above track its response.
+    bool fiberActive;
+    /// The fiber route answers HEAD: framing fields are sent, body bytes are not.
+    bool fiberHead;
+    FiberFraming fiberFraming;
+    /// Body bytes still owed under `Content-Length`.
+    ulong fiberRemaining;
 
     void runHandler() nothrow @nogc
     {
@@ -162,8 +173,17 @@ struct Server
         return driver is null ? 0 : driver.limits.cores;
     }
 
-    /// Port selected by the prepared listener, for package fixtures that bind port zero.
-    package(flint.engine.web) ushort listenPort() const nothrow @nogc
+    /// Register the fiber route before the server begins accepting requests. It serves every request no
+    /// owner-loop or stream route serves; a server has at most one.
+    Error routeFiber(FiberRoute route)
+    {
+        if (driver is null || atomicLoad(driver.phase) != DriverPhase.prepared)
+            return Error(Status.conflict, "fiber HTTP routes require a prepared server");
+        return driver.routes.installFiber(route.handler);
+    }
+
+    /// Port selected by the prepared listener, which resolves a requested port of zero. Zero before `start`.
+    ushort listenPort() const nothrow @nogc
     {
         if (driver is null)
             return 0;
@@ -373,7 +393,7 @@ private Deadline following(long delta) nothrow @nogc
 // `Server.start` retains it; programs that use the parser or router alone link no transport, TLS or HTTP/2.
 private alias Runtime = RuntimeDriver!();
 
-private final class RuntimeDriver() : StreamEndpoint
+private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
 {
     private ServerOptions limits;
     private ReadDelegate readDone;
@@ -874,6 +894,15 @@ private final class RuntimeDriver() : StreamEndpoint
             dispatchStreaming(connection, matched);
             return;
         }
+        if (matched.handler is null && matched.stream is null)
+        {
+            auto fiber = routes.fiber();
+            if (fiber !is null)
+            {
+                dispatchFiber(connection, fiber);
+                return;
+            }
+        }
         // RFC 9110 section 7.8: an ordinary route ignores a body-less Upgrade offer such as h2c. The parser
         // stopped at the upgrade boundary, so the connection closes after this HTTP/1.1 response.
         const head = connection.parser.metadata.method == Method.head;
@@ -909,6 +938,277 @@ private final class RuntimeDriver() : StreamEndpoint
             token.finish(null, connection.request.cancellation);
         connection.taskActive = false;
         close(connection);
+    }
+
+    /// Run the fiber route on this request's task fiber, then finish its response and continue the connection.
+    private void dispatchFiber(Connection* connection, FiberHandler handler) nothrow @nogc
+    {
+        connection.phase = ConnectionPhase.streaming;
+        connection.fiberActive = true;
+        connection.fiberHead = connection.parser.metadata.method == Method.head;
+        const index = cast(ulong) connection.id.ownerCore * limits.maxConnectionsPerCore + connection.id.slot;
+        const generation = connection.id.generation;
+        scope response = FiberResponse(this, index, generation);
+        scope request = Request.fromMetadata(&connection.parser.metadata);
+        const returned = invokeFiber(handler, request, connection.request, response);
+        if (!connection.closing && !requestCancelled(connection))
+        {
+            if (!connection.streamStarted)
+            {
+                // Nothing reached the wire: answer 500 and close, as a container does for a failed servlet.
+                endFiber(connection);
+                reply(connection, failure(connection, 500), false, connection.fiberHead);
+                return;
+            }
+            if (returned && !connection.streamEnded)
+                fiberFinish(index, generation, connection.request.cancellation);
+            if (returned && connection.streamEnded && !connection.closing)
+            {
+                endFiber(connection);
+                nextRequest(connection);
+                return;
+            }
+        }
+        endFiber(connection);
+        close(connection);
+    }
+
+    private static void endFiber(Connection* connection) nothrow @nogc
+    {
+        connection.fiberActive = false;
+        connection.fiberHead = false;
+        connection.fiberRemaining = 0;
+        connection.streamStarted = false;
+        connection.streamEnded = false;
+        connection.taskActive = false;
+    }
+
+    private Connection* fiberConnection(ulong index, ulong generation) return scope nothrow @nogc
+    {
+        auto connection = streamConnection(index, generation);
+        return connection !is null && connection.fiberActive ? connection : null;
+    }
+
+    private static Error fiberUnavailable() pure nothrow @nogc
+    {
+        return Error(Status.unavailable, "fiber HTTP response is no longer active on this fiber");
+    }
+
+    /// The framing and connection fields a fiber head carries, decided as Tomcat's `prepareResponse` does.
+    private struct FiberHead
+    {
+        FiberFraming framing;
+        ulong length;
+        FiberPersistence persistence;
+    }
+
+    private FiberHead fiberHead(scope Connection* connection, ushort status, long contentLength) scope nothrow @nogc
+    {
+        FiberHead head;
+        if (status == 204 || status == 304)
+            head.framing = FiberFraming.none;
+        else if (status == 205)
+            head.framing = FiberFraming.length;
+        else if (contentLength >= 0)
+        {
+            head.framing = FiberFraming.length;
+            head.length = cast(ulong) contentLength;
+        }
+        else
+            head.framing = connection.parser.versionMinor == 1 ? FiberFraming.chunked : FiberFraming.close;
+        head.persistence.keep = connection.parser.keepAlive && !connection.parser.upgradeRequested
+            && !draining() && head.framing != FiberFraming.close;
+        head.persistence.requested = requestedKeepAlive(connection);
+        head.persistence.timeoutSeconds = limits.idleTimeoutNanos / 1_000_000_000L;
+        return head;
+    }
+
+    private bool requestedKeepAlive(scope Connection* connection) scope nothrow @nogc
+    {
+        const metadata = &connection.parser.metadata;
+        bool found;
+        foreach (ref field; metadata.headers[0 .. metadata.fieldCount])
+        {
+            if (!sameName(metadata.names[field.start .. field.end], "connection"))
+                continue;
+            connection.request.arena.read(field.value, (scope const(ubyte)[] value) @safe nothrow @nogc {
+                found = found || hasConnectionToken(cast(const(char)[]) value, "keep-alive");
+            });
+        }
+        return found;
+    }
+
+    private void startFiber(scope Connection* connection, const ref FiberHead head) scope nothrow @nogc
+    {
+        connection.streamStarted = true;
+        connection.keepAlive = head.persistence.keep;
+        connection.fiberFraming = head.framing;
+        connection.fiberRemaining = head.framing == FiberFraming.length ? head.length : 0;
+    }
+
+    override Error fiberBegin(ulong index, ulong generation, ushort status,
+            scope const(StreamField)[] fields, long contentLength, ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = fiberConnection(index, generation);
+        if (connection is null)
+            return fiberUnavailable();
+        if (connection.streamStarted)
+            return Error(Status.conflict, "fiber HTTP response already started");
+        if (status < 200 || status > 999)
+            return Error(Status.invalidArgument, "invalid fiber HTTP response status");
+        const head = fiberHead(connection, status, contentLength);
+        ubyte[ioBytes] header;
+        const count = writeFiberHeader(header[], status, fields, head.framing, head.length,
+                connection.parser.versionMinor, head.persistence);
+        if (count == 0)
+            return Error(Status.invalidArgument, "invalid or oversized fiber HTTP response fields");
+        const sent = writeStream(connection, header[0 .. count], context);
+        if (sent.code == Status.ok)
+            startFiber(connection, head);
+        return sent;
+    }
+
+    // dfmt off
+    override Error fiberSend(ulong index, ulong generation, scope const(ubyte)[] payload,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = fiberConnection(index, generation);
+        if (connection is null)
+            return fiberUnavailable();
+        const admitted = admitFiberBytes(connection, payload.length);
+        if (admitted.code != Status.ok)
+            return admitted;
+        if (connection.fiberHead || payload.length == 0)
+            return context.check();
+        return writeFramed(connection, payload, connection.fiberFraming == FiberFraming.chunked, context);
+    }
+    // dfmt on
+
+    /// Check that `count` body bytes may follow the head, and charge them against `Content-Length`.
+    private Error admitFiberBytes(scope Connection* connection, size_t count) scope nothrow @nogc
+    {
+        if (!connection.streamStarted || connection.streamEnded)
+            return Error(Status.conflict, "fiber HTTP response output is closed");
+        if (connection.fiberFraming == FiberFraming.none)
+            return count == 0 ? Error.init : Error(Status.invalidArgument, "this status has no body");
+        if (connection.fiberFraming != FiberFraming.length)
+            return Error.init;
+        if (count > connection.fiberRemaining)
+            return Error(Status.invalidArgument, "fiber HTTP body exceeds its Content-Length");
+        connection.fiberRemaining -= count;
+        return Error.init;
+    }
+
+    /// Write body bytes in pieces of at most one write, each as a chunk when `chunked`.
+    private Error writeFramed(scope Connection* connection, scope const(ubyte)[] payload, bool chunked,
+            ref scope const Context context) scope nothrow @nogc
+    {
+        const bounded = ioBytes < limits.writeQueueBytes ? ioBytes : limits.writeQueueBytes;
+        if (chunked && bounded <= 12)
+            return Error(Status.resourceExhausted, "HTTP/1 write queue cannot carry chunk framing");
+        const capacity = chunked ? bounded - 12 : bounded;
+        ubyte[ioBytes] frame;
+        size_t first;
+        while (first < payload.length)
+        {
+            const count = payload.length - first < capacity ? payload.length - first : capacity;
+            const piece = payload[first .. first + count];
+            const framed = chunked ? frame[0 .. writeChunk(frame[], piece)] : piece;
+            const sent = writeStream(connection, framed, context);
+            if (sent.code != Status.ok)
+                return sent;
+            first += count;
+        }
+        return context.check();
+    }
+
+    override Error fiberFinish(ulong index, ulong generation, ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = fiberConnection(index, generation);
+        if (connection is null)
+            return fiberUnavailable();
+        if (!connection.streamStarted || connection.streamEnded)
+            return Error(Status.conflict, "fiber HTTP response already finished or not started");
+        if (connection.fiberFraming == FiberFraming.length && connection.fiberRemaining != 0)
+        {
+            close(connection);
+            return Error(Status.invalidArgument, "fiber HTTP body is shorter than its Content-Length");
+        }
+        connection.streamEnded = true;
+        if (connection.fiberFraming != FiberFraming.chunked || connection.fiberHead)
+            return context.check();
+        return writeStream(connection, cast(const(ubyte)[]) "0\r\n\r\n", context);
+    }
+
+    // dfmt off
+    override Error fiberRespond(ulong index, ulong generation, ushort status, scope const(StreamField)[] fields,
+            scope const(ubyte)[] payload, bool chunked, ref scope const Context context) scope nothrow @nogc
+    {
+        auto connection = fiberConnection(index, generation);
+        if (connection is null)
+            return fiberUnavailable();
+        if (connection.streamStarted)
+            return Error(Status.conflict, "fiber HTTP response already started");
+        if (status < 200 || status > 999)
+            return Error(Status.invalidArgument, "invalid fiber HTTP response status");
+        const head = fiberHead(connection, status, chunked ? unknownLength : cast(long) payload.length);
+        // A status without a body (204, 304) drops it, as a container does; 205 sends Content-Length: 0.
+        const sent = head.framing == FiberFraming.none || status == 205 ? payload[0 .. 0] : payload;
+        ubyte[ioBytes] frame;
+        const count = writeFiberHeader(frame[], status, fields, head.framing, head.length,
+                connection.parser.versionMinor, head.persistence);
+        if (count == 0)
+            return Error(Status.invalidArgument, "invalid or oversized fiber HTTP response fields");
+        const whole = composeWhole(connection, frame[], count, head.framing, sent);
+        if (whole != 0)
+        {
+            const written = writeStream(connection, frame[0 .. whole], context);
+            if (written.code == Status.ok)
+            {
+                startFiber(connection, head);
+                connection.fiberRemaining = 0;
+                connection.streamEnded = true;
+            }
+            return written;
+        }
+        const begun = writeStream(connection, frame[0 .. count], context);
+        if (begun.code != Status.ok)
+            return begun;
+        startFiber(connection, head);
+        const rest = fiberSend(index, generation, sent, context);
+        return rest.code == Status.ok ? fiberFinish(index, generation, context) : rest;
+    }
+    // dfmt on
+
+    /// Append the whole body, framed, after a head of `count` bytes in `frame`, when head and body fit in one
+    /// write. Returns the bytes used, or 0 when they do not fit.
+    private size_t composeWhole(scope Connection* connection, scope ubyte[] frame, size_t count,
+            FiberFraming framing, scope const(ubyte)[] payload) scope nothrow @nogc
+    {
+        const bounded = frame.length < limits.writeQueueBytes ? frame.length : limits.writeQueueBytes;
+        const chunked = framing == FiberFraming.chunked;
+        // Chunk framing adds at most 16 hex digits, two CRLFs and the 5-byte last chunk.
+        const wire = connection.fiberHead ? 0 : (chunked ? payload.length + 25 : payload.length);
+        if (count + wire > bounded)
+            return 0;
+        if (connection.fiberHead)
+            return count;
+        size_t used = count;
+        if (!chunked)
+        {
+            frame[used .. used + payload.length] = payload;
+            return used + payload.length;
+        }
+        if (payload.length != 0)
+            used += writeChunk(frame[used .. $], payload);
+        frame[used .. used + 5] = cast(const(ubyte)[]) "0\r\n\r\n";
+        return used + 5;
+    }
+
+    override bool fiberStarted(ulong index, ulong generation) scope nothrow @nogc
+    {
+        auto connection = fiberConnection(index, generation);
+        return connection !is null && connection.streamStarted;
     }
 
     private Connection* streamConnection(ulong index, ulong generation) return scope nothrow @nogc
@@ -1232,6 +1532,12 @@ private final class RuntimeDriver() : StreamEndpoint
             return;
         }
 
+        nextRequest(connection);
+    }
+
+    /// After a complete response: serve the next request on a persistent connection, or close it.
+    private void nextRequest(Connection* connection) nothrow @nogc
+    {
         if (!connection.keepAlive || draining() || connection.request.arena.reset() != Status.ok
                 || !newRequest(connection))
         {
@@ -1305,6 +1611,9 @@ private final class RuntimeDriver() : StreamEndpoint
         connection.streamEnded = false;
         connection.streamRaw = false;
         connection.streamWaiter = TaskWaker.init;
+        connection.fiberActive = false;
+        connection.fiberHead = false;
+        connection.fiberRemaining = 0;
         connection.id = ConnectionId.init;
     }
 }

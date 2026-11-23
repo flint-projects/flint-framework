@@ -207,6 +207,89 @@ package(flint.engine.web) size_t writeStreamHeader(scope ubyte[] output, ushort 
     return writer.full ? 0 : writer.offset;
 }
 
+/// How a fiber route's body is delimited on the wire.
+package(flint.engine.web) enum FiberFraming : ubyte
+{
+    /// `Content-Length` with the exact body length.
+    length,
+    /// `Transfer-Encoding: chunked` (HTTP/1.1).
+    chunked,
+    /// No body and no framing field: 1xx, 204 and 304.
+    none,
+    /// Delimited by closing the connection (HTTP/1.0 with an unknown length).
+    close
+}
+
+/// The connection fields a fiber route's head ends with, as Tomcat's `Http11Processor.prepareResponse` writes them.
+package(flint.engine.web) struct FiberPersistence
+{
+    /// The connection serves another request after this response.
+    bool keep;
+    /// The request named `keep-alive` in its `Connection` field.
+    bool requested;
+    /// Seconds announced in `Keep-Alive: timeout=N`.
+    long timeoutSeconds;
+}
+
+/// Write a fiber route's head: `HTTP/1.x <status> ` with no reason phrase, the application fields in order,
+/// the framing field, `Date` unless the application sent one, then the connection fields. Returns 0 when the
+/// fields are invalid or the head does not fit.
+// dfmt off
+package(flint.engine.web) size_t writeFiberHeader(scope ubyte[] output, ushort status,
+        scope const(StreamField)[] fields, FiberFraming framing, ulong length, ubyte minor,
+        FiberPersistence persistence) nothrow @nogc
+{
+    import flint.engine.web.fiber : validFiberFields;
+
+    if (status < 100 || status > 999 || !validFiberFields(fields))
+        return 0;
+    scope writer = HeaderWriter(output);
+    writer.write(minor == 0 ? "HTTP/1.0 " : "HTTP/1.1 ");
+    writer.decimal(status);
+    writer.write(" \r\n");
+    foreach (ref field; fields)
+    {
+        writer.write(field.name);
+        writer.write(": ");
+        writer.write(field.value);
+        writer.write("\r\n");
+    }
+    final switch (framing)
+    {
+    case FiberFraming.length:
+        writer.write("Content-Length: ");
+        writer.decimal(length);
+        writer.write("\r\n");
+        break;
+    case FiberFraming.chunked:
+        writer.write("Transfer-Encoding: chunked\r\n");
+        break;
+    case FiberFraming.none, FiberFraming.close:
+        break;
+    }
+    if (!hasField(fields, "date"))
+    {
+        writer.write("Date: ");
+        writer.write(httpDate());
+        writer.write("\r\n");
+    }
+    if (!persistence.keep)
+        writer.write("Connection: close\r\n");
+    else if (persistence.requested && persistence.timeoutSeconds > 0)
+    {
+        if (minor == 0)
+            writer.write("Connection: keep-alive\r\n");
+        writer.write("Keep-Alive: timeout=");
+        writer.decimal(persistence.timeoutSeconds);
+        writer.write("\r\n");
+        if (minor != 0)
+            writer.write("Connection: keep-alive\r\n");
+    }
+    writer.write("\r\n");
+    return writer.full ? 0 : writer.offset;
+}
+// dfmt on
+
 /// Whether an application field list already names `name` (ASCII case-insensitive).
 package(flint.engine.web) bool hasField(scope const(StreamField)[] fields, scope const(char)[] name) pure nothrow @nogc
 {
@@ -330,6 +413,44 @@ unittest
     assert(first.length == httpDateBytes && first[$ - 4 .. $] == " GMT");
     const second = httpDate();
     assert(first is second, "the cache must return its thread-local storage");
+}
+
+version (unittest) private bool endsWith(scope const(char)[] text, scope const(char)[] suffix) pure nothrow @nogc
+{
+    return text.length >= suffix.length && text[$ - suffix.length .. $] == suffix;
+}
+
+@("fiber heads have no reason phrase and put framing after the application's fields, as Tomcat does")
+unittest
+{
+    ubyte[512] output;
+    const StreamField[2] fields = [
+        StreamField("Allow", "GET"), StreamField("Content-Type", "application/json")
+    ];
+    auto text = cast(const(char)[]) output[0 .. writeFiberHeader(output[], 405, fields[],
+                FiberFraming.chunked, 0, 1, FiberPersistence(true, false, 60))];
+    enum head405 = "HTTP/1.1 405 \r\nAllow: GET\r\nContent-Type: application/json\r\n"
+        ~ "Transfer-Encoding: chunked\r\nDate: ";
+    assert(text.length == head405.length + httpDateBytes + 4 && text[0 .. head405.length] == head405);
+    assert(text[$ - 4 .. $] == "\r\n\r\n");
+
+    text = cast(const(char)[]) output[0 .. writeFiberHeader(output[], 200, null,
+                FiberFraming.length, 34, 1, FiberPersistence(false, false, 60))];
+    enum head200 = "HTTP/1.1 200 \r\nContent-Length: 34\r\n";
+    assert(text[0 .. head200.length] == head200 && endsWith(text, "\r\nConnection: close\r\n\r\n"));
+
+    text = cast(const(char)[]) output[0 .. writeFiberHeader(output[], 200, null,
+                FiberFraming.length, 0, 1, FiberPersistence(true, true, 60))];
+    assert(endsWith(text, "GMT\r\nKeep-Alive: timeout=60\r\nConnection: keep-alive\r\n\r\n"));
+
+    text = cast(const(char)[]) output[0 .. writeFiberHeader(output[], 204, [
+        StreamField("Date", "x")
+    ], FiberFraming.none, 0, 1, FiberPersistence(true, false, 60))];
+    assert(text == "HTTP/1.1 204 \r\nDate: x\r\n\r\n");
+
+    assert(writeFiberHeader(output[], 200, [StreamField("Content-Length", "1")],
+            FiberFraming.length, 1, 1, FiberPersistence.init) == 0);
+    assert(writeFiberHeader(output[0 .. 20], 200, null, FiberFraming.length, 1, 1, FiberPersistence.init) == 0);
 }
 
 @("Allow lists registered methods in a fixed order")

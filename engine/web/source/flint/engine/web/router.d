@@ -2,6 +2,7 @@
 module flint.engine.web.router;
 
 import flint.arena : Error, Status;
+import flint.engine.web.fiber : FiberHandler;
 import flint.engine.web.stream : StreamHandler, StreamMode, StreamRoute;
 import flint.engine.web.types : Capture, ErrorAdvice, Handler, Method, RouteRegistration, maximumCaptures;
 
@@ -188,6 +189,7 @@ final class RouteTable
     private RouteKey[] registrations;
     private ErrorAdvice errorAdvice;
     private bool duplexRoutes;
+    private FiberHandler fallback;
 
     this()
     {
@@ -207,6 +209,23 @@ final class RouteTable
     ErrorAdvice advice() const nothrow @nogc
     {
         return errorAdvice;
+    }
+
+    /// Install the fiber route that serves every request no other route serves.
+    Error installFiber(FiberHandler handler)
+    {
+        if (handler is null)
+            return Error(Status.invalidArgument, "invalid fiber HTTP route");
+        if (fallback !is null)
+            return Error(Status.conflict, "a fiber HTTP route is already registered");
+        fallback = handler;
+        return Error.init;
+    }
+
+    /// The fiber route, or null.
+    FiberHandler fiber() const nothrow @nogc
+    {
+        return fallback;
     }
 
     Error insert(Method method, string path, Handler handler)

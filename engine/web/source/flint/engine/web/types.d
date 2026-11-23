@@ -205,10 +205,13 @@ package(flint.engine.web) struct RequestMetadata
     ubyte[] names;
     HeaderRecord[] headers;
     size_t fieldCount;
+    /// HTTP/1 minor version: 1 for HTTP/1.1, 0 for HTTP/1.0.
+    ubyte versionMinor = 1;
 
     void reset() nothrow @nogc
     {
         valid = false;
+        versionMinor = 1;
         fieldCount = 0;
         path = Buffer.init;
         query = Buffer.init;
@@ -352,12 +355,43 @@ struct Request
                 Error(Status.invalidArgument, "expired HTTP request"));
     }
 
-    package(flint.engine.web) Result!Buffer query() const scope nothrow @nogc
+    /// Raw query string after `?`, still percent-encoded, in the enclosing request arena.
+    Result!Buffer query() const scope nothrow @nogc
     {
         return live() ? Result!Buffer(state.query) : Result!Buffer(Buffer.init,
                 Error(Status.invalidArgument, "expired HTTP request"));
     }
+
+    /// HTTP/1 minor version: 1 for HTTP/1.1, 0 for HTTP/1.0. An invalidated handle reports 1.
+    ubyte protocolMinor() const scope nothrow @nogc
+    {
+        return live() ? state.versionMinor : 1;
+    }
+
+    /// Number of request fields, in arrival order. An invalidated handle has none.
+    size_t fieldCount() const scope nothrow @nogc
+    {
+        return live() ? state.fieldCount : 0;
+    }
+
+    /// Visit field `index` with its lowercase name and value bytes, both valid for the call only.
+    Error visitField(size_t index, ref scope RequestArena arena, scope FieldVisitor visitor) const scope nothrow @nogc
+    {
+        if (!live())
+            return Error(Status.invalidArgument, "expired HTTP request");
+        if (index >= state.fieldCount || visitor is null)
+            return Error(Status.notFound, "HTTP field index is out of range");
+        const field = state.headers[index];
+        const name = cast(const(char)[]) state.names[field.start .. field.end];
+        const status = arena.read(field.value, (scope const(ubyte)[] value) @safe nothrow @nogc {
+            visitor(name, value);
+        });
+        return status == Status.ok ? Error.init : Error(status, "HTTP field value is unavailable");
+    }
 }
+
+/// Receives one request field during `Request.visitField`.
+alias FieldVisitor = void delegate(scope const(char)[] name, scope const(ubyte)[] value) @safe nothrow @nogc;
 
 /// Response whose body must belong to the current request arena.
 struct Response

@@ -254,6 +254,7 @@ package(flint.engine.web) struct Http1Reader
         if (!parser.headers(info) || info.major != 1 || info.minor > 1)
             return 505;
         versionMinor = info.minor;
+        metadata.versionMinor = info.minor;
         if (!validFraming(info))
             return 400;
         if (info.method > Method.options)
