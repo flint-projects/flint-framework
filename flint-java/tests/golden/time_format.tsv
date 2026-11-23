@@ -1,0 +1,542 @@
+format	ISO_LOCAL_DATE	LocalDate	2010-09-07
+format	ISO_LOCAL_DATE	LocalTime	!Unsupported field: Year
+format	ISO_LOCAL_DATE	LocalDateTime	2010-09-07
+format	ISO_LOCAL_DATE	OffsetDateTime	2010-09-07
+format	ISO_LOCAL_DATE	OffsetDateTimeUtc	2010-09-07
+format	ISO_LOCAL_DATE	ZonedDateTimeUtc	2010-09-07
+format	ISO_LOCAL_DATE	ZonedDateTimePlus	2010-09-07
+format	ISO_LOCAL_DATE	Instant	!Unsupported field: Year
+format	ISO_LOCAL_DATE	LocalDateBig	+12345-01-02
+format	ISO_LOCAL_DATE	LocalDateNeg	-0044-03-15
+format	ISO_LOCAL_DATE	LocalTimeMidnight	!Unsupported field: Year
+format	ISO_LOCAL_DATE	LocalTimeNano	!Unsupported field: Year
+format	ISO_LOCAL_TIME	LocalDate	!Unsupported field: HourOfDay
+format	ISO_LOCAL_TIME	LocalTime	14:05:09.12
+format	ISO_LOCAL_TIME	LocalDateTime	14:05:09.12
+format	ISO_LOCAL_TIME	OffsetDateTime	14:05:09.12
+format	ISO_LOCAL_TIME	OffsetDateTimeUtc	14:05:09.12
+format	ISO_LOCAL_TIME	ZonedDateTimeUtc	14:05:09.12
+format	ISO_LOCAL_TIME	ZonedDateTimePlus	14:05:09.12
+format	ISO_LOCAL_TIME	Instant	!Unsupported field: HourOfDay
+format	ISO_LOCAL_TIME	LocalDateBig	!Unsupported field: HourOfDay
+format	ISO_LOCAL_TIME	LocalDateNeg	!Unsupported field: HourOfDay
+format	ISO_LOCAL_TIME	LocalTimeMidnight	00:00:00
+format	ISO_LOCAL_TIME	LocalTimeNano	00:00:00.000000001
+format	ISO_LOCAL_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
+format	ISO_LOCAL_DATE_TIME	LocalTime	!Unsupported field: Year
+format	ISO_LOCAL_DATE_TIME	LocalDateTime	2010-09-07T14:05:09.12
+format	ISO_LOCAL_DATE_TIME	OffsetDateTime	2010-09-07T14:05:09.12
+format	ISO_LOCAL_DATE_TIME	OffsetDateTimeUtc	2010-09-07T14:05:09.12
+format	ISO_LOCAL_DATE_TIME	ZonedDateTimeUtc	2010-09-07T14:05:09.12
+format	ISO_LOCAL_DATE_TIME	ZonedDateTimePlus	2010-09-07T14:05:09.12
+format	ISO_LOCAL_DATE_TIME	Instant	!Unsupported field: Year
+format	ISO_LOCAL_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
+format	ISO_LOCAL_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
+format	ISO_LOCAL_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
+format	ISO_LOCAL_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+format	ISO_OFFSET_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
+format	ISO_OFFSET_DATE_TIME	LocalTime	!Unsupported field: Year
+format	ISO_OFFSET_DATE_TIME	LocalDateTime	!Unsupported field: OffsetSeconds
+format	ISO_OFFSET_DATE_TIME	OffsetDateTime	2010-09-07T14:05:09.12+05:30
+format	ISO_OFFSET_DATE_TIME	OffsetDateTimeUtc	2010-09-07T14:05:09.12Z
+format	ISO_OFFSET_DATE_TIME	ZonedDateTimeUtc	2010-09-07T14:05:09.12Z
+format	ISO_OFFSET_DATE_TIME	ZonedDateTimePlus	2010-09-07T14:05:09.12+02:00
+format	ISO_OFFSET_DATE_TIME	Instant	!Unsupported field: Year
+format	ISO_OFFSET_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
+format	ISO_OFFSET_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
+format	ISO_OFFSET_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
+format	ISO_OFFSET_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+format	ISO_ZONED_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
+format	ISO_ZONED_DATE_TIME	LocalTime	!Unsupported field: Year
+format	ISO_ZONED_DATE_TIME	LocalDateTime	!Unsupported field: OffsetSeconds
+format	ISO_ZONED_DATE_TIME	OffsetDateTime	2010-09-07T14:05:09.12+05:30
+format	ISO_ZONED_DATE_TIME	OffsetDateTimeUtc	2010-09-07T14:05:09.12Z
+format	ISO_ZONED_DATE_TIME	ZonedDateTimeUtc	2010-09-07T14:05:09.12Z[UTC]
+format	ISO_ZONED_DATE_TIME	ZonedDateTimePlus	2010-09-07T14:05:09.12+02:00[UTC+02:00]
+format	ISO_ZONED_DATE_TIME	Instant	!Unsupported field: Year
+format	ISO_ZONED_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
+format	ISO_ZONED_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
+format	ISO_ZONED_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
+format	ISO_ZONED_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+format	ISO_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
+format	ISO_DATE_TIME	LocalTime	!Unsupported field: Year
+format	ISO_DATE_TIME	LocalDateTime	2010-09-07T14:05:09.12
+format	ISO_DATE_TIME	OffsetDateTime	2010-09-07T14:05:09.12+05:30
+format	ISO_DATE_TIME	OffsetDateTimeUtc	2010-09-07T14:05:09.12Z
+format	ISO_DATE_TIME	ZonedDateTimeUtc	2010-09-07T14:05:09.12Z[UTC]
+format	ISO_DATE_TIME	ZonedDateTimePlus	2010-09-07T14:05:09.12+02:00[UTC+02:00]
+format	ISO_DATE_TIME	Instant	!Unsupported field: Year
+format	ISO_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
+format	ISO_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
+format	ISO_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
+format	ISO_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+format	ISO_DATE	LocalDate	2010-09-07
+format	ISO_DATE	LocalTime	!Unsupported field: Year
+format	ISO_DATE	LocalDateTime	2010-09-07
+format	ISO_DATE	OffsetDateTime	2010-09-07+05:30
+format	ISO_DATE	OffsetDateTimeUtc	2010-09-07Z
+format	ISO_DATE	ZonedDateTimeUtc	2010-09-07Z
+format	ISO_DATE	ZonedDateTimePlus	2010-09-07+02:00
+format	ISO_DATE	Instant	!Unsupported field: Year
+format	ISO_DATE	LocalDateBig	+12345-01-02
+format	ISO_DATE	LocalDateNeg	-0044-03-15
+format	ISO_DATE	LocalTimeMidnight	!Unsupported field: Year
+format	ISO_DATE	LocalTimeNano	!Unsupported field: Year
+format	ISO_TIME	LocalDate	!Unsupported field: HourOfDay
+format	ISO_TIME	LocalTime	14:05:09.12
+format	ISO_TIME	LocalDateTime	14:05:09.12
+format	ISO_TIME	OffsetDateTime	14:05:09.12+05:30
+format	ISO_TIME	OffsetDateTimeUtc	14:05:09.12Z
+format	ISO_TIME	ZonedDateTimeUtc	14:05:09.12Z
+format	ISO_TIME	ZonedDateTimePlus	14:05:09.12+02:00
+format	ISO_TIME	Instant	!Unsupported field: HourOfDay
+format	ISO_TIME	LocalDateBig	!Unsupported field: HourOfDay
+format	ISO_TIME	LocalDateNeg	!Unsupported field: HourOfDay
+format	ISO_TIME	LocalTimeMidnight	00:00:00
+format	ISO_TIME	LocalTimeNano	00:00:00.000000001
+format	ISO_INSTANT	LocalDate	!Unsupported field: InstantSeconds
+format	ISO_INSTANT	LocalTime	!Unsupported field: InstantSeconds
+format	ISO_INSTANT	LocalDateTime	!Unsupported field: InstantSeconds
+format	ISO_INSTANT	OffsetDateTime	2010-09-07T08:35:09.120Z
+format	ISO_INSTANT	OffsetDateTimeUtc	2010-09-07T14:05:09.120Z
+format	ISO_INSTANT	ZonedDateTimeUtc	2010-09-07T14:05:09.120Z
+format	ISO_INSTANT	ZonedDateTimePlus	2010-09-07T12:05:09.120Z
+format	ISO_INSTANT	Instant	2010-09-07T08:35:09.120Z
+format	ISO_INSTANT	LocalDateBig	!Unsupported field: InstantSeconds
+format	ISO_INSTANT	LocalDateNeg	!Unsupported field: InstantSeconds
+format	ISO_INSTANT	LocalTimeMidnight	!Unsupported field: InstantSeconds
+format	ISO_INSTANT	LocalTimeNano	!Unsupported field: InstantSeconds
+format	BASIC_ISO_DATE	LocalDate	20100907
+format	BASIC_ISO_DATE	LocalTime	!Unsupported field: Year
+format	BASIC_ISO_DATE	LocalDateTime	20100907
+format	BASIC_ISO_DATE	OffsetDateTime	20100907+0530
+format	BASIC_ISO_DATE	OffsetDateTimeUtc	20100907Z
+format	BASIC_ISO_DATE	ZonedDateTimeUtc	20100907Z
+format	BASIC_ISO_DATE	ZonedDateTimePlus	20100907+0200
+format	BASIC_ISO_DATE	Instant	!Unsupported field: Year
+format	BASIC_ISO_DATE	LocalDateBig	!Field Year cannot be printed as the value 12345 exceeds the maximum print width of 4
+format	BASIC_ISO_DATE	LocalDateNeg	!Field Year cannot be printed as the value -44 cannot be negative according to the SignStyle
+format	BASIC_ISO_DATE	LocalTimeMidnight	!Unsupported field: Year
+format	BASIC_ISO_DATE	LocalTimeNano	!Unsupported field: Year
+format	yyyy-MM-dd	LocalDate	2010-09-07
+format	yyyy-MM-dd	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd	LocalDateTime	2010-09-07
+format	yyyy-MM-dd	OffsetDateTime	2010-09-07
+format	yyyy-MM-dd	OffsetDateTimeUtc	2010-09-07
+format	yyyy-MM-dd	ZonedDateTimeUtc	2010-09-07
+format	yyyy-MM-dd	ZonedDateTimePlus	2010-09-07
+format	yyyy-MM-dd	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd	LocalDateBig	+12345-01-02
+format	yyyy-MM-dd	LocalDateNeg	0045-03-15
+format	yyyy-MM-dd	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd	LocalTimeNano	!Unsupported field: YearOfEra
+format	yyyy-MM-dd HH:mm:ss	LocalDate	!Unsupported field: HourOfDay
+format	yyyy-MM-dd HH:mm:ss	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd HH:mm:ss	LocalDateTime	2010-09-07 14:05:09
+format	yyyy-MM-dd HH:mm:ss	OffsetDateTime	2010-09-07 14:05:09
+format	yyyy-MM-dd HH:mm:ss	OffsetDateTimeUtc	2010-09-07 14:05:09
+format	yyyy-MM-dd HH:mm:ss	ZonedDateTimeUtc	2010-09-07 14:05:09
+format	yyyy-MM-dd HH:mm:ss	ZonedDateTimePlus	2010-09-07 14:05:09
+format	yyyy-MM-dd HH:mm:ss	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd HH:mm:ss	LocalDateBig	!Unsupported field: HourOfDay
+format	yyyy-MM-dd HH:mm:ss	LocalDateNeg	!Unsupported field: HourOfDay
+format	yyyy-MM-dd HH:mm:ss	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd HH:mm:ss	LocalTimeNano	!Unsupported field: YearOfEra
+format	dd/MM/yyyy	LocalDate	07/09/2010
+format	dd/MM/yyyy	LocalTime	!Unsupported field: DayOfMonth
+format	dd/MM/yyyy	LocalDateTime	07/09/2010
+format	dd/MM/yyyy	OffsetDateTime	07/09/2010
+format	dd/MM/yyyy	OffsetDateTimeUtc	07/09/2010
+format	dd/MM/yyyy	ZonedDateTimeUtc	07/09/2010
+format	dd/MM/yyyy	ZonedDateTimePlus	07/09/2010
+format	dd/MM/yyyy	Instant	!Unsupported field: DayOfMonth
+format	dd/MM/yyyy	LocalDateBig	02/01/+12345
+format	dd/MM/yyyy	LocalDateNeg	15/03/0045
+format	dd/MM/yyyy	LocalTimeMidnight	!Unsupported field: DayOfMonth
+format	dd/MM/yyyy	LocalTimeNano	!Unsupported field: DayOfMonth
+format	d MMM uuuu	LocalDate	7 Sep 2010
+format	d MMM uuuu	LocalTime	!Unsupported field: DayOfMonth
+format	d MMM uuuu	LocalDateTime	7 Sep 2010
+format	d MMM uuuu	OffsetDateTime	7 Sep 2010
+format	d MMM uuuu	OffsetDateTimeUtc	7 Sep 2010
+format	d MMM uuuu	ZonedDateTimeUtc	7 Sep 2010
+format	d MMM uuuu	ZonedDateTimePlus	7 Sep 2010
+format	d MMM uuuu	Instant	!Unsupported field: DayOfMonth
+format	d MMM uuuu	LocalDateBig	2 Jan +12345
+format	d MMM uuuu	LocalDateNeg	15 Mar -0044
+format	d MMM uuuu	LocalTimeMidnight	!Unsupported field: DayOfMonth
+format	d MMM uuuu	LocalTimeNano	!Unsupported field: DayOfMonth
+format	EEEE, MMMM d, yyyy	LocalDate	Tuesday, September 7, 2010
+format	EEEE, MMMM d, yyyy	LocalTime	!Unsupported field: DayOfWeek
+format	EEEE, MMMM d, yyyy	LocalDateTime	Tuesday, September 7, 2010
+format	EEEE, MMMM d, yyyy	OffsetDateTime	Tuesday, September 7, 2010
+format	EEEE, MMMM d, yyyy	OffsetDateTimeUtc	Tuesday, September 7, 2010
+format	EEEE, MMMM d, yyyy	ZonedDateTimeUtc	Tuesday, September 7, 2010
+format	EEEE, MMMM d, yyyy	ZonedDateTimePlus	Tuesday, September 7, 2010
+format	EEEE, MMMM d, yyyy	Instant	!Unsupported field: DayOfWeek
+format	EEEE, MMMM d, yyyy	LocalDateBig	Tuesday, January 2, +12345
+format	EEEE, MMMM d, yyyy	LocalDateNeg	Thursday, March 15, 0045
+format	EEEE, MMMM d, yyyy	LocalTimeMidnight	!Unsupported field: DayOfWeek
+format	EEEE, MMMM d, yyyy	LocalTimeNano	!Unsupported field: DayOfWeek
+format	EEE	LocalDate	Tue
+format	EEE	LocalTime	!Unsupported field: DayOfWeek
+format	EEE	LocalDateTime	Tue
+format	EEE	OffsetDateTime	Tue
+format	EEE	OffsetDateTimeUtc	Tue
+format	EEE	ZonedDateTimeUtc	Tue
+format	EEE	ZonedDateTimePlus	Tue
+format	EEE	Instant	!Unsupported field: DayOfWeek
+format	EEE	LocalDateBig	Tue
+format	EEE	LocalDateNeg	Thu
+format	EEE	LocalTimeMidnight	!Unsupported field: DayOfWeek
+format	EEE	LocalTimeNano	!Unsupported field: DayOfWeek
+format	hh:mm a	LocalDate	!Unsupported field: ClockHourOfAmPm
+format	hh:mm a	LocalTime	02:05 PM
+format	hh:mm a	LocalDateTime	02:05 PM
+format	hh:mm a	OffsetDateTime	02:05 PM
+format	hh:mm a	OffsetDateTimeUtc	02:05 PM
+format	hh:mm a	ZonedDateTimeUtc	02:05 PM
+format	hh:mm a	ZonedDateTimePlus	02:05 PM
+format	hh:mm a	Instant	!Unsupported field: ClockHourOfAmPm
+format	hh:mm a	LocalDateBig	!Unsupported field: ClockHourOfAmPm
+format	hh:mm a	LocalDateNeg	!Unsupported field: ClockHourOfAmPm
+format	hh:mm a	LocalTimeMidnight	12:00 AM
+format	hh:mm a	LocalTimeNano	12:00 AM
+format	h:mm:ss a	LocalDate	!Unsupported field: ClockHourOfAmPm
+format	h:mm:ss a	LocalTime	2:05:09 PM
+format	h:mm:ss a	LocalDateTime	2:05:09 PM
+format	h:mm:ss a	OffsetDateTime	2:05:09 PM
+format	h:mm:ss a	OffsetDateTimeUtc	2:05:09 PM
+format	h:mm:ss a	ZonedDateTimeUtc	2:05:09 PM
+format	h:mm:ss a	ZonedDateTimePlus	2:05:09 PM
+format	h:mm:ss a	Instant	!Unsupported field: ClockHourOfAmPm
+format	h:mm:ss a	LocalDateBig	!Unsupported field: ClockHourOfAmPm
+format	h:mm:ss a	LocalDateNeg	!Unsupported field: ClockHourOfAmPm
+format	h:mm:ss a	LocalTimeMidnight	12:00:00 AM
+format	h:mm:ss a	LocalTimeNano	12:00:00 AM
+format	HH:mm:ss.SSS	LocalDate	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSS	LocalTime	14:05:09.120
+format	HH:mm:ss.SSS	LocalDateTime	14:05:09.120
+format	HH:mm:ss.SSS	OffsetDateTime	14:05:09.120
+format	HH:mm:ss.SSS	OffsetDateTimeUtc	14:05:09.120
+format	HH:mm:ss.SSS	ZonedDateTimeUtc	14:05:09.120
+format	HH:mm:ss.SSS	ZonedDateTimePlus	14:05:09.120
+format	HH:mm:ss.SSS	Instant	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSS	LocalDateBig	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSS	LocalDateNeg	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSS	LocalTimeMidnight	00:00:00.000
+format	HH:mm:ss.SSS	LocalTimeNano	00:00:00.000
+format	HH:mm:ss.SSSSSS	LocalDate	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSSSSS	LocalTime	14:05:09.120000
+format	HH:mm:ss.SSSSSS	LocalDateTime	14:05:09.120000
+format	HH:mm:ss.SSSSSS	OffsetDateTime	14:05:09.120000
+format	HH:mm:ss.SSSSSS	OffsetDateTimeUtc	14:05:09.120000
+format	HH:mm:ss.SSSSSS	ZonedDateTimeUtc	14:05:09.120000
+format	HH:mm:ss.SSSSSS	ZonedDateTimePlus	14:05:09.120000
+format	HH:mm:ss.SSSSSS	Instant	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSSSSS	LocalDateBig	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSSSSS	LocalDateNeg	!Unsupported field: HourOfDay
+format	HH:mm:ss.SSSSSS	LocalTimeMidnight	00:00:00.000000
+format	HH:mm:ss.SSSSSS	LocalTimeNano	00:00:00.000000
+format	yyyyMMddHHmmss	LocalDate	!Unsupported field: HourOfDay
+format	yyyyMMddHHmmss	LocalTime	!Unsupported field: YearOfEra
+format	yyyyMMddHHmmss	LocalDateTime	20100907140509
+format	yyyyMMddHHmmss	OffsetDateTime	20100907140509
+format	yyyyMMddHHmmss	OffsetDateTimeUtc	20100907140509
+format	yyyyMMddHHmmss	ZonedDateTimeUtc	20100907140509
+format	yyyyMMddHHmmss	ZonedDateTimePlus	20100907140509
+format	yyyyMMddHHmmss	Instant	!Unsupported field: YearOfEra
+format	yyyyMMddHHmmss	LocalDateBig	!Unsupported field: HourOfDay
+format	yyyyMMddHHmmss	LocalDateNeg	!Unsupported field: HourOfDay
+format	yyyyMMddHHmmss	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyyMMddHHmmss	LocalTimeNano	!Unsupported field: YearOfEra
+format	yy-M-d	LocalDate	10-9-7
+format	yy-M-d	LocalTime	!Unsupported field: YearOfEra
+format	yy-M-d	LocalDateTime	10-9-7
+format	yy-M-d	OffsetDateTime	10-9-7
+format	yy-M-d	OffsetDateTimeUtc	10-9-7
+format	yy-M-d	ZonedDateTimeUtc	10-9-7
+format	yy-M-d	ZonedDateTimePlus	10-9-7
+format	yy-M-d	Instant	!Unsupported field: YearOfEra
+format	yy-M-d	LocalDateBig	45-1-2
+format	yy-M-d	LocalDateNeg	45-3-15
+format	yy-M-d	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yy-M-d	LocalTimeNano	!Unsupported field: YearOfEra
+format	D	LocalDate	250
+format	D	LocalTime	!Unsupported field: DayOfYear
+format	D	LocalDateTime	250
+format	D	OffsetDateTime	250
+format	D	OffsetDateTimeUtc	250
+format	D	ZonedDateTimeUtc	250
+format	D	ZonedDateTimePlus	250
+format	D	Instant	!Unsupported field: DayOfYear
+format	D	LocalDateBig	2
+format	D	LocalDateNeg	75
+format	D	LocalTimeMidnight	!Unsupported field: DayOfYear
+format	D	LocalTimeNano	!Unsupported field: DayOfYear
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDate	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDateTime	!Unsupported field: OffsetSeconds
+format	yyyy-MM-dd'T'HH:mm:ssXXX	OffsetDateTime	2010-09-07T14:05:09+05:30
+format	yyyy-MM-dd'T'HH:mm:ssXXX	OffsetDateTimeUtc	2010-09-07T14:05:09Z
+format	yyyy-MM-dd'T'HH:mm:ssXXX	ZonedDateTimeUtc	2010-09-07T14:05:09Z
+format	yyyy-MM-dd'T'HH:mm:ssXXX	ZonedDateTimePlus	2010-09-07T14:05:09+02:00
+format	yyyy-MM-dd'T'HH:mm:ssXXX	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDateBig	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDateNeg	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalTimeNano	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDate	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDateTime	!Unsupported field: OffsetSeconds
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	OffsetDateTime	2010-09-07T14:05:09.120+0530
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	OffsetDateTimeUtc	2010-09-07T14:05:09.120+0000
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	ZonedDateTimeUtc	2010-09-07T14:05:09.120+0000
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	ZonedDateTimePlus	2010-09-07T14:05:09.120+0200
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDateBig	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDateNeg	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalTimeNano	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDate	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDateTime	!Unsupported field: OffsetSeconds
+format	yyyy-MM-dd'T'HH:mm:ssxxx	OffsetDateTime	2010-09-07T14:05:09+05:30
+format	yyyy-MM-dd'T'HH:mm:ssxxx	OffsetDateTimeUtc	2010-09-07T14:05:09+00:00
+format	yyyy-MM-dd'T'HH:mm:ssxxx	ZonedDateTimeUtc	2010-09-07T14:05:09+00:00
+format	yyyy-MM-dd'T'HH:mm:ssxxx	ZonedDateTimePlus	2010-09-07T14:05:09+02:00
+format	yyyy-MM-dd'T'HH:mm:ssxxx	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDateBig	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDateNeg	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalTimeNano	!Unsupported field: YearOfEra
+format	HH:mm X	LocalDate	!Unsupported field: HourOfDay
+format	HH:mm X	LocalTime	!Unsupported field: OffsetSeconds
+format	HH:mm X	LocalDateTime	!Unsupported field: OffsetSeconds
+format	HH:mm X	OffsetDateTime	14:05 +0530
+format	HH:mm X	OffsetDateTimeUtc	14:05 Z
+format	HH:mm X	ZonedDateTimeUtc	14:05 Z
+format	HH:mm X	ZonedDateTimePlus	14:05 +02
+format	HH:mm X	Instant	!Unsupported field: HourOfDay
+format	HH:mm X	LocalDateBig	!Unsupported field: HourOfDay
+format	HH:mm X	LocalDateNeg	!Unsupported field: HourOfDay
+format	HH:mm X	LocalTimeMidnight	!Unsupported field: OffsetSeconds
+format	HH:mm X	LocalTimeNano	!Unsupported field: OffsetSeconds
+format	HH:mm XX	LocalDate	!Unsupported field: HourOfDay
+format	HH:mm XX	LocalTime	!Unsupported field: OffsetSeconds
+format	HH:mm XX	LocalDateTime	!Unsupported field: OffsetSeconds
+format	HH:mm XX	OffsetDateTime	14:05 +0530
+format	HH:mm XX	OffsetDateTimeUtc	14:05 Z
+format	HH:mm XX	ZonedDateTimeUtc	14:05 Z
+format	HH:mm XX	ZonedDateTimePlus	14:05 +0200
+format	HH:mm XX	Instant	!Unsupported field: HourOfDay
+format	HH:mm XX	LocalDateBig	!Unsupported field: HourOfDay
+format	HH:mm XX	LocalDateNeg	!Unsupported field: HourOfDay
+format	HH:mm XX	LocalTimeMidnight	!Unsupported field: OffsetSeconds
+format	HH:mm XX	LocalTimeNano	!Unsupported field: OffsetSeconds
+format	HH:mm x	LocalDate	!Unsupported field: HourOfDay
+format	HH:mm x	LocalTime	!Unsupported field: OffsetSeconds
+format	HH:mm x	LocalDateTime	!Unsupported field: OffsetSeconds
+format	HH:mm x	OffsetDateTime	14:05 +0530
+format	HH:mm x	OffsetDateTimeUtc	14:05 +00
+format	HH:mm x	ZonedDateTimeUtc	14:05 +00
+format	HH:mm x	ZonedDateTimePlus	14:05 +02
+format	HH:mm x	Instant	!Unsupported field: HourOfDay
+format	HH:mm x	LocalDateBig	!Unsupported field: HourOfDay
+format	HH:mm x	LocalDateNeg	!Unsupported field: HourOfDay
+format	HH:mm x	LocalTimeMidnight	!Unsupported field: OffsetSeconds
+format	HH:mm x	LocalTimeNano	!Unsupported field: OffsetSeconds
+format	'Date:' yyyy 'o''clock' ''	LocalDate	Date: 2010 o'clock '
+format	'Date:' yyyy 'o''clock' ''	LocalTime	!Unsupported field: YearOfEra
+format	'Date:' yyyy 'o''clock' ''	LocalDateTime	Date: 2010 o'clock '
+format	'Date:' yyyy 'o''clock' ''	OffsetDateTime	Date: 2010 o'clock '
+format	'Date:' yyyy 'o''clock' ''	OffsetDateTimeUtc	Date: 2010 o'clock '
+format	'Date:' yyyy 'o''clock' ''	ZonedDateTimeUtc	Date: 2010 o'clock '
+format	'Date:' yyyy 'o''clock' ''	ZonedDateTimePlus	Date: 2010 o'clock '
+format	'Date:' yyyy 'o''clock' ''	Instant	!Unsupported field: YearOfEra
+format	'Date:' yyyy 'o''clock' ''	LocalDateBig	Date: +12345 o'clock '
+format	'Date:' yyyy 'o''clock' ''	LocalDateNeg	Date: 0045 o'clock '
+format	'Date:' yyyy 'o''clock' ''	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	'Date:' yyyy 'o''clock' ''	LocalTimeNano	!Unsupported field: YearOfEra
+format	yyyy-MM-dd[ HH:mm]	LocalDate	2010-09-07
+format	yyyy-MM-dd[ HH:mm]	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd[ HH:mm]	LocalDateTime	2010-09-07 14:05
+format	yyyy-MM-dd[ HH:mm]	OffsetDateTime	2010-09-07 14:05
+format	yyyy-MM-dd[ HH:mm]	OffsetDateTimeUtc	2010-09-07 14:05
+format	yyyy-MM-dd[ HH:mm]	ZonedDateTimeUtc	2010-09-07 14:05
+format	yyyy-MM-dd[ HH:mm]	ZonedDateTimePlus	2010-09-07 14:05
+format	yyyy-MM-dd[ HH:mm]	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd[ HH:mm]	LocalDateBig	+12345-01-02
+format	yyyy-MM-dd[ HH:mm]	LocalDateNeg	0045-03-15
+format	yyyy-MM-dd[ HH:mm]	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd[ HH:mm]	LocalTimeNano	!Unsupported field: YearOfEra
+format	HH:mm[:ss]	LocalDate	!Unsupported field: HourOfDay
+format	HH:mm[:ss]	LocalTime	14:05:09
+format	HH:mm[:ss]	LocalDateTime	14:05:09
+format	HH:mm[:ss]	OffsetDateTime	14:05:09
+format	HH:mm[:ss]	OffsetDateTimeUtc	14:05:09
+format	HH:mm[:ss]	ZonedDateTimeUtc	14:05:09
+format	HH:mm[:ss]	ZonedDateTimePlus	14:05:09
+format	HH:mm[:ss]	Instant	!Unsupported field: HourOfDay
+format	HH:mm[:ss]	LocalDateBig	!Unsupported field: HourOfDay
+format	HH:mm[:ss]	LocalDateNeg	!Unsupported field: HourOfDay
+format	HH:mm[:ss]	LocalTimeMidnight	00:00:00
+format	HH:mm[:ss]	LocalTimeNano	00:00:00
+format	VV	LocalDate	!Unable to extract ZoneId from temporal 2010-09-07
+format	VV	LocalTime	!Unable to extract ZoneId from temporal 14:05:09.120
+format	VV	LocalDateTime	!Unable to extract ZoneId from temporal 2010-09-07T14:05:09.120
+format	VV	OffsetDateTime	!Unable to extract ZoneId from temporal 2010-09-07T14:05:09.120+05:30
+format	VV	OffsetDateTimeUtc	!Unable to extract ZoneId from temporal 2010-09-07T14:05:09.120Z
+format	VV	ZonedDateTimeUtc	UTC
+format	VV	ZonedDateTimePlus	UTC+02:00
+format	VV	Instant	!Unable to extract ZoneId from temporal 2010-09-07T08:35:09.120Z
+format	VV	LocalDateBig	!Unable to extract ZoneId from temporal +12345-01-02
+format	VV	LocalDateNeg	!Unable to extract ZoneId from temporal -0044-03-15
+format	VV	LocalTimeMidnight	!Unable to extract ZoneId from temporal 00:00
+format	VV	LocalTimeNano	!Unable to extract ZoneId from temporal 00:00:00.000000001
+format	n	LocalDate	!Unsupported field: NanoOfSecond
+format	n	LocalTime	120000000
+format	n	LocalDateTime	120000000
+format	n	OffsetDateTime	120000000
+format	n	OffsetDateTimeUtc	120000000
+format	n	ZonedDateTimeUtc	120000000
+format	n	ZonedDateTimePlus	120000000
+format	n	Instant	120000000
+format	n	LocalDateBig	!Unsupported field: NanoOfSecond
+format	n	LocalDateNeg	!Unsupported field: NanoOfSecond
+format	n	LocalTimeMidnight	0
+format	n	LocalTimeNano	1
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDate	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalTime	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDateTime	!Unsupported field: OffsetSeconds
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	OffsetDateTime	!Unable to extract ZoneId from temporal 2010-09-07T14:05:09.120+05:30
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	OffsetDateTimeUtc	!Unable to extract ZoneId from temporal 2010-09-07T14:05:09.120Z
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	ZonedDateTimeUtc	2010-09-07T14:05:09.120Z[UTC]
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	ZonedDateTimePlus	2010-09-07T14:05:09.120+02:00[UTC+02:00]
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	Instant	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDateBig	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDateNeg	!Unsupported field: HourOfDay
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalTimeNano	!Unsupported field: YearOfEra
+format	uuuu	LocalDate	2010
+format	uuuu	LocalTime	!Unsupported field: Year
+format	uuuu	LocalDateTime	2010
+format	uuuu	OffsetDateTime	2010
+format	uuuu	OffsetDateTimeUtc	2010
+format	uuuu	ZonedDateTimeUtc	2010
+format	uuuu	ZonedDateTimePlus	2010
+format	uuuu	Instant	!Unsupported field: Year
+format	uuuu	LocalDateBig	+12345
+format	uuuu	LocalDateNeg	-0044
+format	uuuu	LocalTimeMidnight	!Unsupported field: Year
+format	uuuu	LocalTimeNano	!Unsupported field: Year
+format	yyyy	LocalDate	2010
+format	yyyy	LocalTime	!Unsupported field: YearOfEra
+format	yyyy	LocalDateTime	2010
+format	yyyy	OffsetDateTime	2010
+format	yyyy	OffsetDateTimeUtc	2010
+format	yyyy	ZonedDateTimeUtc	2010
+format	yyyy	ZonedDateTimePlus	2010
+format	yyyy	Instant	!Unsupported field: YearOfEra
+format	yyyy	LocalDateBig	+12345
+format	yyyy	LocalDateNeg	0045
+format	yyyy	LocalTimeMidnight	!Unsupported field: YearOfEra
+format	yyyy	LocalTimeNano	!Unsupported field: YearOfEra
+parse	LocalDate	ISO_LOCAL_DATE	2010-09-07	2010-09-07
+parse	LocalDate	ISO_LOCAL_DATE	+12345-01-02	+12345-01-02
+parse	LocalDate	ISO_LOCAL_DATE	-0044-03-15	-0044-03-15
+parse	LocalDate	ISO_LOCAL_DATE	2010-13-01	!Text '2010-13-01' could not be parsed: Invalid value for MonthOfYear (valid values 1 - 12): 13
+parse	LocalDate	ISO_LOCAL_DATE	2010-02-30	!Text '2010-02-30' could not be parsed: Invalid date 'FEBRUARY 30'
+parse	LocalDate	ISO_LOCAL_DATE	2023-02-29	!Text '2023-02-29' could not be parsed: Invalid date 'February 29' as '2023' is not a leap year
+parse	LocalDate	ISO_LOCAL_DATE	2010-9-07	!Text '2010-9-07' could not be parsed at index 5
+parse	LocalDate	ISO_LOCAL_DATE	2010-09-07x	!Text '2010-09-07x' could not be parsed, unparsed text found at index 10
+parse	LocalDate	ISO_LOCAL_DATE	12345-01-02	!Text '12345-01-02' could not be parsed at index 0
+parse	LocalDate	ISO_LOCAL_DATE	+2010-09-07	!Text '+2010-09-07' could not be parsed at index 0
+parse	LocalDate	ISO_LOCAL_DATE		!Text '' could not be parsed at index 0
+parse	LocalDate	ISO_DATE	2010-09-07+01:00	2010-09-07
+parse	LocalDate	BASIC_ISO_DATE	20100907	2010-09-07
+parse	LocalDate	dd/MM/yyyy	07/09/2010	2010-09-07
+parse	LocalDate	d MMM uuuu	7 Sep 2010	2010-09-07
+parse	LocalDate	d MMM uuuu	7 sep 2010	!Text '7 sep 2010' could not be parsed at index 2
+parse	LocalDate	EEEE, MMMM d, yyyy	Tuesday, September 7, 2010	2010-09-07
+parse	LocalDate	EEEE, MMMM d, yyyy	Monday, September 7, 2010	!Text 'Monday, September 7, 2010' could not be parsed: Conflict found: Field DayOfWeek 2 differs from DayOfWeek 1 derived from 2010-09-07
+parse	LocalDate	yyyyMMdd	20100907	2010-09-07
+parse	LocalDate	yy-M-d	10-9-7	2010-09-07
+parse	LocalDate	yyyy-MM-dd	2010-09-07 10:15	!Text '2010-09-07 10:15' could not be parsed, unparsed text found at index 10
+parse	LocalTime	ISO_LOCAL_TIME	10:15	10:15
+parse	LocalTime	ISO_LOCAL_TIME	10:15:30	10:15:30
+parse	LocalTime	ISO_LOCAL_TIME	10:15:30.1	10:15:30.100
+parse	LocalTime	ISO_LOCAL_TIME	10:15:30.123456789	10:15:30.123456789
+parse	LocalTime	ISO_LOCAL_TIME	10:15:30.1234567891	!Text '10:15:30.1234567891' could not be parsed, unparsed text found at index 18
+parse	LocalTime	ISO_LOCAL_TIME	24:00	!Text '24:00' could not be parsed: Invalid value for HourOfDay (valid values 0 - 23): 24
+parse	LocalTime	ISO_LOCAL_TIME	10:60	!Text '10:60' could not be parsed: Invalid value for MinuteOfHour (valid values 0 - 59): 60
+parse	LocalTime	ISO_LOCAL_TIME	10	!Text '10' could not be parsed at index 2
+parse	LocalTime	ISO_TIME	10:15:30Z	10:15:30
+parse	LocalTime	hh:mm a	02:05 PM	14:05
+parse	LocalTime	hh:mm a	12:05 AM	00:05
+parse	LocalTime	HH:mm:ss.SSS	14:05:09.120	14:05:09.120
+parse	LocalTime	HH:mm[:ss]	14:05	14:05
+parse	LocalTime	HH	14	14:00
+parse	LocalDateTime	ISO_LOCAL_DATE_TIME	2010-09-07T10:15:30	2010-09-07T10:15:30
+parse	LocalDateTime	ISO_LOCAL_DATE_TIME	2010-09-07t10:15	2010-09-07T10:15
+parse	LocalDateTime	ISO_LOCAL_DATE_TIME	2010-09-07 10:15	!Text '2010-09-07 10:15' could not be parsed at index 10
+parse	LocalDateTime	ISO_LOCAL_DATE_TIME	2010-09-07	!Text '2010-09-07' could not be parsed at index 10
+parse	LocalDateTime	ISO_DATE_TIME	2010-09-07T10:15:30+01:00[UTC]	2010-09-07T10:15:30
+parse	LocalDateTime	yyyy-MM-dd HH:mm:ss	2010-09-07 14:05:09	2010-09-07T14:05:09
+parse	LocalDateTime	yyyyMMddHHmmss	20100907140509	2010-09-07T14:05:09
+parse	LocalDateTime	yyyy-MM-dd[ HH:mm]	2010-09-07	!Text '2010-09-07' could not be parsed: Unable to obtain LocalDateTime from TemporalAccessor: {},ISO resolved to 2010-09-07 of type java.time.format.Parsed
+parse	LocalDateTime	yyyy-MM-dd[ HH:mm]	2010-09-07 14:05	2010-09-07T14:05
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30+01:00	2010-09-07T10:15:30+01:00
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30Z	2010-09-07T10:15:30Z
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30z	2010-09-07T10:15:30Z
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30+0100	!Text '2010-09-07T10:15:30+0100' could not be parsed, unparsed text found at index 22
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30+01	2010-09-07T10:15:30+01:00
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30-05:30:15	2010-09-07T10:15:30-05:30:15
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30+19:00	!Text '2010-09-07T10:15:30+19:00' could not be parsed: Zone offset not in valid range: -18:00 to +18:00
+parse	OffsetDateTime	ISO_OFFSET_DATE_TIME	2010-09-07T10:15:30	!Text '2010-09-07T10:15:30' could not be parsed at index 19
+parse	OffsetDateTime	yyyy-MM-dd'T'HH:mm:ssXXX	2010-09-07T14:05:09+05:30	2010-09-07T14:05:09+05:30
+parse	OffsetDateTime	yyyy-MM-dd'T'HH:mm:ss.SSSZ	2010-09-07T14:05:09.120+0530	2010-09-07T14:05:09.120+05:30
+parse	OffsetDateTime	yyyy-MM-dd'T'HH:mm:ssxxx	2010-09-07T14:05:09+00:00	2010-09-07T14:05:09Z
+parse	ZonedDateTime	ISO_ZONED_DATE_TIME	2010-09-07T10:15:30+01:00	2010-09-07T10:15:30+01:00
+parse	ZonedDateTime	ISO_ZONED_DATE_TIME	2010-09-07T10:15:30Z[UTC]	2010-09-07T10:15:30Z[UTC]
+parse	ZonedDateTime	ISO_ZONED_DATE_TIME	2010-09-07T10:15:30+01:00[UTC]	2010-09-07T09:15:30Z[UTC]
+parse	ZonedDateTime	ISO_ZONED_DATE_TIME	2010-09-07T10:15:30+02:00[UTC+02:00]	2010-09-07T10:15:30+02:00[UTC+02:00]
+parse	ZonedDateTime	ISO_DATE_TIME	2010-09-07T10:15:30+01:00	2010-09-07T10:15:30+01:00
+parse	Instant	ISO_INSTANT	2010-09-07T10:15:30Z	2010-09-07T10:15:30Z
+parse	Instant	ISO_INSTANT	2010-09-07T10:15:30.5Z	2010-09-07T10:15:30.500Z
+parse	Instant	ISO_INSTANT	2010-09-07T10:15:30+01:00	2010-09-07T09:15:30Z
+parse	Instant	ISO_INSTANT	2010-09-07T10:15Z	!Text '2010-09-07T10:15Z' could not be parsed at index 16
+parse	Instant	ISO_INSTANT	1969-12-31T23:59:59.999999999Z	1969-12-31T23:59:59.999999999Z
+parse	Instant	ISO_INSTANT	2010-09-07T10:15:30	!Text '2010-09-07T10:15:30' could not be parsed at index 19
+parse	Duration	-	PT20.345S	PT20.345S
+parse	Duration	-	PT15M	PT15M
+parse	Duration	-	PT10H	PT10H
+parse	Duration	-	P2D	PT48H
+parse	Duration	-	P2DT3H4M	PT51H4M
+parse	Duration	-	PT-6H3M	PT-5H-57M
+parse	Duration	-	-PT6H3M	PT-6H-3M
+parse	Duration	-	-PT-6H+3M	PT5H57M
+parse	Duration	-	pt1.5s	PT1.5S
+parse	Duration	-	PT-0.5S	PT-0.5S
+parse	Duration	-	PT0,25S	PT0.25S
+parse	Duration	-	PT	!Text cannot be parsed to a Duration
+parse	Duration	-	P	!Text cannot be parsed to a Duration
+parse	Duration	-	PT1.5M	!Text cannot be parsed to a Duration
+parse	Duration	-	1D	!Text cannot be parsed to a Duration
+parse	Duration	-	P1H	!Text cannot be parsed to a Duration
+parse	ZoneOffset	-	+01:00	+01:00
+parse	ZoneOffset	-	-0530	-05:30
+parse	ZoneOffset	-	+5	+05:00
+parse	ZoneOffset	-	+01:00:30	+01:00:30
+parse	ZoneOffset	-	+00:00	Z
+parse	ZoneOffset	-	+19:00	!Zone offset hours not in valid range: value 19 is not in the range -18 to 18
+parse	ZoneOffset	-	+01:60	!Zone offset minutes not in valid range: value 60 is not in the range -59 to 59
+parse	ZoneOffset	-	01:00	!Invalid ID for ZoneOffset, non numeric characters found: 01:00
+parse	ZoneOffset	-	+1:00	!Invalid ID for ZoneOffset, non numeric characters found: +1:00
+parse	ZoneId	-	UTC	UTC
+parse	ZoneId	-	Z	Z
+parse	ZoneId	-	GMT	GMT
+parse	ZoneId	-	UTC+2	UTC+02:00
+parse	ZoneId	-	UTC+0	UTC
+parse	ZoneId	-	GMT-05:30	GMT-05:30
+parse	ZoneId	-	+02:00	+02:00

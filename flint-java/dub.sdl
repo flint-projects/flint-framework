@@ -15,4 +15,5 @@ configuration "unittest" {
     targetType "library"
     sourcePaths "source" "tests"
     importPaths "source" "tests"
+    stringImportPaths "tests/golden"
 }
