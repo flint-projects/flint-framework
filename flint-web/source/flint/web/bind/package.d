@@ -17,6 +17,7 @@ import flint.web.bind.support : javaTypeName;
 import flint.engine.aot.any : Any;
 import flint.http : HttpStatus, HttpStatusCode, ProblemDetail;
 import flint.jakarta.servlet : ServletException;
+import flint.validation : BindException, BindingResult, FieldError, ObjectError;
 import flint.web : ErrorResponse, skipBacktrace;
 
 @safe:
@@ -246,3 +247,211 @@ class MissingServletRequestParameterException : MissingRequestValueException
                                             return java[i + 1 .. $];
                                     return java;
                                 }
+
+/// `MissingMatrixVariableException`: a required matrix variable is missing (400).
+class MissingMatrixVariableException : MissingRequestValueException
+{
+    private string variableName;
+    private MethodParameter parameter;
+
+    /// For the missing `variableName` of `parameter`.
+    this(string variableName, MethodParameter parameter, bool missingAfterConversion = false)
+    {
+        super("", missingAfterConversion, null, [Any.of(variableName)]);
+        this.variableName = variableName;
+        this.parameter = parameter;
+        msg = "Required matrix variable '" ~ variableName ~ "' for method parameter type " ~ simpleJavaName(
+                parameter is null ? "" : parameter.getNestedParameterType()) ~ " is "
+            ~ (missingAfterConversion ? "present but converted to null" : "not present");
+        getBody().setDetail("Required path parameter '" ~ variableName ~ "' is not present.");
+    }
+
+    /// The variable name.
+    final string getVariableName() const pure nothrow @nogc
+    {
+        return variableName;
+    }
+
+    /// The method parameter.
+    final MethodParameter getParameter() pure nothrow @nogc
+    {
+        return parameter;
+    }
+}
+
+/// `UnsatisfiedServletRequestParameterException`: the request's parameters do not meet a mapping's `params`
+/// conditions (400). `Map<String, String[]>` is `string[][string]` and `List<String[]>` is `string[][]` (R10).
+class UnsatisfiedServletRequestParameterException : ServletRequestBindingException
+{
+    private string[][] paramConditions;
+    private string[][string] actualParams;
+
+    /// One set of conditions.
+    this(string[] paramConditions, string[][string] actualParams)
+    {
+        this([paramConditions], actualParams);
+    }
+
+    /// Alternative sets of conditions, any of which would have matched.
+    this(string[][] paramConditions, string[][string] actualParams)
+    {
+        super("", null, null, [Any.of(paramsToStringList(paramConditions))]);
+        this.paramConditions = paramConditions;
+        this.actualParams = actualParams;
+        string joined;
+        foreach (index, condition; paramsToStringList(paramConditions))
+            joined ~= (index != 0 ? " OR " : "") ~ condition;
+        msg = "Parameter conditions " ~ joined ~ " not met for actual request parameters: "
+            ~ requestParameterMapToString(actualParams);
+        getBody().setDetail("Invalid request parameters.");
+    }
+
+    /// The first set of conditions.
+    final string[] getParamConditions() pure nothrow @nogc
+    {
+        return paramConditions.length != 0 ? paramConditions[0] : null;
+    }
+
+    /// Every set of conditions.
+    final string[][] getParamConditionGroups() pure nothrow @nogc
+    {
+        return paramConditions;
+    }
+
+    /// The request's parameters.
+    final string[][string] getActualParams() pure nothrow @nogc
+    {
+        return actualParams;
+    }
+
+    private static string[] paramsToStringList(string[][] paramConditions) pure nothrow
+    {
+        string[] result;
+        foreach (conditions; paramConditions)
+        {
+            string text;
+            foreach (index, condition; conditions)
+                text ~= (index != 0 ? ", " : "") ~ condition;
+            result ~= "\"" ~ text ~ "\"";
+        }
+        return result;
+    }
+
+    /// `ObjectUtils.nullSafeToString` of each `String[]`: `{a, b}`.
+    private static string requestParameterMapToString(string[][string] actualParams)
+    {
+        string result;
+        foreach (name, values; actualParams)
+        {
+            string list;
+            foreach (index, value; values)
+                list ~= (index != 0 ? ", " : "") ~ value;
+            result ~= (result.length != 0 ? ", " : "") ~ name ~ "={" ~ list ~ "}";
+        }
+        return result;
+    }
+}
+
+/++
+`MethodArgumentNotValidException`: validation of a `@Valid` argument failed (400). It is a `BindException`, so a
+handler or advice reads the `BindingResult` from it, as petclinic-rest's advice does.
+
+Without a `MessageSource` the detail arguments are the global and the field errors, each list joined with
+`, and `, a field error as `field: message`, as Spring's `BindErrorUtils` formats them.
++/
+class MethodArgumentNotValidException : BindException, ErrorResponse
+{
+    mixin ErrorResponse.Defaults;
+
+    private MethodParameter parameter;
+    private ProblemDetail body;
+
+    /// For the invalid argument `parameter` and the errors in `bindingResult`.
+    this(MethodParameter parameter, BindingResult bindingResult)
+    {
+        super(bindingResult);
+        this.parameter = parameter;
+        body = ProblemDetail.forStatusAndDetail(getStatusCode(), "Invalid request content.");
+        msg = validationMessage();
+        skipBacktrace(this);
+    }
+
+    HttpStatusCode getStatusCode()
+    {
+        return HttpStatus.BAD_REQUEST;
+    }
+
+    ProblemDetail getBody()
+    {
+        return
+        body;
+    }
+
+    /// The method parameter that failed validation.
+    final MethodParameter getParameter() pure nothrow @nogc
+    {
+        return parameter;
+    }
+
+    override Any[] getDetailMessageArguments()
+    {
+        return [
+            Any.of(join(errorsToStringList(getGlobalErrors().toArray()))),
+            Any.of(join(errorsToStringList(getFieldErrors().toArray())))
+        ];
+    }
+
+    /// The errors as messages: a field error as `field: message`, any other as its message.
+    static string[] errorsToStringList(FieldError[] errors)
+    {
+        ObjectError[] all;
+        foreach (error; errors)
+            all ~= error;
+        return errorsToStringList(all);
+    }
+
+    /// ditto
+    static string[] errorsToStringList(ObjectError[] errors)
+    {
+        string[] result;
+        foreach (error; errors)
+        {
+            if (auto field = cast(FieldError) error)
+                result ~= field.getField() ~ ": " ~ field.getDefaultMessage();
+            else
+                result ~= error.getDefaultMessage();
+        }
+        return result;
+    }
+
+    private static string join(string[] errors) pure nothrow
+    {
+        string result;
+        foreach (index, error; errors)
+            result ~= (index != 0 ? ", and " : "") ~ error;
+        return result;
+    }
+
+    private string validationMessage()
+    {
+        import flint.java.lang : valueOf;
+
+        string text = "Validation failed ";
+        if (parameter !is null)
+            text ~= "for argument [" ~ decimal(parameter.getParameterIndex()) ~ "] in " ~ parameter.getExecutable();
+        const count = getErrorCount();
+        if (count > 1)
+            text ~= " with " ~ decimal(count) ~ " errors";
+        text ~= ": ";
+        foreach (error; getAllErrors().toArray())
+            text ~= "[" ~ valueOf(cast(Object) error) ~ "] ";
+        return text;
+    }
+
+    private static string decimal(long value) pure nothrow
+    {
+        if (value < 0)
+            return "-" ~ decimal(-value);
+        return value < 10 ? [cast(char)('0' + value)] : decimal(value / 10) ~ cast(char)('0' + value % 10);
+    }
+}

@@ -90,24 +90,18 @@ unittest
     assert(ex.getHeaders().isEmpty());
 }
 
-// flint.web has not ported AsyncRequestTimeoutException, MissingMatrixVariableException,
-// UnsatisfiedServletRequestParameterException, MissingServletRequestPartException,
-// MethodArgumentNotValidException or HandlerMethodValidationException.
-version (FlintWebMissingExceptions)
+@("ErrorResponseExceptionTests.asyncRequestTimeoutException")
+unittest
 {
-    @("ErrorResponseExceptionTests.asyncRequestTimeoutException")
-    unittest
-    {
-        import flint.web.context.request.async : AsyncRequestTimeoutException;
+    import flint.web.context.request.async : AsyncRequestTimeoutException;
 
-        ErrorResponse ex = new AsyncRequestTimeoutException();
-        assertDetailMessageCode(ex, null, null);
+    ErrorResponse ex = new AsyncRequestTimeoutException();
+    assertDetailMessageCode(ex, null, null);
 
-        assertStatus(ex, HttpStatus.SERVICE_UNAVAILABLE);
-        assertDetail(ex, null);
+    assertStatus(ex, HttpStatus.SERVICE_UNAVAILABLE);
+    assertDetail(ex, null);
 
-        assert(ex.getHeaders().isEmpty());
-    }
+    assert(ex.getHeaders().isEmpty());
 }
 
 @("ErrorResponseExceptionTests.httpRequestMethodNotSupportedException")
@@ -147,21 +141,18 @@ unittest
     assert(ex.getHeaders().isEmpty());
 }
 
-version (FlintWebMissingExceptions)
+@("ErrorResponseExceptionTests.missingMatrixVariableException")
+unittest
 {
-    @("ErrorResponseExceptionTests.missingMatrixVariableException")
-    unittest
-    {
-        import flint.web.bind : MissingMatrixVariableException;
+    import flint.web.bind : MissingMatrixVariableException;
 
-        auto ex = new MissingMatrixVariableException("region", methodParameter());
+    auto ex = new MissingMatrixVariableException("region", methodParameter());
 
-        assertStatus(ex, HttpStatus.BAD_REQUEST);
-        assertDetail(ex, "Required path parameter 'region' is not present.");
-        assertDetailMessageCode(ex, null, [Any.of(ex.getVariableName())]);
+    assertStatus(ex, HttpStatus.BAD_REQUEST);
+    assertDetail(ex, "Required path parameter 'region' is not present.");
+    assertDetailMessageCode(ex, null, [Any.of(ex.getVariableName())]);
 
-        assert(ex.getHeaders().isEmpty());
-    }
+    assert(ex.getHeaders().isEmpty());
 }
 
 @("ErrorResponseExceptionTests.missingPathVariableException")
@@ -200,39 +191,37 @@ unittest
     assert(ex.getHeaders().isEmpty());
 }
 
-version (FlintWebMissingExceptions)
+@("ErrorResponseExceptionTests.unsatisfiedServletRequestParameterException")
+unittest
 {
-    @("ErrorResponseExceptionTests.unsatisfiedServletRequestParameterException")
-    unittest
-    {
-        import flint.web.bind : UnsatisfiedServletRequestParameterException;
+    import flint.web.bind : UnsatisfiedServletRequestParameterException;
 
-        auto ex = new UnsatisfiedServletRequestParameterException(["foo=bar", "bar=baz"], [
-            "q": ["1"]
-        ]);
+    auto ex = new UnsatisfiedServletRequestParameterException(["foo=bar", "bar=baz"], ["q": ["1"]]);
 
-        assertStatus(ex, HttpStatus.BAD_REQUEST);
-        assertDetail(ex, "Invalid request parameters.");
-        assertDetailMessageCode(ex, null, [Any.of(["\"foo=bar, bar=baz\""])]);
+    assertStatus(ex, HttpStatus.BAD_REQUEST);
+    assertDetail(ex, "Invalid request parameters.");
+    assertDetailMessageCode(ex, null, [Any.of(["\"foo=bar, bar=baz\""])]);
 
-        assert(ex.getHeaders().isEmpty());
-    }
+    assert(ex.getHeaders().isEmpty());
+}
 
-    @("ErrorResponseExceptionTests.missingServletRequestPartException")
-    unittest
-    {
-        import flint.web.multipart.support : MissingServletRequestPartException;
+@("ErrorResponseExceptionTests.missingServletRequestPartException")
+unittest
+{
+    import flint.web.multipart.support : MissingServletRequestPartException;
 
-        auto ex = new MissingServletRequestPartException("file");
+    auto ex = new MissingServletRequestPartException("file");
 
-        assertStatus(ex, HttpStatus.BAD_REQUEST);
-        assertDetail(ex, "Required part 'file' is not present.");
-        assertDetailMessageCode(ex, null, [Any.of(ex.getRequestPartName())]);
+    assertStatus(ex, HttpStatus.BAD_REQUEST);
+    assertDetail(ex, "Required part 'file' is not present.");
+    assertDetailMessageCode(ex, null, [Any.of(ex.getRequestPartName())]);
 
-        assert(ex.getHeaders().isEmpty());
-    }
+    assert(ex.getHeaders().isEmpty());
+}
 
-    // Also needs ValidationTestHelper (version FlintWebMessageSource).
+// Needs ValidationTestHelper, which needs spring-context's MessageSource (framework-core).
+version (FlintWebMessageSource)
+{
     @("ErrorResponseExceptionTests.methodArgumentNotValidException")
     unittest
     {
@@ -250,7 +239,11 @@ version (FlintWebMissingExceptions)
 
         assert(ex.getHeaders().isEmpty());
     }
+}
 
+// Needs flint.validation.method's MethodValidationResult (spring-context, framework-core).
+version (FlintValidationMethod)
+{
     @("ErrorResponseExceptionTests.handlerMethodValidationException")
     unittest
     {
