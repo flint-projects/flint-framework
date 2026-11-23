@@ -41,11 +41,50 @@ private bool isController(C)() pure nothrow @nogc
     }
 }
 
+/// Whether C's routes run on a worker thread: when it says so with `@WorkerController`, or when a handler may throw
+/// or use the GC. Handlers that are all `nothrow @nogc` run on the reactor; ordinary handlers need no attributes,
+/// because the framework picks their execution from what they are (ADR-028 section 3).
 private bool isWorker(C)() pure nothrow @nogc
 {
     static foreach (attribute; __traits(getAttributes, C))
     {
         static if (is(attribute == WorkerController) || is(typeof(attribute) == WorkerController))
+            return true;
+    }
+    return !reactorHandlers!C();
+}
+
+/// Whether every route handler of C is `nothrow` and `@nogc`, as declared or inferred.
+private bool reactorHandlers(C)() pure nothrow @nogc
+{
+    import std.traits : FunctionAttribute, functionAttributes;
+
+    static foreach (name; __traits(allMembers, C))
+    {
+        static if (__traits(compiles, __traits(getOverloads, C, name, true)))
+        {
+            static foreach (member; __traits(getOverloads, C, name, true))
+            {
+                static if (routeAttribute!member())
+                {
+                    if ((functionAttributes!member & (FunctionAttribute.nothrow_ | FunctionAttribute.nogc)) != (
+                            FunctionAttribute.nothrow_ | FunctionAttribute.nogc))
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether a member carries a route attribute.
+private bool routeAttribute(alias member)() pure nothrow @nogc
+{
+    static foreach (attribute; __traits(getAttributes, member))
+    {
+        static if (is(typeof(attribute) == Get) || is(typeof(attribute) == Post)
+                || is(typeof(attribute) == Put) || is(typeof(attribute) == Delete)
+                || is(typeof(attribute) == RequestMapping))
             return true;
     }
     return false;

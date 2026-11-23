@@ -171,6 +171,9 @@ private ref T byReference(T)(return ref T value)
 struct AppContext(Beans...)
 {
     private alias Entries = Resolved!Beans;
+    /// The registrations after expanding registrars and auto-configuration lists and applying their conditions,
+    /// for runners that bind configuration or collect controllers (ADR-028).
+    alias Registered = Entries;
     static assert(Entries.length <= maxBeans, "DI context exceeds the 128-bean limit");
     static if (hasBinding!Entries())
     {

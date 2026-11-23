@@ -12,9 +12,42 @@ package(flint.web):
 
 enum signedScalar(T) = is(T == byte) || is(T == short) || is(T == int) || is(T == long);
 enum unsignedScalar(T) = is(T == ubyte) || is(T == ushort) || is(T == uint) || is(T == ulong);
-enum scalar(T) = signedScalar!T || unsignedScalar!T || is(T == Text) || is(T == bool);
+enum scalar(T) = signedScalar!T || unsignedScalar!T || is(T == Text) || is(T == bool) || is(T == string);
+
+/// A `string` path or query argument: decoded like `Text`, then copied to the GC heap. Only handlers that are not
+/// `@nogc` take one (ADR-028 section 3).
+Error bindPath(T : string)(ref scope Request request, ref scope RequestArena arena, string name, ref T output) nothrow
+{
+    Text text;
+    const failed = bindPath(request, arena, name, text);
+    return failed.code == Status.ok ? ownedText(arena, text, output) : failed;
+}
+
+/// ditto
+Error bindQuery(T : string)(ref scope const Request request, ref scope RequestArena arena, string name,
+        bool required, ref T output) nothrow
+{
+    Text text;
+    const failed = bindQuery(request, arena, name, required, text);
+    return failed.code == Status.ok ? ownedText(arena, text, output) : failed;
+}
+
+private Error ownedText(ref scope RequestArena arena, Text text, ref string output) nothrow
+{
+    ubyte[maximumTargetBytes] copied;
+    size_t length;
+    const read = arena.read(text.bytes, (scope const(ubyte)[] value) @safe nothrow @nogc {
+        length = value.length <= copied.length ? value.length : copied.length;
+        copied[0 .. length] = value[0 .. length];
+    });
+    if (read != Status.ok)
+        return Error(read, "expired HTTP argument");
+    output = (cast(const(char)[]) copied[0 .. length]).idup;
+    return Error.init;
+}
 
 Error bindPath(T)(ref scope Request request, ref scope RequestArena arena, string name, ref T output) nothrow @nogc
+        if (!is(T == string))
 {
     auto capture = request.capture(name);
     auto path = request.path();
@@ -24,7 +57,7 @@ Error bindPath(T)(ref scope Request request, ref scope RequestArena arena, strin
 }
 
 Error bindQuery(T)(ref scope const Request request, ref scope RequestArena arena, string name,
-        bool required, ref T output) nothrow @nogc
+        bool required, ref T output) nothrow @nogc if (!is(T == string))
 {
     auto query = request.query();
     if (!query.ok())
