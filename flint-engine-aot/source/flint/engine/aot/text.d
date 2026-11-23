@@ -121,6 +121,65 @@ ParsedDouble tryParseDouble(scope const(char)[] text) pure nothrow
     return result;
 }
 
+/// `tryParseLong` limited to `int`, as `to!int` reads text: false also for a value outside `int`.
+ParsedLong tryParseInt(scope const(char)[] text) pure nothrow @nogc
+{
+    auto result = tryParseLong(text);
+    result.ok = result.ok && result.value >= int.min && result.value <= int.max;
+    return result;
+}
+
+/// `text` without leading and trailing white space, as `std.string.strip` does: the characters `std.uni.isWhite`
+/// accepts, ASCII and Unicode.
+inout(char)[] stripWhite(inout(char)[] text) pure nothrow @nogc
+{
+    size_t start, end = text.length;
+    size_t width;
+    while (start < end && (width = whiteAt(text, start)) != 0)
+        start += width;
+    while (end > start)
+    {
+        size_t at = end - 1;
+        while (at > start && (text[at] & 0xC0) == 0x80)
+            --at;
+        if (whiteAt(text, at) != end - at)
+            break;
+        end = at;
+    }
+    return text[start .. end];
+}
+
+// The byte width of the white-space character starting at `i` (std.uni.isWhite), or 0.
+private size_t whiteAt(scope const(char)[] text, size_t i) pure nothrow @nogc
+{
+    static immutable dchar[] white = [
+        ' ', '\t', '\n', '\v', '\f', '\r', 0x85, 0xA0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003,
+        0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000
+    ];
+    const lead = text[i];
+    size_t width;
+    dchar c;
+    if (lead < 0x80)
+    {
+        width = 1;
+        c = lead;
+    }
+    else if ((lead & 0xE0) == 0xC0 && i + 1 < text.length)
+    {
+        width = 2;
+        c = ((lead & 0x1F) << 6) | (text[i + 1] & 0x3F);
+    }
+    else if ((lead & 0xF0) == 0xE0 && i + 2 < text.length)
+    {
+        width = 3;
+        c = ((lead & 0x0F) << 12) | ((text[i + 1] & 0x3F) << 6) | (text[i + 2] & 0x3F);
+    }
+    foreach (w; white)
+        if (width && c == w)
+            return width;
+    return 0;
+}
+
 /// Reads a whole floating-point number as `to!double` does: decimal with optional fraction, exponent and single
 /// underscores after digits, hexadecimal with a binary exponent, and `inf` and `nan` in any case. False where
 /// `to!double` throws, for malformed text or a finite number out of range.
@@ -419,4 +478,37 @@ unittest
     ];
     foreach (value; values)
         assert(doubleText(value) == value.to!string, value.to!string);
+}
+
+unittest
+{
+    import std.conv : to;
+
+    foreach (text; [
+        "0", "-2147483648", "2147483647", "2147483648", "-2147483649", "+7", "", "x", " 1"
+    ])
+    {
+        bool expected = true;
+        int reference;
+        try
+            reference = text.to!int;
+        catch (Exception)
+            expected = false;
+        const result = tryParseInt(text);
+        assert(result.ok == expected, text);
+        if (expected)
+            assert(result.value == reference, text);
+    }
+}
+
+unittest
+{
+    import std.string : strip;
+
+    static immutable texts = [
+        "", " ", "1.5", "  1.5\t\n", "\u00A01.5\u3000", "\u20281\u2029", "x\u0085", "\u00A0",
+        "1\u200B", "\u2000\u200A2\u202F\u205F", "é é", "\u1680-3\u1680", "\v\fz\r"
+    ];
+    foreach (text; texts)
+        assert(stripWhite(text) == text.strip(), text);
 }
