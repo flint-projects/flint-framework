@@ -1,0 +1,16 @@
+name "jakarta-annotation"
+description "Jakarta Annotations 3.0 for Flint: @PostConstruct, @PreDestroy, @Resource, @Nullable (EPL-2.0 module, ADR-030 section 7)"
+license "EPL-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}
