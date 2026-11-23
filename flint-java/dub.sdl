@@ -6,6 +6,7 @@ sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:engine-aot" version="*"
+dependency "flint:serde" version="*"
 
 configuration "library" {
     targetType "library"

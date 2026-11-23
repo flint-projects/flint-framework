@@ -1,10 +1,11 @@
 name "core"
-description "spring-core's flint.core: NestedRuntimeException, the base of Spring's runtime exception hierarchies (ADR-030)"
+description "Spring Framework's spring-core for Flint: flint.core (env, convert, io, annotation), flint.util and flint.lang"
 license "Apache-2.0"
 targetType "library"
 sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
+dependency "flint:engine-aot" version="*"
 dependency "flint:java" version="*"
 
 configuration "library" {

@@ -128,6 +128,18 @@ struct Optional(T)
     private T value_;
     private bool present_;
 
+    /// Descriptor builder hook (`flint.engine.aot.descriptor`): the value, or nothing.
+    static T[] __flintUnwrap(Optional self)
+    {
+        return self.present_ ? [self.value_] : null;
+    }
+
+    /// Descriptor builder hook: `ofNullable(value)`, or empty.
+    static Optional __flintWrap(T value, bool present)
+    {
+        return present ? ofNullable(value) : Optional.init;
+    }
+
     /// An `Optional` holding `value`. Throws `NullPointerException` for a null reference.
     static Optional of(T value)
     {
@@ -567,6 +579,18 @@ interface List(T) : Collection!T
     alias remove = Collection!T.remove;
     alias add = Collection!T.add;
 
+    /// Descriptor builder hook (`flint.engine.aot.descriptor`): the elements.
+    static T[] __flintElements(List!T self)
+    {
+        return self is null ? null : self.toArray();
+    }
+
+    /// Descriptor builder hook: a new mutable list of `items`.
+    static List!T __flintFromElements(T[] items)
+    {
+        return new ArrayList!T(items);
+    }
+
     /// An unmodifiable list of `elements`.
     static List!T of(T[] elements...)
     {
@@ -583,6 +607,18 @@ interface List(T) : Collection!T
 /// Java's `Set`: a collection without duplicates.
 interface Set(T) : Collection!T
 {
+    /// Descriptor builder hook (`flint.engine.aot.descriptor`): the elements.
+    static T[] __flintElements(Set!T self)
+    {
+        return self is null ? null : self.toArray();
+    }
+
+    /// Descriptor builder hook: a new mutable set of `items`.
+    static Set!T __flintFromElements(T[] items)
+    {
+        return new LinkedHashSet!T(items);
+    }
+
     /// An unmodifiable set of `elements`. Throws `IllegalArgumentException` on a duplicate, as Java does.
     static Set!T of(T[] elements...)
     {
@@ -1443,6 +1479,25 @@ interface Map(K, V) : RawMap
     /// Store `value`, or `remapping(old, value)` when `key` is mapped.
     V merge(K key, V value, V delegate(V, V) @safe remapping);
 
+    /// Descriptor builder hook (`flint.engine.aot.descriptor`): keys and values in iteration order.
+    static void __flintEntries(Map!(K, V) self, out K[] keys, out V[] values)
+    {
+        if (self is null)
+            return;
+        keys = self.keySet().toArray();
+        foreach (key; keys)
+            values ~= self.get(key);
+    }
+
+    /// Descriptor builder hook: a new mutable map of the entries.
+    static Map!(K, V) __flintFromEntries(K[] keys, V[] values)
+    {
+        auto result = new LinkedHashMap!(K, V)();
+        foreach (i, key; keys)
+            result.put(key, values[i]);
+        return result;
+    }
+
     /// An unmodifiable map of alternating keys and values.
     static Map!(K, V) of(Args...)(Args keysAndValues)
     {
@@ -1937,5 +1992,220 @@ private final class FixedList(T) : AbstractList!T
             stableSort(items, (T a, T b) => compareNatural(a, b));
         else
             stableSort(items, &c.compare);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Properties
+
+/++
+Java's `Properties`: a persistent set of string properties, loaded from the `.properties` format with Java's rules:
+`#` and `!` comments, `=`, `:` or whitespace separators, backslash line continuations, escapes (`\t`, `\n`, `\f`,
+`\r`, `\uXXXX`, and `\` before any other character), and a missing key's value looked up in the `defaults`.
++/
+class Properties : LinkedHashMap!(string, string)
+{
+    /// Properties consulted when a key is missing; may be null.
+    protected Properties defaults;
+
+    /// Empty properties.
+    this() pure nothrow @nogc
+    {
+    }
+
+    /// Empty properties with `defaults`.
+    this(Properties defaults) pure nothrow @nogc
+    {
+        this.defaults = defaults;
+    }
+
+    /// The value of `key`, then the defaults' value; null when neither has it.
+    string getProperty(string key)
+    {
+        if (containsKey(key))
+            return get(key);
+        return defaults is null ? null : defaults.getProperty(key);
+    }
+
+    /// The value of `key`, or `defaultValue`.
+    string getProperty(string key, string defaultValue)
+    {
+        auto value = getProperty(key);
+        return value is null ? defaultValue : value;
+    }
+
+    /// Set `key` to `value`; the previous value, or null.
+    string setProperty(string key, string value)
+    {
+        return put(key, value);
+    }
+
+    /// Every key, including the defaults' keys, in insertion order.
+    Set!string stringPropertyNames()
+    {
+        auto result = new LinkedHashSet!string();
+        if (defaults !is null)
+            foreach (key; defaults.stringPropertyNames().toArray())
+                result.add(key);
+        foreach (key; keySet().toArray())
+            result.add(key);
+        return result;
+    }
+
+    /// Load properties from `text` in the `.properties` format. Throws `IllegalArgumentException` on a malformed
+    /// `\uXXXX` escape, with Java's message.
+    void load(string text)
+    {
+        size_t position;
+        while (position < text.length)
+        {
+            auto line = logicalLine(text, position);
+            if (line.length == 0)
+                continue;
+            parseLine(line);
+        }
+    }
+
+    /// Load properties from `stream` (UTF-8, as `Properties.load(Reader)` reads text).
+    void load(imported!"flint.java.io".InputStream stream)
+    {
+        load(cast(string) stream.readAllBytes().idup);
+    }
+
+    private static string logicalLine(string text, ref size_t position)
+    {
+        string line;
+        bool continuing;
+        while (position < text.length)
+        {
+            size_t end = position;
+            while (end < text.length && text[end] != '\n' && text[end] != '\r')
+                end++;
+            auto raw = text[position .. end];
+            position = end;
+            if (position < text.length && text[position] == '\r')
+                position++;
+            if (position < text.length && text[position] == '\n')
+                position++;
+            raw = raw[skipBlanks(raw, 0) .. $];
+            if (!continuing && isComment(raw))
+                return null;
+            if (trailingBackslashes(raw) % 2 == 1)
+            {
+                line ~= raw[0 .. $ - 1];
+                continuing = true;
+                continue;
+            }
+            return line ~ raw;
+        }
+        return line;
+    }
+
+    private void parseLine(string line)
+    {
+        size_t keyEnd;
+        bool escaped;
+        for (; keyEnd < line.length; keyEnd++)
+        {
+            const c = line[keyEnd];
+            if (escaped)
+                escaped = false;
+            else if (c == '\\')
+                escaped = true;
+            else if (c == '=' || c == ':' || isBlank(c))
+                break;
+        }
+        size_t valueStart = skipBlanks(line, keyEnd);
+        if (valueStart < line.length && (line[valueStart] == '=' || line[valueStart] == ':'))
+            valueStart++;
+        valueStart = skipBlanks(line, valueStart);
+        put(unescape(line[0 .. keyEnd]), unescape(line[valueStart .. $]));
+    }
+
+    private static bool isBlank(char c) pure nothrow @nogc
+    {
+        return c == ' ' || c == '\t' || c == '\f';
+    }
+
+    private static size_t skipBlanks(string text, size_t from) pure nothrow @nogc
+    {
+        while (from < text.length && isBlank(text[from]))
+            from++;
+        return from;
+    }
+
+    private static bool isComment(string line) pure nothrow @nogc
+    {
+        return line.length == 0 || line[0] == '#' || line[0] == '!';
+    }
+
+    private static size_t trailingBackslashes(string line) pure nothrow @nogc
+    {
+        size_t count;
+        while (count < line.length && line[line.length - (count + 1)] == '\\')
+            count++;
+        return count;
+    }
+
+    private static string unescape(string text)
+    {
+        string result;
+        for (size_t i = 0; i < text.length; i++)
+        {
+            if (text[i] != '\\' || i + 1 == text.length)
+            {
+                result ~= text[i];
+                continue;
+            }
+            const c = text[++i];
+            switch (c)
+            {
+            case 't':
+                result ~= '\t';
+                break;
+            case 'n':
+                result ~= '\n';
+                break;
+            case 'r':
+                result ~= '\r';
+                break;
+            case 'f':
+                result ~= '\f';
+                break;
+            case 'u':
+                result ~= unicodeEscape(text, i);
+                break;
+            default:
+                result ~= c;
+            }
+        }
+        return result;
+    }
+
+    private static string unicodeEscape(string text, ref size_t i)
+    {
+        import std.utf : encode;
+
+        dchar value = 0;
+        foreach (j; 1 .. 5)
+        {
+            if (i + j >= text.length)
+                throw new IllegalArgumentException("Malformed \\uxxxx encoding.");
+            const h = text[i + j];
+            int digit;
+            if (h >= '0' && h <= '9')
+                digit = h - '0';
+            else if (h >= 'a' && h <= 'f')
+                digit = h - 'a' + 10;
+            else if (h >= 'A' && h <= 'F')
+                digit = h - 'A' + 10;
+            else
+                throw new IllegalArgumentException("Malformed \\uxxxx encoding.");
+            value = value * 16 + digit;
+        }
+        i += 4;
+        char[4] buffer;
+        const n = encode(buffer, value);
+        return buffer[0 .. n].idup;
     }
 }

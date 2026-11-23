@@ -272,6 +272,20 @@ interface Iterable(T)
     int opApply(scope int delegate(T) @safe dg);
 }
 
+/++
+Java's `Class<?>` where an annotation attribute names a type: the type's canonical fully qualified D name
+(AOT contract section 2). Rulebook R4 makes `Class` parameters template parameters; annotation attributes cannot be
+templates, so they carry a `ClassRef`. `flint.core.annotation` re-exports it.
++/
+struct ClassRef
+{
+    /// The canonical fully qualified D name; empty for `ClassRef.init` ("none", or "this annotation").
+    string name;
+}
+
+/// Java's `T.class` in an annotation attribute: `@ConditionalOnMissingBean(classOf!DataSource)`.
+enum ClassRef classOf(T) = ClassRef(imported!"flint.engine.aot.name".typeNameOf!T);
+
 /// Java's `Comparable`: a natural ordering.
 interface Comparable(T)
 {
@@ -341,16 +355,18 @@ mixin template JavaObject()
     }
 }
 
-/// Java's `a.equals(b)` for any class through UFCS: the class's `opEquals` (identity unless overridden).
-bool equals(Object a, Object b)
+/// Java's `a.equals(b)` for any class or interface reference through UFCS: the class's `opEquals` (identity
+/// unless overridden). Interfaces do not convert to `Object` implicitly in D, hence the template.
+bool equals(A, B)(A a, B b)
+        if ((is(A == class) || is(A == interface)) && (is(B == class) || is(B == interface)))
 {
-    return objectEquals(a, b);
+    return objectEquals(cast(Object) a, cast(Object) b);
 }
 
-/// Java's `o.hashCode()` for any class through UFCS: its `toHash`, folded to Java's 32-bit `int`.
-int hashCode(Object o) nothrow
+/// Java's `o.hashCode()` for any class or interface reference through UFCS: its `toHash`, folded to an `int`.
+int hashCode(T)(T o) nothrow if (is(T == class) || is(T == interface))
 {
-    return cast(int) objectToHash(o);
+    return cast(int) objectToHash(cast(Object) o);
 }
 
 /// Java's `Objects.equals` semantics for any `T`: `objectEquals` for references, `==` for values.
@@ -376,26 +392,29 @@ string valueOf(T)(T value)
         return value is null ? "null" : value.idup;
     else static if (is(T == bool))
         return value ? "true" : "false";
+    else static if (is(T == float))
+        return floatToString(value);
     else static if (__traits(isFloating, T))
         return doubleToString(value);
     else
         return value.to!string;
 }
 
-/// Java's `Double.toString` for the values Spring formats: integral values keep `.0`; NaN and infinities by name.
-string doubleToString(double value)
+/// Java's `Double.toString` (JDK 19 and later): the shortest round-trip digits in the JDK's layout, from
+/// `flint.serde.java_number` (checked against OpenJDK 21).
+string doubleToString(double value) pure nothrow
 {
-    import std.conv : to;
+    import flint.serde.java_number : javaDoubleString;
 
-    if (value != value)
-        return "NaN";
-    if (value == double.infinity)
-        return "Infinity";
-    if (value == -double.infinity)
-        return "-Infinity";
-    if (value == cast(long) value && value > -1e16 && value < 1e16)
-        return (cast(long) value).to!string ~ ".0";
-    return value.to!string;
+    return javaDoubleString(value);
+}
+
+/// Java's `Float.toString`.
+string floatToString(float value) pure nothrow
+{
+    import flint.serde.java_number : javaFloatString;
+
+    return javaFloatString(value);
 }
 
 private string decimal(long value) pure nothrow
@@ -645,7 +664,7 @@ int javaHashCode(T)(T value)
         static if (__traits(hasMember, T, "hashCode") && is(typeof(value.hashCode()) : int))
             return value.hashCode();
         else
-            return hashCode(cast(Object) value);
+            return cast(int) objectToHash(cast(Object) value);
     }
     else static if (__traits(hasMember, T, "hashCode"))
         return value.hashCode();

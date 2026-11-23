@@ -1,0 +1,20 @@
+name "context"
+description "Spring Framework's spring-context for Flint: application contexts fed by Flint AOT, events, lifecycle, stereotypes"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:engine-aot" version="*"
+dependency "flint:java" version="*"
+dependency "flint:core" version="*"
+dependency "flint:beans" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

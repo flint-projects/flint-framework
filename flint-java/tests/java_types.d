@@ -152,6 +152,7 @@ unittest
     assert(Boolean.parseBoolean("TRUE") && !Boolean.parseBoolean("yes") && !Boolean.parseBoolean(null));
     assert(Double.parseDouble(" 2.5 ") == 2.5 && Double.parseDouble("1e3") == 1000);
     assert(valueOf(1.0) == "1.0" && valueOf(2.5) == "2.5" && valueOf(true) == "true");
+    assert(Double.toString(1e7) == "1.0E7" && Double.toString(0.0001) == "1.0E-4" && valueOf(0.1f) == "0.1");
     Owner nobody;
     assert(valueOf(nobody) == "null" && valueOf(42) == "42");
 }
@@ -427,6 +428,29 @@ unittest
 
 unittest
 {
+    // java.util.Properties: Java's .properties format.
+    import flint.java.util : Properties;
+
+    auto defaults = new Properties;
+    defaults.setProperty("fallback", "yes");
+    auto p = new Properties(defaults);
+    p.load("# comment\n! also\nserver.port=8080\nname : Ada Lovelace\nspaced   value\n"
+            ~ "multi = one, \\\n    two\nescaped\\ key=a\\tb\\u00e9\n  \nempty=\n");
+    assert(p.getProperty("server.port") == "8080" && p.getProperty("name") == "Ada Lovelace");
+    assert(p.getProperty("spaced") == "value" && p.getProperty("multi") == "one, two");
+    assert(p.getProperty("escaped key") == "a\tbé" && p.getProperty("empty") == "");
+    assert(p.getProperty("fallback") == "yes" && p.getProperty("missing", "d") == "d");
+    assert(p.stringPropertyNames().size() == 7);
+    bool threw;
+    try
+        new Properties().load("bad=\\u12x4");
+    catch (IllegalArgumentException e)
+        threw = e.getMessage() == "Malformed \\uxxxx encoding.";
+    assert(threw);
+}
+
+unittest
+{
     // Map!(string, Any): Spring's Map<String, Object> (model maps, error attributes) is @safe.
     import flint.engine.aot.any : Any;
 
@@ -435,4 +459,25 @@ unittest
     model.put("error", Any.of("Not Found"));
     assert(model.get("status").get!int == 404 && model.containsValue(Any.of("Not Found")));
     assert(model.equals(cast(Object) new LinkedHashMap!(string, Any)(model)));
+}
+
+unittest
+{
+    // Descriptor builders over flint:java collections (contract 2 runtime extensions).
+    import flint.engine.aot.any : Any;
+    import flint.engine.aot.descriptor : descriptorOf;
+
+    auto lists = descriptorOf!(List!int);
+    auto built = lists.fromElements([Any.of(1), Any.of(2)]);
+    assert(built.get!(List!int).toArray() == [1, 2] && lists.length(built) == 2);
+    assert(lists.element(built, 1).get!int == 2);
+    auto maps = descriptorOf!(Map!(string, int));
+    auto map = maps.fromEntries([Any.of("a")], [Any.of(1)]);
+    assert(map.get!(Map!(string, int)).get("a") == 1 && maps.toKeys(map)[0].get!string == "a");
+    auto optionals = descriptorOf!(Optional!int);
+    auto some = optionals.wrap(Any.of(5));
+    assert(some.get!(Optional!int).get() == 5 && optionals.unwrap(some).get!int == 5);
+    auto none = optionals.wrap(Any.init);
+    assert(optionals.unwrap(none).isNull);
+    assert(descriptorOf!(Set!string).fromElements([Any.of("x")]).get!(Set!string).contains("x"));
 }

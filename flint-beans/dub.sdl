@@ -1,0 +1,19 @@
+name "beans"
+description "Spring Framework's spring-beans for Flint: flint.beans (bean factories fed by Flint AOT bean definitions)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:engine-aot" version="*"
+dependency "flint:java" version="*"
+dependency "flint:core" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}
