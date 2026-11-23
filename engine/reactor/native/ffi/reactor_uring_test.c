@@ -132,6 +132,70 @@ static void borrowed_readiness(void *owner)
     CHECK(close(ends[0]) == 0 && close(ends[1]) == 0);
 }
 
+/* More operations in flight than the submission queue holds: `reserve` submits the full queue and continues, and
+ * every operation still completes once. */
+static void beyond_submission_queue(void)
+{
+    enum { operations = 600 };
+    void *owner = NULL;
+    CHECK(flint_uring_open(2 * (operations + 1), &owner) == 0);
+    int ends[2];
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, ends) == 0);
+    for (uint64_t i = 1; i <= operations; ++i)
+        CHECK(flint_uring_poll_readable(owner, ends[0], i) == 0);
+    const char input = 7;
+    CHECK(write(ends[1], &input, 1) == 1);
+    static unsigned char seen[operations + 1];
+    for (size_t i = 0; i < operations; ++i) {
+        uint64_t token;
+        int state;
+        CHECK(flint_uring_wait(owner, 1000, &token, &state) == 1);
+        CHECK(token >= 1 && token <= operations && !seen[token]);
+        CHECK(state >= 0 && (state & POLLIN) != 0);
+        seen[token] = 1;
+    }
+    uint64_t token;
+    int state;
+    CHECK(flint_uring_wait(owner, 5, &token, &state) == 0);
+    CHECK(close(ends[0]) == 0 && close(ends[1]) == 0);
+    flint_uring_close(owner);
+}
+
+/* Resident kB of this process's io_uring ring mappings. */
+static long ring_resident_kb(void)
+{
+    FILE *maps = fopen("/proc/self/smaps", "r");
+    CHECK(maps != NULL);
+    char line[512];
+    int ring = 0;
+    long total = 0;
+    while (fgets(line, sizeof(line), maps) != NULL) {
+        long kb;
+        /* A mapping starts with its lowercase-hex address range; its attributes start with a capitalized key. */
+        if ((line[0] >= '0' && line[0] <= '9') || (line[0] >= 'a' && line[0] <= 'f'))
+            ring = strstr(line, "anon_inode:[io_uring]") != NULL;
+        else if (ring && sscanf(line, "Rss: %ld kB", &kb) == 1)
+            total += kb;
+    }
+    fclose(maps);
+    return total;
+}
+
+/* The HTTP engine's 4,160 operations per worker: the completion queue holds them all, and the submission queue
+ * stays small, so a worker's rings were 1,540 kB resident and are now about a fifth of that. */
+static void ring_footprint(void)
+{
+    const long before = ring_resident_kb();
+    void *owner = NULL;
+    CHECK(flint_uring_open(2 * (4160 + 1), &owner) == 0);
+    const long rings = ring_resident_kb() - before;
+    if (rings > 400) {
+        fprintf(stderr, "io_uring rings take %ld kB\n", rings);
+        exit(EXIT_FAILURE);
+    }
+    flint_uring_close(owner);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc == 2 && strcmp(argv[1], "--deny-setup") == 0)
@@ -149,5 +213,7 @@ int main(int argc, char *argv[])
     accept_connection(owner);
     borrowed_readiness(owner);
     flint_uring_close(owner);
+    beyond_submission_queue();
+    ring_footprint();
     return 0;
 }

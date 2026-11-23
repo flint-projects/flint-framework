@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
+/* Submission-queue entries per ring (64 bytes each); see flint_uring_open. */
+#define FLINT_URING_SQ_ENTRIES 256u
+
 struct flint_uring {
     struct io_uring ring;
     size_t pending;
@@ -39,8 +42,15 @@ int flint_uring_open(unsigned entries, void **out)
     struct flint_uring *owner = calloc(1, sizeof(*owner));
     if (owner == NULL)
         return -ENOMEM;
+    /* `entries` bounds the operations in flight, which the completion queue must hold. The submission queue only
+     * holds what one loop pass prepares before it submits, and `reserve` submits early when it fills, so it is
+     * capped: the kernel keeps both rings resident, and at the HTTP engine's 4,160 operations per worker a
+     * submission queue as large as the completion queue cost 1 MiB of SQEs per worker. */
     struct io_uring_params params = {0};
-    int status = io_uring_queue_init_params(entries, &owner->ring, &params);
+    params.flags = IORING_SETUP_CQSIZE;
+    params.cq_entries = entries;
+    unsigned submission = entries < FLINT_URING_SQ_ENTRIES ? entries : FLINT_URING_SQ_ENTRIES;
+    int status = io_uring_queue_init_params(submission, &owner->ring, &params);
     if (status < 0) {
         free(owner);
         return status;
@@ -72,6 +82,14 @@ static struct io_uring_sqe *reserve(struct flint_uring *owner)
     if (owner->pending == owner->limit)
         return NULL;
     struct io_uring_sqe *sqe = io_uring_get_sqe(&owner->ring);
+    if (sqe == NULL) {
+        /* The submission queue is full of prepared entries; hand them to the kernel and take a fresh one. The
+         * completion queue still has room for every pending operation, so -EBUSY cannot come from overflow. */
+        int status = io_uring_submit(&owner->ring);
+        if (status < 0 && status != -EAGAIN && status != -EBUSY && status != -EINTR)
+            return NULL;
+        sqe = io_uring_get_sqe(&owner->ring);
+    }
     if (sqe != NULL)
         ++owner->pending;
     return sqe;
