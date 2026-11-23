@@ -647,3 +647,15 @@ unittest
     assert(conflict.length && conflict[0 .. 37] == "Different @AliasFor mirror values for", conflict);
     assert(descriptorOf!OwnerService.annotations[0].error is null);
 }
+
+unittest
+{
+    import flint.engine.aot.mapping : ArgumentSpec, HandlerMapping;
+
+    // Contract 3: generated code fills the descriptor fields one by one.
+    ArgumentSpec argument;
+    argument.descriptor = descriptorOf!OwnerService;
+    HandlerMapping mapping;
+    mapping.returnDescriptor = descriptorOf!OwnerService;
+    assert(argument.descriptor.name == mapping.returnDescriptor.name);
+}

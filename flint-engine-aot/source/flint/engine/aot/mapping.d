@@ -43,7 +43,7 @@ struct ArgumentSpec
     MergedAnnotation[] annotations;
     /// Contract 3: the parameter type's descriptor (`descriptorOf!T`), so dispatch need not look it up by `type`
     /// per request; null for scalars, `string`, and older generated code (callers then look up `type`).
-    const(Descriptor) descriptor;
+    Descriptor descriptor;
 }
 
 /// The resolved arguments of one invocation.
@@ -95,7 +95,7 @@ struct HandlerMapping
     string source;
     /// Contract 3: the return type's descriptor; null for scalars, `void`, and older generated code (callers then
     /// look up `returnType`).
-    const(Descriptor) returnDescriptor;
+    Descriptor returnDescriptor;
 }
 
 /// A generated exception-handler invoker: `(bean, exception, arguments, ref result)`.
