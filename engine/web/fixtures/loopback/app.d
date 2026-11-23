@@ -8,8 +8,8 @@ import flint.arena : Error, Result, Status, Text;
 import flint.conc : Context, Deadline;
 import flint.engine.reactor : Reactor;
 import flint.validate : NotBlank, Valid;
-import flint.engine.web : ControllerAdvice, enableTls, Get, PathVariable, Post, QueryParam, RequestBody,
-    RequestContext, Response, RestController, Server, ServerOptions, WorkerController,
+import flint.engine.web : ControllerAdvice, enableHttp2, enableTls, Get, PathVariable, Post, QueryParam,
+    RequestBody, RequestContext, Response, RestController, Server, ServerOptions, WorkerController,
     registerAdvice, registerController;
 import std.conv : to;
 
@@ -186,6 +186,9 @@ int main(string[] arguments)
     const port = to!ushort(arguments[1]);
     if (tls)
         enableTls();
+    // h2 prior knowledge, and TLS whose ALPN offers h2.
+    if (tls || arguments[2] == "h2")
+        enableHttp2();
     const options = tls ? fixtureOptions(port, arguments[2], arguments[3], arguments[4]) : fixtureOptions(port,
             arguments[2], null, null);
     return serve(options, stress);

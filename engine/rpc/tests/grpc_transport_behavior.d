@@ -9,8 +9,8 @@ import flint.engine.reactor : Reactor;
 import flint.engine.http : ClientOptions, HttpClient, HttpStream, HttpStreamField, HttpStreamMode, HttpStreamOptions;
 import flint.engine.rpc : GrpcCall, GrpcCallOptions, GrpcService, RpcCode, RpcStatus, RpcStream,
     StreamLimits, beginGrpc, registerGrpc;
-import flint.engine.web : Method, Request, RequestContext, Server, ServerOptions, StreamField,
-    StreamMode, StreamRoute, StreamToken;
+import flint.engine.web : enableHttp2, Method, Request, RequestContext, Server, ServerOptions,
+    StreamField, StreamMode, StreamRoute, StreamToken;
 
 @safe:
 
@@ -265,6 +265,7 @@ private void startFixture(ref Fixture fixture) @system
     options.maxConnectionsPerCore = 16;
     options.maxStreamsPerConnection = 32;
     options.http2PriorKnowledge = true;
+    enableHttp2();
     check(fixture.server.start(options));
     fixture.actions = new Actions;
     fixture.raw = new RawRoutes;

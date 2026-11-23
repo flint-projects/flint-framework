@@ -4,8 +4,8 @@ module app;
 import core.atomic : atomicLoad, atomicStore;
 import flint.arena : Error, Result, Status;
 import flint.conc : Context, Deadline;
-import flint.engine.web : Method, Request, RequestContext, Response, Server, ServerOptions,
-    StreamMode, StreamRoute, StreamToken;
+import flint.engine.web : enableHttp2, Method, Request, RequestContext, Response, Server,
+    ServerOptions, StreamMode, StreamRoute, StreamToken;
 import std.conv : to;
 
 @safe:
@@ -45,6 +45,8 @@ int main(string[] args)
     ServerOptions options;
     options.port = to!ushort(args[1]);
     options.http2PriorKnowledge = args[2] == "h2";
+    if (options.http2PriorKnowledge)
+        enableHttp2();
     options.maxConnectionsPerCore = 4;
     options.maxStreamsPerConnection = 4;
     options.maxStreamingRequestBytes = 4 * 1024 * 1024;

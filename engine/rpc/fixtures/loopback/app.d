@@ -7,7 +7,7 @@ import flint.conc : Context, Deadline;
 import flint.engine.reactor : Reactor;
 import flint.engine.rpc : GrpcService, RpcCode, RpcHandler, RpcStatus, RpcStream, Sse, SseEvent,
     WebSocket, WebSocketPeer, registerGrpc, registerSse, registerWebSocket, sendEvent, sendHeartbeat;
-import flint.engine.web : Method, Request, RequestContext, Response, Server, ServerOptions;
+import flint.engine.web : enableHttp2, Method, Request, RequestContext, Response, Server, ServerOptions;
 import std.conv : to;
 
 @safe:
@@ -24,6 +24,8 @@ int main(string[] arguments)
     options.maxConnectionsPerCore = 32;
     options.maxStreamsPerConnection = 64;
     options.http2PriorKnowledge = arguments[2] == "h2";
+    if (options.http2PriorKnowledge)
+        enableHttp2();
     options.idleTimeoutNanos = 15_000_000_000;
     Server server;
     if (server.start(options).code != Status.ok)

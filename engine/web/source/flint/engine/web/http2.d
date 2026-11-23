@@ -11,6 +11,7 @@ import flint.engine.reactor : Completion, CompletionDelegate, ConnectionId, IoId
 import flint.engine.web.dispatch : executeMatched, executeStream, failureResponse, liveBody, lookupRoute;
 import flint.engine.web.ffi.http2 : H2Chunk, H2Event, H2Output, H2Session, deferOutput, holdStreamCredit;
 import flint.engine.web.http1 : Http1Reader;
+import flint.engine.web.http2_endpoint : Http2Endpoint;
 import flint.engine.web.router : Match, RouteTable;
 import flint.engine.web.stream : StreamEndpoint, StreamField, StreamMode, StreamToken;
 import flint.engine.web.stream_queues : StreamQueues;
@@ -65,7 +66,7 @@ private struct Session
 /// A worker-local stream slot cannot recycle while a posted handler or final send can reference it.
 private struct Stream
 {
-    H2Runtime runtime;
+    H2Driver!() runtime;
     TaskDelegate action;
     uint index;
     ConnectionId connection;
@@ -96,11 +97,9 @@ private struct Stream
     }
 }
 
-// A template class is absent from ModuleInfo, so only a listener that enables HTTP/2 retains the driver and
-// nghttp2; linking this module for its types does not.
-package(flint.engine.web) alias H2Runtime = H2Driver!();
-
-package(flint.engine.web) final class H2Driver() : StreamEndpoint
+// A template class is absent from ModuleInfo, and only flint.engine.web.h2.enableHttp2 instantiates this one, so only
+// a program that enables HTTP/2 retains the driver and nghttp2.
+package(flint.engine.web) final class H2Driver() : StreamEndpoint, Http2Endpoint
 {
     private ServerOptions options;
     private CompletionDelegate writeDone;

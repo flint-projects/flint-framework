@@ -12,7 +12,7 @@ import flint.engine.reactor : AcceptDelegate, Completion, CompletionDelegate, Co
 import flint.engine.web.dispatch : executeMatched, executeStream, failureResponse, lookupRoute;
 import flint.engine.web.fiber : FiberEndpoint, FiberHandler, FiberResponse, FiberRoute,
     hasConnectionToken, unknownLength;
-import flint.engine.web.http2 : H2Runtime;
+import flint.engine.web.http2_endpoint : Http2Endpoint, http2Factory;
 import flint.engine.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
 import flint.engine.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.engine.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
@@ -131,6 +131,8 @@ struct Server
                 else
                     return Error(Status.unsupported, "pinned nghttp2 provider is unavailable");
             }
+            if (allowsH2(options) && http2Factory() is null)
+                return Error(Status.unsupported, "HTTP/2 is not linked: call flint.engine.web.h2.enableHttp2() first");
             if (hasTls(options) && tlsFactory() is null)
                 return Error(Status.unsupported, "TLS is not linked: call flint.engine.web.tls.enableTls() first");
             auto state = new Runtime(options);
@@ -403,7 +405,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
     private CompletionDelegate writeDone;
     private Reactor reactor;
     private RouteTable routes;
-    private H2Runtime http2;
+    private Http2Endpoint http2;
     private TlsTransport tls;
     private Connection[] connections;
     private WorkerLifecycle[] workers;
@@ -507,7 +509,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         AcceptDelegate acceptH2;
         if (allowsH2(limits))
         {
-            http2 = new H2Runtime(limits, routes, serverContext, drainContext);
+            http2 = http2Factory()(limits, routes, serverContext, drainContext);
             acceptH2 = &http2.accept;
             if (limits.http2PriorKnowledge)
                 acceptedCallback = acceptH2;

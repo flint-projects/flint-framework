@@ -3,6 +3,7 @@ module flint.engine.web.http2_behavior;
 import flint.arena : Buffer, Error, Result, Status;
 import flint.conc : Context, Deadline;
 import flint.engine.web.http1_socket_behavior : assertCurrentDate, fieldValue;
+import flint.engine.web.h2 : enableHttp2;
 import flint.engine.web.runtime : Server;
 import flint.engine.web.stream : StreamField, StreamMode, StreamRoute, StreamToken;
 import flint.engine.web.types : Method, Request, RequestContext, Response, ServerOptions;
@@ -75,6 +76,7 @@ unittest
     options.maxConnectionsPerCore = 16;
     options.http2 = true;
     options.http2PriorKnowledge = true;
+    enableHttp2();
     assert(server.start(options).code == Status.ok);
     scope (exit)
         server.shutdown(Deadline.afterMillis(5_000).monotonicNanoseconds);
