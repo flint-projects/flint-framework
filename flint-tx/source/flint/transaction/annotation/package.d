@@ -2,12 +2,18 @@
 // Copyright 2002-present the original author or authors.
 // Licensed under the Apache License, Version 2.0.
 // Modified by the Flint authors.
+// Also ported: EnableTransactionManagement.java and RollbackOn.java.
 
 /++
-`org.springframework.transaction.annotation`: `@Transactional` and the `Propagation` and `Isolation` enums it uses.
-An annotation module is a leaf (rule R2): it imports only `flint.core.annotation`, so the enum values are the
-`TransactionDefinition` constants written out, and Java's `value()` is a free function called through UFCS:
-`Propagation.REQUIRES_NEW.value()`.
+`org.springframework.transaction.annotation`: `@Transactional`, `@EnableTransactionManagement` and the enums they use.
+An annotation module is a leaf (rule R2): it imports only UDA structs (`flint.core.annotation`, and `@Import` from
+`flint.context.annotation`), so the enum values are the `TransactionDefinition` constants written out, and Java's
+`value()` is a free function called through UFCS: `Propagation.REQUIRES_NEW.value()`.
+
+`@EnableTransactionManagement` imports `ProxyTransactionManagementConfiguration` by its qualified name: that
+configuration, in the child module `flint.transaction.annotation.configuration`, builds the interceptor, which reads
+`@Transactional` from this module. Flint AOT always proxies by subclass, so `proxyTargetClass` and Spring's `mode`
+(only `AdviceMode.PROXY` applies) have no effect.
 
 Flint AOT applies `@Transactional` through a proxy subclass whose advice chain holds `TransactionInterceptor`
 (aot-contract section 7). `Class`-valued attributes are `ClassRef`s: `rollbackFor: [classOf!IOException]`.
@@ -15,6 +21,7 @@ Also ported from Propagation.java and Isolation.java.
 +/
 module flint.transaction.annotation;
 
+import flint.context.annotation : Import;
 import flint.core.annotation : AliasFor, ClassRef;
 
 @safe:
@@ -54,6 +61,34 @@ struct Transactional
     ClassRef[] noRollbackFor;
     /// Exception name patterns that must not cause a rollback.
     string[] noRollbackForClassName;
+}
+
+/++
+Enables Spring's annotation-driven transaction management capability: `@Transactional` methods of the context's
+beans run in transactions, through `ProxyTransactionManagementConfiguration`'s `TransactionInterceptor`.
++/
+@Import([
+    ClassRef("flint.transaction.annotation.configuration.ProxyTransactionManagementConfiguration")
+])
+struct EnableTransactionManagement
+{
+    /// Whether subclass-based proxies are to be created, as opposed to interface-based ones. Flint AOT's proxies
+    /// are always subclasses.
+    bool proxyTargetClass;
+    /// The ordering of the execution of the transaction advisor when multiple advices apply at a specific joinpoint
+    /// (`Ordered.LOWEST_PRECEDENCE` by default).
+    int order = int.max;
+    /// The rollback-on behavior for the entire transaction management setup.
+    RollbackOn rollbackOn = RollbackOn.RUNTIME_EXCEPTIONS;
+}
+
+/// An enum for global rollback-on behavior.
+enum RollbackOn
+{
+    /// The default rollback-on behavior: rollback on `RuntimeException` as well as `Error`.
+    RUNTIME_EXCEPTIONS,
+    /// The alternative mode: rollback on all exceptions, including any checked `Exception`.
+    ALL_EXCEPTIONS,
 }
 
 /// Enumeration that represents transaction propagation behaviors for use with the `Transactional` annotation,
