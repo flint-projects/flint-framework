@@ -30,9 +30,7 @@ unittest
     assert(isValidFor(constraint, "-12456.22"));
     assert(isValidFor(constraint, "-000000000.22"));
     //should throw number format exception
-    // LIKELY BUG: an unparsable numeric String throws HV000030 instead of being invalid.
-    version (FlintNumericStringParseFailure)
-        assert(!isValidFor(constraint, ""));
+    assert(!isValidFor(constraint, ""));
     assert(!isValidFor(constraint, "256874.0"));
     assert(!isValidFor(constraint, "12.0001"));
 }

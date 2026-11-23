@@ -298,6 +298,9 @@ private bool checkNumber(ref const BuiltinConstraint c, string simple, ref Any v
     if (simple == "Past" || simple == "PastOrPresent" || simple == "Future" || simple == "FutureOrPresent")
         return checkTemporal(c, simple, value, propertyPath);
     const read = readNumber(value);
+    // The CharSequence validators' `new BigDecimal(value.toString())` threw NumberFormatException: invalid.
+    if (read.unparsable)
+        return false;
     const integral = read.integral;
     const number = read.number;
     const whole = read.whole;
@@ -393,6 +396,7 @@ private struct NumberRead
     bool integral;
     double number = double.nan;
     long whole;
+    bool unparsable; // a String that is not BigDecimal syntax
 }
 
 // Reads an integral, floating-point or numeric String value.
@@ -407,8 +411,56 @@ private NumberRead readNumber(ref Any value)
         return NumberRead(false, value.get!double());
     // Hibernate's validators for CharSequence parse a BigDecimal; an unparsable String is invalid.
     if (value.holds!string())
-        return NumberRead(false, decimal(value.get!string()));
+    {
+        const text = stripWhite(value.get!string());
+        if (!bigDecimalSyntax(text))
+            return NumberRead(false, double.nan, 0, true);
+        return NumberRead(false, decimal(text));
+    }
     return NumberRead.init;
+}
+
+// `new BigDecimal(String)`'s syntax: an optional sign, digits with an optional fraction (at least one digit in
+// all), and an optional exponent. No suffix, NaN or Infinity, unlike Double.parseDouble.
+private bool bigDecimalSyntax(string text) pure nothrow @nogc
+{
+    static bool digit(char c) pure nothrow @nogc
+    {
+        return c >= '0' && c <= '9';
+    }
+
+    size_t at = text.length && (text[0] == '+' || text[0] == '-') ? 1 : 0;
+    size_t digits;
+    for (; at < text.length && digit(text[at]); ++at)
+        ++digits;
+    if (at < text.length && text[at] == '.')
+        for (++at; at < text.length && digit(text[at]); ++at)
+            ++digits;
+    if (digits == 0)
+        return false;
+    if (at < text.length && (text[at] == 'e' || text[at] == 'E'))
+    {
+        ++at;
+        if (at < text.length && (text[at] == '+' || text[at] == '-'))
+            ++at;
+        const exponentStart = at;
+        while (at < text.length && digit(text[at]))
+            ++at;
+        if (at == exponentStart)
+            return false;
+    }
+    return at == text.length;
+}
+
+@("bigDecimalSyntax accepts what new BigDecimal(String) accepts")
+unittest
+{
+    foreach (text; ["0", "-1", "+2", "15.0", ".5", "5.", "-000000000.22", "1e3", "2.5E-4", "1E+2"])
+        assert(bigDecimalSyntax(text), text);
+    foreach (text; [
+            "", "15l", "15f", "1d", "NaN", "Infinity", ".", "-", "1e", "1e+", "1.2.3", "0x10", "1 2"
+        ])
+        assert(!bigDecimalSyntax(text), text);
 }
 
 private double decimal(string text) pure nothrow

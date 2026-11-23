@@ -72,7 +72,5 @@ private void testMaxValidator(A)(A constraint, bool inclusive)
     assert(isValidFor(constraint, "-14.99"));
     assert(!isValidFor(constraint, "20"));
     // number format exception
-    // LIKELY BUG: an unparsable numeric String throws HV000030 instead of being invalid.
-    version (FlintNumericStringParseFailure)
-        assert(!isValidFor(constraint, "15l"));
+    assert(!isValidFor(constraint, "15l"));
 }

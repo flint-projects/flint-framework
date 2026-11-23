@@ -28,9 +28,7 @@ unittest
     assert(!isValidFor(constraint, "-10"));
     assert(!isValidFor(constraint, "-14.99"));
     // number format exception
-    // LIKELY BUG: an unparsable numeric String throws HV000030 instead of being invalid.
-    version (FlintNumericStringParseFailure)
-        assert(!isValidFor(constraint, "15l"));
+    assert(!isValidFor(constraint, "15l"));
 }
 
 @("NegativePositiveValidatorForStringTest.testIsValidPositiveOrZeroValidator")
@@ -44,9 +42,7 @@ unittest
     assert(!isValidFor(constraint, "-10"));
     assert(!isValidFor(constraint, "-14.99"));
     // number format exception
-    // LIKELY BUG: an unparsable numeric String throws HV000030 instead of being invalid.
-    version (FlintNumericStringParseFailure)
-        assert(!isValidFor(constraint, "15l"));
+    assert(!isValidFor(constraint, "15l"));
 }
 
 @("NegativePositiveValidatorForStringTest.testIsValidNegativeValidator")
@@ -60,9 +56,7 @@ unittest
     assert(isValidFor(constraint, "-10"));
     assert(isValidFor(constraint, "-14.99"));
     // number format exception
-    // LIKELY BUG: an unparsable numeric String throws HV000030 instead of being invalid.
-    version (FlintNumericStringParseFailure)
-        assert(!isValidFor(constraint, "15l"));
+    assert(!isValidFor(constraint, "15l"));
 }
 
 @("NegativePositiveValidatorForStringTest.testIsValidNegativeOrZeroValidator")
@@ -76,7 +70,5 @@ unittest
     assert(isValidFor(constraint, "-10"));
     assert(isValidFor(constraint, "-14.99"));
     // number format exception
-    // LIKELY BUG: an unparsable numeric String throws HV000030 instead of being invalid.
-    version (FlintNumericStringParseFailure)
-        assert(!isValidFor(constraint, "15l"));
+    assert(!isValidFor(constraint, "15l"));
 }
