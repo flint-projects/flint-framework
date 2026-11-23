@@ -5,7 +5,8 @@ import flint.arena : Error, Status;
 import flint.di.internal.constructors : noConstructor;
 import flint.di.internal.graph : Graph, build, maxBeans;
 import flint.di.internal.lifecycle : Hook;
-import flint.di.internal.registrations : Concrete, Key, Registrations, hasBinding, keyIndex, missing;
+import flint.di.internal.conditions : Resolved;
+import flint.di.internal.registrations : Concrete, Key, hasBinding, keyIndex, missing;
 import std.meta : staticMap;
 
 @safe:
@@ -169,7 +170,7 @@ private ref T byReference(T)(return ref T value)
 /// Startup context for singleton values keyed by explicitly registered types.
 struct AppContext(Beans...)
 {
-    private alias Entries = Registrations!Beans;
+    private alias Entries = Resolved!Beans;
     static assert(Entries.length <= maxBeans, "DI context exceeds the 128-bean limit");
     static if (hasBinding!Entries())
     {

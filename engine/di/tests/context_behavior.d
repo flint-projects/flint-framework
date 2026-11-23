@@ -2,7 +2,8 @@
 module context_behavior;
 
 import flint.arena : Error, Status;
-import flint.di : AppContext, BeanRegistrar, Bind, Inject, PostConstruct, PreDestroy, Service;
+import flint.di : AppContext, AutoConfiguration, BeanRegistrar, Bind, ConditionalOnConfig,
+    ConditionalOnMissingBean, ConfiguredSections, Inject, PostConstruct, PreDestroy, Service;
 
 @safe:
 
@@ -478,4 +479,128 @@ unittest
     assert(context.initialize().code == Status.ok);
     assert(context.get!User().observed == 42);
     context.shutdown();
+}
+
+// ---------------------------------------------------------------- conditional registration (ADR-028)
+
+private interface Clock
+{
+    long now();
+}
+
+@Service private final class SystemClock : Clock
+{
+    long now()
+    {
+        return 1;
+    }
+}
+
+@Service private final class FixedClock : Clock
+{
+    long now()
+    {
+        return 42;
+    }
+}
+
+private struct PoolSettings
+{
+    uint size = 4;
+}
+
+@ConditionalOnConfig("database") @Service private final class DatabasePool
+{
+    uint size;
+    this(PoolSettings settings)
+    {
+        size = settings.size;
+    }
+}
+
+@ConditionalOnConfig("cache") @Service private final class CacheClient
+{
+}
+
+@Service private final class Reporter
+{
+    Clock clock;
+    this(Clock clock)
+    {
+        this.clock = clock;
+    }
+}
+
+private alias StarterDefaults = AutoConfiguration!(Bind!(Clock, SystemClock), PoolSettings, DatabasePool, CacheClient);
+
+@("an auto-configuration's beans are wired only when their configuration section is present")
+unittest
+{
+    AppContext!(StarterDefaults, ConfiguredSections!("database.pool"), Reporter) context;
+    assert(context.initialize().code == Status.ok);
+    assert(context.get!Reporter().clock.now() == 1);
+    assert(context.get!DatabasePool().size == 4);
+    static assert(!__traits(compiles, context.get!CacheClient()));
+    context.shutdown();
+}
+
+@("an explicit registration replaces the auto-configured bean of the same key")
+unittest
+{
+    AppContext!(Bind!(Clock, FixedClock), StarterDefaults, ConfiguredSections!(), Reporter) context;
+    assert(context.initialize().code == Status.ok);
+    assert(context.get!Reporter().clock.now() == 42);
+    static assert(!__traits(compiles, context.get!DatabasePool()));
+    context.shutdown();
+}
+
+@ConditionalOnMissingBean @Service private final class FallbackClock : Clock
+{
+    long now()
+    {
+        return 7;
+    }
+}
+
+@("ConditionalOnMissingBean registers a fallback only when nothing else has its key")
+unittest
+{
+    AppContext!(Bind!(Clock, FallbackClock), Reporter) alone;
+    assert(alone.initialize().code == Status.ok && alone.get!Reporter().clock.now() == 7);
+    alone.shutdown();
+    AppContext!(Bind!(Clock, FallbackClock), Bind!(Clock, FixedClock), Reporter) replaced;
+    assert(replaced.initialize().code == Status.ok && replaced.get!Reporter().clock.now() == 42);
+    replaced.shutdown();
+}
+
+@("a bean that needs a disabled one is a compile-time error naming both")
+unittest
+{
+    @Service static final class Dashboard
+    {
+        this(CacheClient cache)
+        {
+        }
+    }
+
+    static assert(!__traits(compiles, {
+            AppContext!(StarterDefaults, ConfiguredSections!(), Dashboard) context;
+        }));
+    static assert(__traits(compiles, {
+            AppContext!(StarterDefaults, ConfiguredSections!("cache"), Dashboard) c;
+        }));
+}
+
+@("TOML sections: tables, arrays of tables, nested tables and dotted or inline top-level keys")
+unittest
+{
+    import flint.di.internal.conditions : sectionPresent, tomlSections;
+
+    const sections = tomlSections("title = \"x\"\nmail.host = \"h\"\nauth = { realm = \"r\" }\n# [ignored]\n"
+            ~ "[database.pool]\nsize = 4\n[[queues]]\nname = \"q\"\n[web]\nport = 8080\n");
+    assert(sections == ["title", "mail.host", "auth", "database.pool", "queues", "web"], sections[0]);
+    foreach (present; ["database", "database.pool", "mail", "auth", "queues", "web"])
+        assert(sectionPresent(sections, present), present);
+    foreach (absent; ["data", "database.pools", "port", "size", "cache"])
+        assert(!sectionPresent(sections, absent), absent);
 }
