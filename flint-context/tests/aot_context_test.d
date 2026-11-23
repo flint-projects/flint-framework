@@ -144,7 +144,6 @@ private void populate(scope AotRegistry registry) @safe
     service.name = "greetingService";
     service.type = typeNameOf!GreetingService;
     service.types = [typeNameOf!GreetingService];
-    service.dependsOn = ["inMemoryGreetingRepository"];
     service.create = &create_greetingService;
     service.initialize = &initialize_greetingService;
     service.destroy = &destroy_greetingService;
@@ -185,4 +184,26 @@ unittest
     assert(context.getBean!GreetingService().port == 9090);
     assert(!context.containsBean("inMemoryGreetingRepository"));
     context.close();
+}
+
+unittest
+{
+    // dependsOn is strict (contract section 4.3): a name with no definition fails, as @DependsOn does in Spring.
+    import flint.beans.factory : NoSuchBeanDefinitionException;
+    import flint.context.support : GenericApplicationContext;
+
+    auto context = new GenericApplicationContext;
+    BeanDefinition orphan;
+    orphan.name = "orphan";
+    orphan.type = typeNameOf!JdbcGreetingRepository;
+    orphan.types = [orphan.type];
+    orphan.dependsOn = ["missing"];
+    orphan.create = &create_jdbcRepository;
+    context.getDefaultListableBeanFactory().registerAotDefinition(orphan);
+    bool threw;
+    try
+        context.refresh();
+    catch (NoSuchBeanDefinitionException e)
+        threw = e.getMessage() == "No bean named 'missing' available";
+    assert(threw);
 }

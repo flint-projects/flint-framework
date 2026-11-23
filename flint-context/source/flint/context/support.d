@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-context/src/main/java/org/springframework/context/support
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -57,7 +61,7 @@ import flint.engine.aot.query : DerivedQuery;
 import flint.engine.aot.registry : AotRegistry, RegistryPopulator, checkContractVersion, installedRegistry;
 import flint.java.lang : IllegalStateException, Runnable, valueOf;
 import flint.java.util : stableSort;
-import flint.util : Assert, StringValueResolver;
+import flint.util : Assert, StringUtils, StringValueResolver;
 
 @safe:
 
@@ -867,6 +871,7 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
                     "GenericApplicationContext does not support multiple refresh attempts: just call 'refresh' once");
         refreshed = true;
         beanFactory.setConversionService(getConfigurableEnvironment().getConversionService());
+        beanFactory.setDescriptorTable(descriptors);
     }
 
     /// Nothing to release beyond the destroyed singletons.
@@ -1175,5 +1180,27 @@ private final class ContextConditions : ConditionContext
         if (context.webApplicationType == "NONE")
             return false;
         return type == "ANY" || type == context.webApplicationType;
+    }
+
+    bool isAutoConfigurationExcluded(string type)
+    {
+        foreach (excluded; excludedAutoConfigurations())
+            if (excluded == type)
+                return true;
+        return false;
+    }
+
+    /// `flint.autoconfigure.exclude`: through the binder when Flint Boot registered one (comma or indexed lists,
+    /// the `spring.` alias), else the comma list the environment resolves.
+    private string[] excludedAutoConfigurations()
+    {
+        enum key = "flint.autoconfigure.exclude";
+        if (auto binder = context.beanFactory.getConfigurationPropertiesBinder())
+            return binder.bindList(key);
+        string[] result;
+        foreach (entry; StringUtils.commaDelimitedListToStringArray(context.getConfigurableEnvironment()
+                .getProperty(key)))
+            result ~= StringUtils.trimWhitespace(entry);
+        return result;
     }
 }

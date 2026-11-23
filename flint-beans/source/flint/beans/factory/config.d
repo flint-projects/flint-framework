@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-beans/src/main/java/org/springframework/beans/factory/config
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -28,6 +32,8 @@ module flint.beans.factory.config;
 import flint.beans.factory : HierarchicalBeanFactory, ListableBeanFactory;
 import flint.core : AttributeAccessor;
 import flint.core.convert : ConversionService;
+import flint.engine.aot.any : Any;
+import flint.engine.aot.descriptor : Descriptor;
 import flint.util : StringValueResolver;
 
 @safe:
@@ -203,4 +209,20 @@ interface ConfigurableListableBeanFactory : ListableBeanFactory, ConfigurableBea
     bool isConfigurationFrozen();
     /// Create every non-lazy singleton, then call `SmartInitializingSingleton` callbacks.
     void preInstantiateSingletons();
+}
+
+/++
+Binds `@ConfigurationProperties` beans: the hook Flint AOT's generated `initialize` reaches through
+`BeanFactory.bind` and `bindConstructor`. Flint Boot registers its implementation (over Boot's `Binder` and the
+environment's sources) as a singleton before refresh; the factory finds it by type. Spring does this in Boot's
+`ConfigurationPropertiesBindingPostProcessor`.
++/
+interface ConfigurationPropertiesBinder
+{
+    /// Bind the properties under `prefix` onto `target`, an instance of `type`.
+    void bind(string prefix, ref Any target, const Descriptor type);
+    /// A new instance of `type` built from the properties under `prefix` (constructor binding).
+    Any bindConstructor(string prefix, const Descriptor type);
+    /// The property `name` bound as a list: a comma-separated value or `name[0]`, `name[1]`, ...
+    string[] bindList(string name);
 }

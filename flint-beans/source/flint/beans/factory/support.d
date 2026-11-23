@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-beans/src/main/java/org/springframework/beans/factory/support
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -40,7 +44,8 @@ import flint.beans.factory : BeanCreationException, BeanCurrentlyInCreationExcep
     BeanNotOfRequiredTypeException, DisposableBean, InitializingBean,
     NoSuchBeanDefinitionException, NoUniqueBeanDefinitionException, SmartInitializingSingleton;
 import flint.beans.factory.config : BeanDefinition, BeanPostProcessor,
-    ConfigurableListableBeanFactory, DestructionAwareBeanPostProcessor;
+    ConfigurableListableBeanFactory, ConfigurationPropertiesBinder, DestructionAwareBeanPostProcessor;
+import flint.engine.aot.descriptor : DescriptorTable;
 import flint.core : AliasRegistry, AttributeAccessorSupport, Ordered, PriorityOrdered, SimpleAliasRegistry;
 import flint.core.convert : ConversionService, TypeDescriptor;
 import flint.engine.aot.any : Any;
@@ -366,15 +371,6 @@ private string joinComma(string[] values)
     return result;
 }
 
-/// Supplies `@ConfigurationProperties` binding; installed by Flint Boot.
-interface PropertiesBinder
-{
-    /// Bind the properties under `prefix` onto `target`, JavaBean style.
-    void bind(string prefix, Any target);
-    /// A new `type` built from the properties under `prefix`.
-    Any bindConstructor(string prefix, string type);
-}
-
 /++
 Spring's default `ConfigurableListableBeanFactory` and `BeanDefinitionRegistry`: a factory fed by bean
 definitions, creating singletons on demand.
@@ -392,7 +388,7 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
     private BeanPostProcessor[] postProcessors;
     private StringValueResolver[] valueResolvers;
     private ConversionService conversionService;
-    private PropertiesBinder propertiesBinder;
+    private DescriptorTable descriptors;
     private Object[string] resolvableDependencies;
     private BeanFactory parent;
     private bool frozen;
@@ -439,10 +435,16 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         resolvableDependencies[dependencyType] = autowiredValue;
     }
 
-    /// Install `@ConfigurationProperties` binding.
-    void setPropertiesBinder(PropertiesBinder binder) pure nothrow @nogc
+    /// The descriptors the `@ConfigurationProperties` binder receives (the context's table).
+    void setDescriptorTable(DescriptorTable table) pure nothrow @nogc
     {
-        propertiesBinder = binder;
+        descriptors = table;
+    }
+
+    /// The `ConfigurationPropertiesBinder` bean, or null when none is registered.
+    final ConfigurationPropertiesBinder getConfigurationPropertiesBinder()
+    {
+        return cast(ConfigurationPropertiesBinder) resolveByType(typeNameOf!ConfigurationPropertiesBinder, null, false);
     }
 
     // -----------------------------------------------------------------------------------------------------------
@@ -898,10 +900,6 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
             throw new BeanCreationException(beanName, "Bean definition is abstract", null);
         foreach (dependsOn; definition.getDependsOn())
         {
-            // Flint AOT lists every bean it saw a definition require (contract 4.3); a candidate whose condition
-            // dropped it at startup is skipped rather than failing, since injection resolves by type anyway.
-            if (!containsBean(dependsOn))
-                continue;
             if (isDependent(beanName, dependsOn))
                 throw new BeanCreationException(definition.getResourceDescription(), beanName,
                         "Circular depends-on relationship between '" ~ beanName ~ "' and '" ~ dependsOn ~ "'", null);
@@ -1146,20 +1144,26 @@ class DefaultListableBeanFactory : SimpleAliasRegistry, ConfigurableListableBean
         return service.convert(Any.of(resolved), TypeDescriptor.valueOf!string, new TypeDescriptor(targetType));
     }
 
-    /// Bind configuration properties (delegated to the installed `PropertiesBinder`).
+    /// Bind configuration properties through the `ConfigurationPropertiesBinder` bean.
     final void bindProperties(string prefix, Any target)
     {
-        if (propertiesBinder is null)
-            throw new UnsupportedOperationException("@ConfigurationProperties binding requires flint-boot");
-        propertiesBinder.bind(prefix, target);
+        auto binder = requireBinder();
+        binder.bind(prefix, target, descriptors is null ? null : descriptors.find(target.typeName));
     }
 
-    /// Constructor-bind configuration properties (delegated to the installed `PropertiesBinder`).
+    /// Constructor-bind configuration properties through the `ConfigurationPropertiesBinder` bean.
     final Any bindPropertiesConstructor(string prefix, string type)
     {
-        if (propertiesBinder is null)
-            throw new UnsupportedOperationException("@ConfigurationProperties binding requires flint-boot");
-        return propertiesBinder.bindConstructor(prefix, type);
+        auto binder = requireBinder();
+        return binder.bindConstructor(prefix, descriptors is null ? null : descriptors.find(type));
+    }
+
+    private ConfigurationPropertiesBinder requireBinder()
+    {
+        auto binder = getConfigurationPropertiesBinder();
+        if (binder is null)
+            throw new IllegalStateException("@ConfigurationProperties needs flint:boot");
+        return binder;
     }
 
     // -----------------------------------------------------------------------------------------------------------
