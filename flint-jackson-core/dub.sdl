@@ -1,0 +1,18 @@
+name "jackson-core"
+description "Jackson 3.1 streaming API for Flint: JsonFactory, JsonGenerator, JsonParser and their features (tools.jackson.core)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:serde" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+    stringImportPaths "tests/golden"
+}
