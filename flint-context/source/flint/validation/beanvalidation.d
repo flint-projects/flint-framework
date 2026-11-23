@@ -372,3 +372,217 @@ class OptionalValidatorFactoryBean : LocalValidatorFactoryBean
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Method validation. Ported from spring-framework v7.1.0, spring-context/src/main/java/org/springframework/
+// validation/beanvalidation/{MethodValidationInterceptor,MethodValidationPostProcessor}.java. Modified by the Flint
+// authors: Flint AOT generates the proxies, so the interceptor is the engine-aot `Advisor` that a proxy's advice
+// chain runs, and the post-processor is the bean that holds it (no BeanPostProcessor wraps beans at run time). A
+// method is its `MethodDescriptor`; only the default group exists; `adaptConstraintViolations` (Spring's
+// MethodValidationException) and Reactor arguments are not ported.
+
+/++
+`MethodValidationInterceptor`: validates the arguments of a call against the parameter constraints of the method
+(`@Min`, `@NotNull`, `@Valid` and the like) before it proceeds, and its return value after, through Jakarta's
+`ExecutableValidator`. Violations throw `ConstraintViolationException`.
++/
+class MethodValidationInterceptor : imported!"flint.engine.aot.proxy".Advisor
+{
+    import flint.engine.aot.descriptor : Descriptor, MethodDescriptor;
+    import flint.engine.aot.proxy : Invocation, Proceed;
+
+    private JakartaValidator validator;
+    private string validatedAnnotationType = "flint.validation.annotation.Validated";
+    private int order = int.max;
+    private string[const(MethodDescriptor)* ] beanTypes;
+
+    /// With the validator of the default `ValidatorFactory`.
+    this()
+    {
+        this(Validation.buildDefaultValidatorFactory());
+    }
+
+    /// With the validator of `validatorFactory`.
+    this(ValidatorFactory validatorFactory)
+    {
+        this(validatorFactory.getValidator());
+    }
+
+    /// With `validator`; a `SpringValidatorAdapter` (such as Boot's `LocalValidatorFactoryBean`) is unwrapped
+    /// to its target, as Spring's `MethodValidationAdapter` does.
+    this(JakartaValidator validator)
+    {
+        this.validator = validator;
+    }
+
+    /// The type-level annotation that marks a bean for method validation; `@Validated` by default.
+    final void setValidatedAnnotationType(string validatedAnnotationType)
+    {
+        if (validatedAnnotationType.length == 0)
+            throw new imported!"flint.java.lang".IllegalArgumentException("'validatedAnnotationType' must not be null");
+        this.validatedAnnotationType = validatedAnnotationType;
+    }
+
+    /// Spring's `AnnotationMatchingPointcut(validatedAnnotationType, true)`: every method of a bean whose type
+    /// carries the annotation. Flint AOT merges it onto the bean's descriptor or, for an annotated interface,
+    /// onto the methods that implement it.
+    bool appliesTo(const Descriptor descriptor, const(MethodDescriptor)* method)
+    {
+        import flint.engine.aot.descriptor : findAnnotation;
+
+        if (method is null || (findAnnotation(descriptor.annotations, validatedAnnotationType) is null
+                && findAnnotation(method.annotations, validatedAnnotationType) is null))
+            return false;
+        synchronized (this)
+            beanTypes[method] = descriptor.name;
+        return true;
+    }
+
+    /// `Ordered.LOWEST_PRECEDENCE` unless set.
+    int getOrder()
+    {
+        return order;
+    }
+
+    /// The advisor order.
+    final void setOrder(int order) pure nothrow @nogc
+    {
+        this.order = order;
+    }
+
+    /// Validate the arguments, proceed, then validate the return value. Throws `ConstraintViolationException`.
+    void invoke(ref Invocation invocation, scope Proceed proceed)
+    {
+        import flint.jakarta.validation : ConstraintViolationException;
+
+        string beanType;
+        synchronized (this)
+        {
+            if (auto found = invocation.method in beanTypes)
+                beanType = *found;
+        }
+        auto target = Any.ofObject(invocation.target, beanType.length ? beanType : typeid(invocation.target).name);
+        auto executable = executableValidator();
+        auto violations = executable.validateParameters(target, invocation.method, invocation.arguments);
+        if (violations.length != 0)
+            throw new ConstraintViolationException(violations);
+        proceed(invocation);
+        violations = executable.validateReturnValue(target, invocation.method, invocation.result);
+        if (violations.length != 0)
+            throw new ConstraintViolationException(violations);
+    }
+
+    private imported!"flint.jakarta.validation.executable".ExecutableValidator executableValidator()
+    {
+        auto target = validator;
+        if (auto adapter = cast(SpringValidatorAdapter) target)
+            target = adapter.getTargetValidator();
+        if (target is null)
+            throw new IllegalStateException("No target Validator set");
+        return target.forExecutables();
+    }
+}
+
+/++
+`MethodValidationPostProcessor`: method validation for beans whose type carries `@Validated` (or the annotation set
+with `setValidatedAnnotationType`). Boot's `ValidationAutoConfiguration` registers it as
+`methodValidationPostProcessor`. After `afterPropertiesSet` it is the `Advisor` the generated proxies of those
+beans run: a `MethodValidationInterceptor` over the configured validator.
++/
+class MethodValidationPostProcessor : imported!"flint.engine.aot.proxy".Advisor, InitializingBean
+{
+    import flint.engine.aot.descriptor : Descriptor, MethodDescriptor;
+    import flint.engine.aot.proxy : Invocation, Proceed;
+
+    private string validatedAnnotationType = "flint.validation.annotation.Validated";
+    private JakartaValidator validator;
+    private JakartaValidator delegate() @safe validatorProvider;
+    private int order = int.max;
+    private MethodValidationInterceptor advisor;
+
+    /// The type-level annotation that marks beans for validation, by fully qualified name (R4).
+    void setValidatedAnnotationType(string validatedAnnotationType)
+    {
+        if (validatedAnnotationType.length == 0)
+            throw new imported!"flint.java.lang".IllegalArgumentException("'validatedAnnotationType' must not be null");
+        this.validatedAnnotationType = validatedAnnotationType;
+    }
+
+    /// Validate with the validator of `validatorFactory`.
+    void setValidatorFactory(ValidatorFactory validatorFactory)
+    {
+        validator = validatorFactory.getValidator();
+    }
+
+    /// Validate with `validator`.
+    void setValidator(JakartaValidator validator)
+    {
+        this.validator = validator;
+    }
+
+    /// Validate with the validator `validatorProvider` returns, asked on first use (Spring's `ObjectProvider`).
+    void setValidatorProvider(JakartaValidator delegate() @safe validatorProvider)
+    {
+        this.validatorProvider = validatorProvider;
+    }
+
+    /// Spring adapts violations to `MethodValidationException` when true; Flint does not port it yet, so `true`
+    /// throws `UnsupportedOperationException`.
+    void setAdaptConstraintViolations(bool adaptViolations)
+    {
+        if (adaptViolations)
+            throw new imported!"flint.java.lang".UnsupportedOperationException(
+                    "MethodValidationException is not ported: violations are thrown as ConstraintViolationException");
+    }
+
+    /// The advisor order; `Ordered.LOWEST_PRECEDENCE` by default.
+    void setOrder(int order)
+    {
+        this.order = order;
+        if (advisor !is null)
+            advisor.setOrder(order);
+    }
+
+    /// Build the interceptor; with no validator set, the default provider's validator.
+    void afterPropertiesSet()
+    {
+        advisor = createMethodValidationAdvice();
+        advisor.setValidatedAnnotationType(validatedAnnotationType);
+        advisor.setOrder(order);
+    }
+
+    /// The interceptor over the configured validator.
+    protected MethodValidationInterceptor createMethodValidationAdvice()
+    {
+        if (validator !is null)
+            return new MethodValidationInterceptor(validator);
+        if (validatorProvider !is null)
+            return new MethodValidationInterceptor(validatorProvider());
+        return new MethodValidationInterceptor();
+    }
+
+    /// Whether `method` of a bean described by `descriptor` is validated.
+    bool appliesTo(const Descriptor descriptor, const(MethodDescriptor)* method)
+    {
+        return checkedAdvisor().appliesTo(descriptor, method);
+    }
+
+    /// The advisor order.
+    int getOrder()
+    {
+        return order;
+    }
+
+    /// Validate the call through the interceptor.
+    void invoke(ref Invocation invocation, scope Proceed proceed)
+    {
+        checkedAdvisor().invoke(invocation, proceed);
+    }
+
+    private MethodValidationInterceptor checkedAdvisor()
+    {
+        if (advisor is null)
+            afterPropertiesSet();
+        return advisor;
+    }
+}

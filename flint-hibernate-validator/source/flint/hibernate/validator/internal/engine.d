@@ -11,20 +11,23 @@
  * with merged constraint annotations) instead of reflecting over classes; the Default
  * group is the only group until Class-valued annotation elements exist. Violations
  * are returned in property declaration order, a deterministic instance of the Set
- * Hibernate returns.
+ * Hibernate returns. Executable validation reads a method's parameters and return-value
+ * constraints from its AOT MethodDescriptor; parameter nodes carry the D parameter names.
  */
 
 /// The validation engine: walking descriptors, cascading, and building violations.
 module flint.hibernate.validator.internal.engine;
 
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : Descriptor, DescriptorTable, MergedAnnotation, PropertyDescriptor, TypeKind;
+import flint.engine.aot.descriptor : Descriptor, DescriptorTable, MergedAnnotation,
+    MethodDescriptor, PropertyDescriptor, TypeKind;
 import flint.engine.aot.name : typeNameOf;
 import flint.hibernate.validator.internal.constraintvalidators : BuiltinConstraint, PatternCache,
     attributeText, isBuiltin, isValid, javaConstraintName, javaTypeName, read;
 import flint.hibernate.validator.internal.custom : ConstraintValidatorContextImpl, CustomValidator;
 import flint.jakarta.validation : Constraint, ConstraintViolation, ElementKind, MessageInterpolator,
     Path, UnexpectedTypeException, Valid, ValidationException, Validator, ValidatorFactory;
+import flint.jakarta.validation.executable : ExecutableValidator;
 import flint.jakarta.validation.metadata : ConstraintDescriptor;
 import flint.java.util : RawCollection, RawMap;
 
@@ -105,6 +108,30 @@ final class PathImpl : Path
     {
         auto path = new PathImpl();
         path.nodeList = nodeList.dup;
+        return path;
+    }
+
+    /// The root path of executable validation: one method node (`createPathForExecutable`).
+    static PathImpl createPathForExecutable(string methodName) pure nothrow
+    {
+        auto path = new PathImpl();
+        path.nodeList = [new NodeImpl(methodName, ElementKind.METHOD)];
+        return path;
+    }
+
+    /// A path to parameter `parameterName` of the executable at its root.
+    PathImpl addParameterNode(string parameterName) pure nothrow
+    {
+        auto path = copy();
+        path.nodeList ~= new NodeImpl(parameterName, ElementKind.PARAMETER);
+        return path;
+    }
+
+    /// A path to the return value of the executable at its root.
+    PathImpl addReturnValueNode() pure nothrow
+    {
+        auto path = copy();
+        path.nodeList ~= new NodeImpl("<return value>", ElementKind.RETURN_VALUE);
         return path;
     }
 
@@ -394,7 +421,7 @@ final class ValidatorFactoryImpl : ValidatorFactory
 }
 
 /// Hibernate's `Validator`: validates beans through their descriptors, cascading through `@Valid`.
-final class ValidatorImpl : Validator
+final class ValidatorImpl : Validator, ExecutableValidator
 {
     alias validate = Validator.validate;
     alias validateProperty = Validator.validateProperty;
@@ -445,6 +472,51 @@ final class ValidatorImpl : Validator
                     ~ " in entity " ~ beanType ~ ".");
         run.checkConstraints(Any.init, value, property.annotations, PathImpl.createRootPath()
                 .addPropertyNode(propertyName));
+        return run.violations;
+    }
+
+    /// Validate each parameter value against its parameter's constraints, cascading through `@Valid` parameters.
+    /// Violation paths are `method.parameter`, and their root bean is `object`.
+    ConstraintViolation[] validateParameters(Any object, scope const(MethodDescriptor)* method, Any[] parameterValues)
+    {
+        import flint.engine.aot.text : decimal;
+
+        if (object.isNull())
+            throw new IllegalArgument("HV000116: The object to be validated must not be null.");
+        if (method is null)
+            throw new IllegalArgument("HV000116: The method to be validated must not be null.");
+        if (parameterValues.length != method.parameters.length)
+        {
+            const expected = decimal(cast(long) method.parameters.length);
+            const actual = decimal(cast(long) parameterValues.length);
+            throw new IllegalArgument("HV000181: Wrong number of parameters. Method or constructor "
+                    ~ method.name ~ " expects " ~ expected ~ " parameters, but got " ~ actual ~ ".");
+        }
+        auto run = Run(factory, object, object.typeName());
+        auto root = PathImpl.createPathForExecutable(method.name);
+        foreach (i, ref parameter; method.parameters)
+        {
+            auto value = parameterValues[i];
+            auto at = root.addParameterNode(parameter.name);
+            run.checkConstraints(object, value, parameter.annotations, at);
+            if (findAnnotation(parameter.annotations, typeNameOf!Valid) && !value.isNull())
+                run.cascade(value, at, parameter.type);
+        }
+        return run.violations;
+    }
+
+    /// Validate `returnValue` against the method's return-value constraints, cascading through a `@Valid` method.
+    ConstraintViolation[] validateReturnValue(Any object, scope const(MethodDescriptor)* method, Any returnValue)
+    {
+        if (object.isNull())
+            throw new IllegalArgument("HV000116: The object to be validated must not be null.");
+        if (method is null)
+            throw new IllegalArgument("HV000116: The method to be validated must not be null.");
+        auto run = Run(factory, object, object.typeName());
+        auto at = PathImpl.createPathForExecutable(method.name).addReturnValueNode();
+        run.checkConstraints(object, returnValue, method.annotations, at);
+        if (findAnnotation(method.annotations, typeNameOf!Valid) && !returnValue.isNull())
+            run.cascade(returnValue, at, method.returnType);
         return run.violations;
     }
 }

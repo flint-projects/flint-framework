@@ -158,6 +158,15 @@ interface Validator
     /// Validates all constraints placed on the property `propertyName` of the type named `beanType` were it to have `value`.
     ConstraintViolation[] validateValue(string beanType, string propertyName, Any value);
 
+    /// The delegate for validating parameters and return values of methods. Throws `ValidationException` when the
+    /// provider does not support executable validation.
+    final imported!"flint.jakarta.validation.executable".ExecutableValidator forExecutables()
+    {
+        if (auto executable = cast(imported!"flint.jakarta.validation.executable".ExecutableValidator) this)
+            return executable;
+        throw new ValidationException("Type " ~ typeid(this).name ~ " does not support executable validation.");
+    }
+
     /// Validates all constraints on `object` (R4: one façade over the erased `validate(Any)`).
     ConstraintViolation[] validate(T)(T object) if (!is(T == Any))
     {
