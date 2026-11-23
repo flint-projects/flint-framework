@@ -247,8 +247,8 @@ final class PathPattern
     PathPattern combine(const PathPattern pattern2) const
     {
         if (patternString.length == 0)
-            return pattern2.patternString.length == 0 ? new PathPatternParser().parse("")
-                : new PathPatternParser().parse(pattern2.patternString);
+            return pattern2.patternString.length == 0 ? new PathPatternParser()
+                .parse("") : new PathPatternParser().parse(pattern2.patternString);
         if (pattern2.patternString.length == 0)
             return new PathPatternParser().parse(patternString);
         string left = patternString;
@@ -259,8 +259,8 @@ final class PathPattern
         string right = pattern2.patternString;
         const leftSlash = left.length != 0 && left[$ - 1] == '/';
         const rightSlash = right.length != 0 && right[0] == '/';
-        string joined = leftSlash && rightSlash ? left ~ right[1 .. $] : !leftSlash && !rightSlash ? left ~ "/" ~ right
-            : left ~ right;
+        string joined = leftSlash && rightSlash ? left ~ right[1 .. $] : !leftSlash && !rightSlash
+            ? left ~ "/" ~ right : left ~ right;
         return new PathPatternParser().parse(joined);
     }
 
@@ -319,7 +319,8 @@ final class PathPatternParser
         }
         // Separators count one each in the normalized length.
         string[] segments = splitSegments(pathPattern[start .. $]);
-        pattern.normalizedLength = cast(int)(pattern.leadingSeparator ? 1 : 0) + cast(int)(segments.length > 0 ? segments.length - 1 : 0);
+        pattern.normalizedLength = cast(int)(pattern.leadingSeparator
+                ? 1 : 0) + cast(int)(segments.length > 0 ? segments.length - 1 : 0);
         foreach (index, segment; segments)
         {
             const last = index + 1 == segments.length;
@@ -359,8 +360,8 @@ final class PathPatternParser
                 if (name.length == 0)
                     throw new PatternParseException(position, pathPattern, "Missing variable name");
                 foreach (element; pattern.elements)
-                    if ((element.kind == ElementKind.capture || element.kind == ElementKind.captureSegments)
-                            && element.text == name)
+                    if ((element.kind == ElementKind.capture
+                            || element.kind == ElementKind.captureSegments) && element.text == name)
                         throw new PatternParseException(position, pathPattern,
                                 "Path pattern contains the same variable name twice: " ~ name);
                 pattern.elements ~= Element(ElementKind.capture, name);

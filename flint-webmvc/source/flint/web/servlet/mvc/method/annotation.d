@@ -21,10 +21,10 @@ module flint.web.servlet.mvc.method.annotation;
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.bean : BeanFactory;
-import flint.engine.aot.mapping : AotHandlerMapping = HandlerMapping, ArgumentKind, ArgumentSpec, ExceptionHandlerSpec,
-    HandlerArguments;
-import flint.http : HttpEntity, HttpHeaders, HttpMethod, HttpStatus, HttpStatusCode, MediaType, ProblemDetail,
-    ResponseEntity;
+import flint.engine.aot.mapping : AotHandlerMapping = HandlerMapping, ArgumentKind, ArgumentSpec,
+    ExceptionHandlerSpec, HandlerArguments;
+import flint.http : HttpEntity, HttpHeaders, HttpMethod, HttpStatus, HttpStatusCode, MediaType,
+    ProblemDetail, ResponseEntity;
 import flint.http.converter : HttpMessageConverter, HttpMessageNotReadableException, HttpMessageNotWritableException;
 import flint.http.server : ServletServerHttpRequest, ServletServerHttpResponse;
 import flint.jakarta.servlet : ServletRequest, ServletResponse;
@@ -38,11 +38,11 @@ import flint.web.bind.support : DefaultDataBinderFactory, WebDataBinderFactory;
 import flint.web.context.request : NativeWebRequest, ServletWebRequest, WebRequest;
 import flint.web.method : HandlerMethod;
 import flint.web.method.annotation : AbstractNamedValueMethodArgumentResolver, CookieValueMethodArgumentResolver,
-    ExceptionHandlerMethodResolver, NamedValueInfo, RequestHeaderMethodArgumentResolver,
-    RequestParamMethodArgumentResolver;
+    ExceptionHandlerMethodResolver,
+    NamedValueInfo, RequestHeaderMethodArgumentResolver, RequestParamMethodArgumentResolver;
 import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodArgumentResolverComposite,
-    HandlerMethodReturnValueHandler, HandlerMethodReturnValueHandlerComposite, InvocableHandlerMethod,
-    ModelAndViewContainer;
+    HandlerMethodReturnValueHandler,
+    HandlerMethodReturnValueHandlerComposite, InvocableHandlerMethod, ModelAndViewContainer;
 import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView;
 import flint.web.servlet.handler : AbstractHandlerExceptionResolver;
 import flint.web.cors : CorsConfiguration;
@@ -64,8 +64,9 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
         {
             Object bean = beanFactory.getBean(mapping.bean);
             auto handlerMethod = new HandlerMethod(bean, typeid(bean).name, mapping);
-            registerMapping(new RequestMappingInfo(mapping.paths, mapping.methods, mapping.params, mapping.headers,
-                    mapping.consumes, mapping.produces), handlerMethod, initCorsConfiguration(mapping));
+            registerMapping(new RequestMappingInfo(mapping.paths, mapping.methods, mapping.params,
+                    mapping.headers, mapping.consumes, mapping.produces), handlerMethod,
+                    initCorsConfiguration(mapping));
         }
     }
 
@@ -101,7 +102,8 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
         return config.applyPermitDefaultValues();
     }
 
-    private static void updateCorsConfig(CorsConfiguration config, const(imported!"flint.web.bind.annotation".CrossOrigin)* annotation)
+    private static void updateCorsConfig(CorsConfiguration config,
+            const(imported!"flint.web.bind.annotation".CrossOrigin)* annotation)
     {
         if (annotation is null)
             return;
@@ -130,8 +132,8 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
             config.setMaxAge(annotation.maxAge);
     }
 
-    protected override HandlerMethod createOptionsHandler(string[] declaredMethods, MediaType[] acceptPatch,
-            MediaType[] acceptQuery)
+    protected override HandlerMethod createOptionsHandler(string[] declaredMethods,
+            MediaType[] acceptPatch, MediaType[] acceptQuery)
     {
         auto handler = new HttpOptionsHandler(declaredMethods, acceptPatch, acceptQuery);
         AotHandlerMapping row;
@@ -246,8 +248,8 @@ class ServletRequestMethodArgumentResolver : HandlerMethodArgumentResolver
         return false;
     }
 
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory)
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         switch (parameter.getParameterType())
         {
@@ -255,7 +257,7 @@ class ServletRequestMethodArgumentResolver : HandlerMethodArgumentResolver
             return Any.of(HttpMethod.valueOf(webRequest.getNativeRequest().getMethod()));
         case "flint.web.context.request.WebRequest", "flint.web.context.request.NativeWebRequest",
                 "flint.web.context.request.ServletWebRequest":
-            return Any.of(cast(Object) webRequest);
+                return Any.of(cast(Object) webRequest);
         default:
             return Any.of(cast(Object) webRequest.getNativeRequest());
         }
@@ -268,11 +270,12 @@ class ServletResponseMethodArgumentResolver : HandlerMethodArgumentResolver
     bool supportsParameter(MethodParameter parameter)
     {
         const type = parameter.getParameterType();
-        return type == "flint.jakarta.servlet.http.HttpServletResponse" || type == "flint.jakarta.servlet.ServletResponse";
+        return type == "flint.jakarta.servlet.http.HttpServletResponse"
+            || type == "flint.jakarta.servlet.ServletResponse";
     }
 
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory)
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         if (mavContainer !is null)
             mavContainer.setRequestHandled(true);
@@ -305,7 +308,8 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
         auto inputMessage = new ServletServerHttpRequest(webRequest.getNativeRequest());
         auto contentType = inputMessage.getHeaders().getContentType();
         MediaType effective = contentType !is null ? *contentType : MediaType.APPLICATION_OCTET_STREAM;
-        const body = inputMessage.getBody();
+        const 
+        body = inputMessage.getBody();
         foreach (converter; messageConverters)
         {
             if (converter.canRead(typeName, &effective))
@@ -327,8 +331,8 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
     }
 
     /// Spring's `writeWithMessageConverters`.
-    protected void writeWithMessageConverters(Any value, MethodParameter returnType, NativeWebRequest webRequest,
-            ServletServerHttpResponse outputMessage)
+    protected void writeWithMessageConverters(Any value, MethodParameter returnType,
+            NativeWebRequest webRequest, ServletServerHttpResponse outputMessage)
     {
         auto request = webRequest.getNativeRequest();
         string valueType = value.isNull() ? returnType.getParameterType() : value.typeName();
@@ -359,7 +363,8 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
             MediaType[] compatibleMediaTypes;
             determineCompatibleMediaTypes(acceptableTypes, producibleTypes, compatibleMediaTypes);
             if (compatibleMediaTypes.length == 0 && valueType == "flint.http.ProblemDetail")
-                determineCompatibleMediaTypes(cast(MediaType[]) problemMediaTypes.dup, producibleTypes, compatibleMediaTypes);
+                determineCompatibleMediaTypes(cast(MediaType[]) problemMediaTypes.dup,
+                        producibleTypes, compatibleMediaTypes);
             if (compatibleMediaTypes.length == 0)
             {
                 if (!value.isNull())
@@ -375,7 +380,8 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
                     selected = true;
                     break;
                 }
-                else if (mediaType.equalsTypeAndSubtype(MediaType.ALL) || mediaType.equalsTypeAndSubtype(MediaType("application")))
+                else if (mediaType.equalsTypeAndSubtype(MediaType.ALL)
+                        || mediaType.equalsTypeAndSubtype(MediaType("application")))
                 {
                     selectedMediaType = MediaType.APPLICATION_OCTET_STREAM;
                     selected = true;
@@ -400,8 +406,9 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
         {
             auto producible = request.getAttribute(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
             if (isContentTypePreset || !producible.isNull())
-                throw new HttpMessageNotWritableException("No converter for [" ~ valueType
-                        ~ "] with preset Content-Type '" ~ (contentType is null ? "null" : contentType.toString()) ~ "'");
+                throw new HttpMessageNotWritableException(
+                        "No converter for [" ~ valueType ~ "] with preset Content-Type '" ~ (contentType is null
+                        ? "null" : contentType.toString()) ~ "'");
             MediaType[] supported;
             foreach (converter; messageConverters)
                 supported ~= converter.getSupportedMediaTypes(valueType);
@@ -422,8 +429,8 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
         return result;
     }
 
-    private static void determineCompatibleMediaTypes(MediaType[] acceptableTypes, MediaType[] producibleTypes,
-            ref MediaType[] mediaTypesToUse)
+    private static void determineCompatibleMediaTypes(MediaType[] acceptableTypes,
+            MediaType[] producibleTypes, ref MediaType[] mediaTypesToUse)
     {
         foreach (requestedType; acceptableTypes)
             foreach (producibleType; producibleTypes)
@@ -470,18 +477,18 @@ class RequestResponseBodyMethodProcessor : AbstractMessageConverterMethodProcess
         return true;
     }
 
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory)
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         auto arg = readWithMessageConverters(webRequest, parameter, parameter.getNestedParameterType());
         if (arg.isNull() && parameter.getArgumentSpec().required && !parameter.isOptional())
-            throw new HttpMessageNotReadableException("Required request body is missing: "
-                    ~ parameter.getExecutable(), null, new ServletServerHttpRequest(webRequest.getNativeRequest()));
+            throw new HttpMessageNotReadableException("Required request body is missing: " ~ parameter.getExecutable(),
+                    null, new ServletServerHttpRequest(webRequest.getNativeRequest()));
         return arg;
     }
 
-    void handleReturnValue(Any returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer,
-            NativeWebRequest webRequest)
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
     {
         mavContainer.setRequestHandled(true);
         auto outputMessage = createOutputMessage(webRequest);
@@ -510,21 +517,22 @@ class HttpEntityMethodProcessor : AbstractMessageConverterMethodProcessor
     bool supportsReturnType(MethodParameter returnType)
     {
         const type = returnType.getParameterType();
-        return type == "flint.http.ResponseEntity" || type == "flint.http.HttpEntity" || type == "flint.http.ProblemDetail"
-            || type == "flint.web.ErrorResponse" || type == "flint.web.ErrorResponseException"
-            || type == "flint.web.server.ResponseStatusException";
+        return type == "flint.http.ResponseEntity" || type == "flint.http.HttpEntity"
+            || type == "flint.http.ProblemDetail"
+            || type == "flint.web.ErrorResponse"
+            || type == "flint.web.ErrorResponseException" || type == "flint.web.server.ResponseStatusException";
     }
 
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory)
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         auto inputMessage = new ServletServerHttpRequest(webRequest.getNativeRequest());
         auto body = readWithMessageConverters(webRequest, parameter, "string");
         return Any.of(HttpEntity.of(body, inputMessage.getHeaders()));
     }
 
-    void handleReturnValue(Any returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer,
-            NativeWebRequest webRequest)
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
     {
         mavContainer.setRequestHandled(true);
         if (returnValue.isNull())
@@ -574,8 +582,8 @@ class HttpHeadersReturnValueHandler : HandlerMethodReturnValueHandler
         return returnType.getParameterType() == "flint.http.HttpHeaders";
     }
 
-    void handleReturnValue(Any returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer,
-            NativeWebRequest webRequest)
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
     {
         mavContainer.setRequestHandled(true);
         if (returnValue.isNull())
@@ -597,8 +605,8 @@ class ViewNameMethodReturnValueHandler : HandlerMethodReturnValueHandler
         return type == "void" || type == "string";
     }
 
-    void handleReturnValue(Any returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer,
-            NativeWebRequest webRequest)
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
     {
         if (returnValue.holds!string)
             mavContainer.setViewName(returnValue.get!string);
@@ -703,8 +711,8 @@ private struct DefaultHandlers
         result.argumentResolvers = new HandlerMethodArgumentResolverComposite;
         result.argumentResolvers.addResolvers(new RequestParamMethodArgumentResolver(false),
                 new PathVariableMethodArgumentResolver, new RequestHeaderMethodArgumentResolver,
-                new CookieValueMethodArgumentResolver, result.responseBody, new ServletRequestMethodArgumentResolver,
-                new ServletResponseMethodArgumentResolver, entity);
+                new CookieValueMethodArgumentResolver, result.responseBody,
+                new ServletRequestMethodArgumentResolver, new ServletResponseMethodArgumentResolver, entity);
         result.argumentResolvers.addResolvers(customResolvers);
         result.argumentResolvers.addResolvers(new RequestParamMethodArgumentResolver(true));
         result.returnValueHandlers = new HandlerMethodReturnValueHandlerComposite;
@@ -734,8 +742,8 @@ class RequestMappingHandlerAdapter : HandlerAdapter
         contentNegotiationManager = manager !is null ? manager : new ContentNegotiationManager;
         this.customArgumentResolvers = customArgumentResolvers;
         this.customReturnValueHandlers = customReturnValueHandlers;
-        handlers = DefaultHandlers.create(messageConverters, contentNegotiationManager, customArgumentResolvers,
-                customReturnValueHandlers);
+        handlers = DefaultHandlers.create(messageConverters, contentNegotiationManager,
+                customArgumentResolvers, customReturnValueHandlers);
         binderFactory = new DefaultDataBinderFactory;
     }
 
@@ -832,8 +840,8 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
     private RequestMappingHandlerAdapter adapter;
 
     /// Over Flint AOT's exception-handler table, sharing the adapter's resolvers and handlers.
-    this(ExceptionHandlerSpec[] handlerSpecs, BeanFactory beanFactory, RequestMappingHandlerAdapter adapter,
-            int[string] adviceOrder = null)
+    this(ExceptionHandlerSpec[] handlerSpecs, BeanFactory beanFactory,
+            RequestMappingHandlerAdapter adapter, int[string] adviceOrder = null)
     {
         this.handlerSpecs = handlerSpecs;
         this.beanFactory = beanFactory;
@@ -879,15 +887,16 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
         return handler is null || cast(HandlerMethod) handler !is null;
     }
 
-    protected override ModelAndView doResolveException(HttpServletRequest request, HttpServletResponse response,
-            Object handler, Exception exception)
+    protected override ModelAndView doResolveException(HttpServletRequest request,
+            HttpServletResponse response, Object handler, Exception exception)
     {
         auto handlerMethod = cast(HandlerMethod) handler;
         Object bean;
         ExceptionHandlerSpec* spec = findHandler(handlerMethod, exception, bean);
         if (spec is null)
             return null;
-        auto exceptionHandlerMethod = new ServletInvocableHandlerMethod(new HandlerMethod(bean, typeid(bean).name, *spec));
+        auto exceptionHandlerMethod = new ServletInvocableHandlerMethod(new HandlerMethod(bean,
+                typeid(bean).name, *spec));
         exceptionHandlerMethod.setHandlerMethodArgumentResolvers(adapter.getArgumentResolvers());
         exceptionHandlerMethod.setHandlerMethodReturnValueHandlers(adapter.getReturnValueHandlers(),
                 adapter.getResponseBodyHandler());

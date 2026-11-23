@@ -14,8 +14,8 @@ module flint.mock.web;
 
 import flint.engine.aot.any : Any;
 import flint.http : HttpHeaders, MediaType;
-import flint.jakarta.servlet : DispatcherType, RequestDispatcher, ServletContext, ServletInputStream,
-    ServletOutputStream;
+import flint.jakarta.servlet : DispatcherType, RequestDispatcher, ServletContext,
+    ServletInputStream, ServletOutputStream;
 import flint.jakarta.servlet.http : Cookie, HttpServletRequest, HttpServletResponse;
 import flint.java.io : PrintWriter, Writer;
 import flint.java.lang : IllegalStateException;

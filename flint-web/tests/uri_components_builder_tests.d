@@ -51,7 +51,9 @@ unittest
     assert(result.getQuery() is null);
     assert(result.getFragment() is null);
 
-    result = UriComponentsBuilder.fromUriString("https://arjen:foobar@java.sun.com:80/javase/6/docs/api/java/util/BitSet.html?foo=bar#and(java.util.BitSet)").build();
+    result = UriComponentsBuilder.fromUriString(
+            "https://arjen:foobar@java.sun.com:80/javase/6/docs/api/java/util/BitSet.html"
+            ~ "?foo=bar#and(java.util.BitSet)").build();
     assert(result.getUserInfo() == "arjen:foobar");
     assert(result.getHost() == "java.sun.com");
     assert(result.getPort() == 80);
@@ -64,7 +66,8 @@ unittest
 @("UriComponentsBuilderTests.fromUriStringIPv6Host")
 unittest
 {
-    auto result = UriComponentsBuilder.fromUriString("http://[1abc:2abc:3abc::5ABC:6abc]:8080/resource").build().encode();
+    auto result = UriComponentsBuilder.fromUriString("http://[1abc:2abc:3abc::5ABC:6abc]:8080/resource")
+        .build().encode();
     assert(result.getHost() == "[1abc:2abc:3abc::5ABC:6abc]");
     assert(result.getPort() == 8080);
 }
@@ -75,7 +78,10 @@ unittest
     assert(UriComponentsBuilder.fromPath("/foo/").path("/bar").build().getPath() == "/foo/bar");
     assert(UriComponentsBuilder.fromPath("/foo").path("bar").build().getPath() == "/foo/bar");
     assert(UriComponentsBuilder.newInstance().pathSegment("foo").pathSegment("bar").build().getPath() == "/foo/bar");
-    assert(UriComponentsBuilder.newInstance().pathSegment("/foo/").pathSegment("/bar/").build().getPath() == "/foo/bar");
+    // dfmt off
+    assert(UriComponentsBuilder.newInstance().pathSegment("/foo/").pathSegment("/bar/").build().getPath() ==
+            "/foo/bar");
+    // dfmt on
     assert(UriComponentsBuilder.fromPath("/foo").replacePath("/bar").build().getPath() == "/bar");
 }
 
@@ -95,8 +101,8 @@ unittest
 {
     auto uri = UriComponentsBuilder.newInstance().path("/api/owners/{id}").buildAndExpand("11").toUri();
     assert(uri.toString() == "/api/owners/11");
-    auto expanded = UriComponentsBuilder.fromUriString("http://example.com/hotels/{hotel}/bookings/{booking}")
-        .buildAndExpand("42", "21");
+    auto expanded = UriComponentsBuilder.fromUriString(
+            "http://example.com/hotels/{hotel}/bookings/{booking}").buildAndExpand("42", "21");
     assert(expanded.toUriString() == "http://example.com/hotels/42/bookings/21");
     bool thrown;
     try

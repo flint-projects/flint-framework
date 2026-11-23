@@ -96,8 +96,8 @@ private bool contains(const(string)[] names, string name)
 
 // Java's reflective @Deprecated lookup becomes the list of constants the upstream source marks deprecated.
 private immutable string[] deprecatedNames = [
-    "PROCESSING", "PAYLOAD_TOO_LARGE", "I_AM_A_TEAPOT", "UNPROCESSABLE_ENTITY", "BANDWIDTH_LIMIT_EXCEEDED",
-    "NOT_EXTENDED"
+    "PROCESSING", "PAYLOAD_TOO_LARGE", "I_AM_A_TEAPOT", "UNPROCESSABLE_ENTITY",
+    "BANDWIDTH_LIMIT_EXCEEDED", "NOT_EXTENDED"
 ];
 
 @("HttpStatusTests.fromMapToEnum")
@@ -153,8 +153,8 @@ unittest
 {
     HttpMethod[] values = HttpMethod.values();
     HttpMethod[] expected = [
-        HttpMethod.GET, HttpMethod.HEAD, HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE,
-        HttpMethod.OPTIONS, HttpMethod.TRACE, HttpMethod.QUERY
+        HttpMethod.GET, HttpMethod.HEAD, HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH,
+        HttpMethod.DELETE, HttpMethod.OPTIONS, HttpMethod.TRACE, HttpMethod.QUERY
     ];
     assert(values == expected);
     // check defensive copy
@@ -220,8 +220,8 @@ unittest
         try
             HttpStatusCode.valueOf(bad);
         catch (IllegalArgumentException e)
-            thrown = e.getMessage() == "Status code '" ~ (bad == 99 ? "99" : bad == 1000 ? "1000" : "-1")
-                ~ "' should be a three-digit positive integer";
+            thrown = e.getMessage() == "Status code '" ~ (bad == 99 ? "99" : bad == 1000
+                    ? "1000" : "-1") ~ "' should be a three-digit positive integer";
         assert(thrown);
     }
     bool thrown;
@@ -242,17 +242,19 @@ unittest
 @("annotations read as Java's: positional value shorthand, named arrays, composed meta-annotation")
 unittest
 {
-    import flint.web.bind.annotation : GetMapping, RequestMapping, RequestMethod, RequestParam, ResponseStatus,
-        RestController, ValueConstants;
+    import flint.web.bind.annotation : GetMapping, RequestMapping, RequestMethod, RequestParam,
+        ResponseStatus, RestController, ValueConstants;
     import flint.stereotype : Controller;
 
     @RestController static class GreetingController
     {
-        @GetMapping("/greeting") void greeting(@RequestParam(value: "name", defaultValue: "World") string name)
+        @GetMapping("/greeting") void greeting(@RequestParam(value : "name", defaultValue:
+                "World") string name)
         {
         }
 
-        @GetMapping(path: ["/a", "/b"], produces: ["application/json"]) void two()
+        @GetMapping(path : ["/a", "/b"], produces:
+                ["application/json"]) void two()
         {
         }
     }

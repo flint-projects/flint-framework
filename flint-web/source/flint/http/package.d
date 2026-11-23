@@ -96,8 +96,8 @@ struct HttpStatusCode
     static HttpStatusCode valueOf(int code) pure
     {
         if (code < 100 || code > 999)
-            throw new IllegalArgumentException("Status code '" ~ decimal(code)
-                    ~ "' should be a three-digit positive integer");
+            throw new IllegalArgumentException(
+                    "Status code '" ~ decimal(code) ~ "' should be a three-digit positive integer");
         return HttpStatusCode(code);
     }
 
@@ -164,11 +164,9 @@ struct HttpStatus
     private static immutable Constant[64] constants = [
         Constant("CONTINUE", 100, 1, "Continue"),
         Constant("SWITCHING_PROTOCOLS", 101, 1, "Switching Protocols"),
-        Constant("PROCESSING", 102, 1, "Processing"),
-        Constant("EARLY_HINTS", 103, 1, "Early Hints"),
-        Constant("OK", 200, 2, "OK"),
-        Constant("CREATED", 201, 2, "Created"),
-        Constant("ACCEPTED", 202, 2, "Accepted"),
+        Constant("PROCESSING", 102, 1, "Processing"), Constant("EARLY_HINTS", 103, 1,
+                "Early Hints"), Constant("OK", 200, 2, "OK"), Constant("CREATED", 201, 2,
+                "Created"), Constant("ACCEPTED", 202, 2, "Accepted"),
         Constant("NON_AUTHORITATIVE_INFORMATION", 203, 2, "Non-Authoritative Information"),
         Constant("NO_CONTENT", 204, 2, "No Content"),
         Constant("RESET_CONTENT", 205, 2, "Reset Content"),
@@ -177,23 +175,20 @@ struct HttpStatus
         Constant("ALREADY_REPORTED", 208, 2, "Already Reported"),
         Constant("IM_USED", 226, 2, "IM Used"),
         Constant("MULTIPLE_CHOICES", 300, 3, "Multiple Choices"),
-        Constant("MOVED_PERMANENTLY", 301, 3, "Moved Permanently"),
-        Constant("FOUND", 302, 3, "Found"),
-        Constant("SEE_OTHER", 303, 3, "See Other"),
+        Constant("MOVED_PERMANENTLY", 301, 3, "Moved Permanently"), Constant("FOUND", 302, 3,
+                "Found"), Constant("SEE_OTHER", 303, 3, "See Other"),
         Constant("NOT_MODIFIED", 304, 3, "Not Modified"),
         Constant("TEMPORARY_REDIRECT", 307, 3, "Temporary Redirect"),
         Constant("PERMANENT_REDIRECT", 308, 3, "Permanent Redirect"),
         Constant("BAD_REQUEST", 400, 4, "Bad Request"),
         Constant("UNAUTHORIZED", 401, 4, "Unauthorized"),
         Constant("PAYMENT_REQUIRED", 402, 4, "Payment Required"),
-        Constant("FORBIDDEN", 403, 4, "Forbidden"),
-        Constant("NOT_FOUND", 404, 4, "Not Found"),
+        Constant("FORBIDDEN", 403, 4, "Forbidden"), Constant("NOT_FOUND", 404, 4, "Not Found"),
         Constant("METHOD_NOT_ALLOWED", 405, 4, "Method Not Allowed"),
         Constant("NOT_ACCEPTABLE", 406, 4, "Not Acceptable"),
         Constant("PROXY_AUTHENTICATION_REQUIRED", 407, 4, "Proxy Authentication Required"),
         Constant("REQUEST_TIMEOUT", 408, 4, "Request Timeout"),
-        Constant("CONFLICT", 409, 4, "Conflict"),
-        Constant("GONE", 410, 4, "Gone"),
+        Constant("CONFLICT", 409, 4, "Conflict"), Constant("GONE", 410, 4, "Gone"),
         Constant("LENGTH_REQUIRED", 411, 4, "Length Required"),
         Constant("PRECONDITION_FAILED", 412, 4, "Precondition Failed"),
         Constant("CONTENT_TOO_LARGE", 413, 4, "Content Too Large"),
@@ -554,8 +549,9 @@ struct HttpMethod
     static HttpMethod valueOf(string method) pure nothrow @nogc
     {
         static immutable HttpMethod[9] standard = [
-            HttpMethod("GET"), HttpMethod("HEAD"), HttpMethod("POST"), HttpMethod("PUT"), HttpMethod("PATCH"),
-            HttpMethod("DELETE"), HttpMethod("OPTIONS"), HttpMethod("TRACE"), HttpMethod("QUERY")
+            HttpMethod("GET"), HttpMethod("HEAD"), HttpMethod("POST"), HttpMethod("PUT"),
+            HttpMethod("PATCH"), HttpMethod("DELETE"), HttpMethod("OPTIONS"),
+            HttpMethod("TRACE"), HttpMethod("QUERY")
         ];
         foreach (candidate; standard)
         {
@@ -637,8 +633,12 @@ struct MediaType
     static immutable MediaType ALL = MediaType.constant("*", "*"); ///
     static immutable MediaType APPLICATION_ATOM_XML = MediaType.constant("application", "atom+xml"); ///
     static immutable MediaType APPLICATION_CBOR = MediaType.constant("application", "cbor"); ///
-    static immutable MediaType APPLICATION_FORM_URLENCODED = MediaType.constant("application", "x-www-form-urlencoded"); ///
-    static immutable MediaType APPLICATION_GRAPHQL_RESPONSE = MediaType.constant("application", "graphql-response+json"); ///
+    // dfmt off
+    static immutable MediaType APPLICATION_FORM_URLENCODED = MediaType.constant("application",
+            "x-www-form-urlencoded"); ///
+    // dfmt on
+    static immutable MediaType APPLICATION_GRAPHQL_RESPONSE = MediaType.constant("application",
+            "graphql-response+json"); ///
     static immutable MediaType APPLICATION_JSON = MediaType.constant("application", "json"); ///
     static immutable MediaType APPLICATION_NDJSON = MediaType.constant("application", "x-ndjson"); ///
     static immutable MediaType APPLICATION_JSONL = MediaType.constant("application", "jsonl"); ///
@@ -719,7 +719,9 @@ struct MediaType
     /// `type/subtype;q=<qualityValue>`, the value written as Java's `Double.toString`.
     this(string type, string subtype, double qualityValue) pure
     {
-        this(type, subtype, [MimeTypeParameter(PARAM_QUALITY_FACTOR, javaDoubleToString(qualityValue))]);
+        this(type, subtype, [
+            MimeTypeParameter(PARAM_QUALITY_FACTOR, javaDoubleToString(qualityValue))
+        ]);
     }
 
     /// A copy of `other` with charset `charset`.
@@ -762,8 +764,8 @@ struct MediaType
             const unquotedValue = MimeType.unquote(value);
             const d = parseJavaDouble(unquotedValue);
             if (!(d >= 0.0 && d <= 1.0))
-                throw new IllegalArgumentException("Invalid quality value \"" ~ unquotedValue
-                        ~ "\": should be between 0.0 and 1.0");
+                throw new IllegalArgumentException(
+                        "Invalid quality value \"" ~ unquotedValue ~ "\": should be between 0.0 and 1.0");
         }
     }
 
@@ -1861,8 +1863,8 @@ struct HttpHeaders
                 return millis;
         }
         if (rejectInvalid)
-            throw new IllegalArgumentException("Cannot parse date value \"" ~ headerValue ~ "\" for \""
-                    ~ headerName ~ "\" header");
+            throw new IllegalArgumentException(
+                    "Cannot parse date value \"" ~ headerValue ~ "\" for \"" ~ headerName ~ "\" header");
         return -1;
     }
 
@@ -1879,8 +1881,10 @@ struct HttpHeaders
     /// Removes the `Content-*` headers a body would describe.
     void clearContentHeaders() pure
     {
-        foreach (name; [CONTENT_DISPOSITION, CONTENT_ENCODING, CONTENT_LANGUAGE, CONTENT_LENGTH,
-                CONTENT_LOCATION, CONTENT_RANGE, CONTENT_TYPE])
+        foreach (name; [
+            CONTENT_DISPOSITION, CONTENT_ENCODING, CONTENT_LANGUAGE, CONTENT_LENGTH,
+            CONTENT_LOCATION, CONTENT_RANGE, CONTENT_TYPE
+        ])
             remove(name);
     }
 
@@ -2002,13 +2006,15 @@ struct HttpEntity
     /// The erased body; `isNull()` when there is none.
     Any getBody() pure nothrow @nogc
     {
-        return body;
+        return
+        body;
     }
 
     /// The body as `T`. Throws: `AnyTypeException` when it is not a `T`.
     T getBody(T)()
     {
-        return body.get!T();
+        return
+        body.get!T();
     }
 
     /// Whether there is a body.
@@ -2020,8 +2026,8 @@ struct HttpEntity
     /// Java's `equals`: equal headers, and bodies of the same type that are both absent or the same reference.
     bool opEquals(const HttpEntity other) const pure nothrow @nogc
     {
-        return headers == other.headers && body.typeName() == other.body.typeName() && body.isNull() == other.body.isNull()
-            && body.asObject() is other.body.asObject();
+        return headers == other.headers && body.typeName() == other.body.typeName()
+            && body.isNull() == other.body.isNull() && body.asObject() is other.body.asObject();
     }
 
     size_t toHash() const pure nothrow @nogc
@@ -2033,7 +2039,8 @@ struct HttpEntity
 package(flint) Any boxBody(T)(T body)
 {
     static if (is(T == Any))
-        return body;
+        return
+        body;
     else static if (is(T == typeof(null)))
         return Any.init;
     else
@@ -2142,7 +2149,8 @@ struct ResponseEntity
     /// 200 OK with the optional's value, or 404 Not Found with no body (Java's `of(Optional<T>)`).
     static ResponseEntity of(T)(T body) if (isOptional!T)
     {
-        return body.isPresent() ? ok(body.get()) : notFound().build();
+        return
+        body.isPresent() ? ok(body.get()) : notFound().build();
     }
 
     /// A headers builder whose `build()` returns `body` with its status (Java's `of(ProblemDetail)`).
@@ -2650,10 +2658,10 @@ class ProblemDetail
         if (that is this)
             return true;
         return ((type is null && that.type is null) || (type !is null && that.type !is null && *type == *that.type))
-            && getTitle() == that.getTitle() && status == that.status && detail == that.detail
-            && ((instance is null && that.instance is null)
-                    || (instance !is null && that.instance !is null && *instance == *that.instance))
-            && propertyNames == that.propertyNames;
+            && getTitle() == that.getTitle()
+            && status == that.status && detail == that.detail && ((instance is null
+                    && that.instance is null) || (instance !is null && that.instance !is null
+                    && *instance == *that.instance)) && propertyNames == that.propertyNames;
     }
 
     override size_t toHash() const nothrow
@@ -2670,10 +2678,11 @@ class ProblemDetail
     /// Spring's protected `initToStringContent()`, for subclasses.
     protected string initToStringContent() const
     {
-        return "type='" ~ (type is null ? "null" : type.toString()) ~ "'" ~ ", title='" ~ nullText(getTitle())
-            ~ "'" ~ ", status=" ~ decimal(getStatus()) ~ ", detail='" ~ nullText(getDetail()) ~ "'"
-            ~ ", instance='" ~ (instance is null ? "null" : instance.toString()) ~ "'" ~ ", properties='"
-            ~ (propertyNames.length == 0 ? "null" : propertiesText()) ~ "'";
+        return "type='" ~ (type is null
+                ? "null" : type.toString()) ~ "'" ~ ", title='" ~ nullText(getTitle()) ~ "'" ~ ", status=" ~ decimal(
+                getStatus()) ~ ", detail='" ~ nullText(getDetail()) ~ "'" ~ ", instance='" ~ (instance is null
+                ? "null" : instance.toString()) ~ "'" ~ ", properties='" ~ (propertyNames.length == 0
+                ? "null" : propertiesText()) ~ "'";
     }
 
     private string propertiesText() const
@@ -2823,8 +2832,10 @@ package(flint) int javaStringHash(scope const(char)[] text) pure nothrow @nogc
             }
             else if ((c & 0xF8) == 0xF0 && i + 3 < text.length)
             {
-                c = ((c & 0x07) << 18) | ((text[i + 1] & 0x3F) << 12) | ((text[i + 2] & 0x3F) << 6)
-                    | (text[i + 3] & 0x3F);
+                // dfmt off
+                c = ((c & 0x07) << 18) | ((text[i + 1] & 0x3F) << 12) | ((text[i + 2] & 0x3F) << 6) | (text[i
+                        + 3] & 0x3F);
+                // dfmt on
                 width = 4;
             }
         }
@@ -3022,21 +3033,23 @@ private bool parseHttpDate(string value, out long millis) pure nothrow
     if (parts.length == 6 && parts[0].length == 4 && parts[0][3] == ',' && parts[5] == "GMT")
     {
         // RFC 1123
-        if (!number(parts[1], d) || (m = monthOf(parts[2])) == 0 || !number(parts[3], y) || !time(parts[4], secondOfDay))
+        if (!number(parts[1], d) || (m = monthOf(parts[2])) == 0 || !number(parts[3], y)
+                || !time(parts[4], secondOfDay))
             return false;
     }
     else if (parts.length == 4 && parts[3] == "GMT" && parts[1].length == 9 && parts[1][2] == '-' && parts[1][6] == '-')
     {
         // RFC 850: Sunday, 06-Nov-94 08:49:37 GMT
-        if (!number(parts[1][0 .. 2], d) || (m = monthOf(parts[1][3 .. 6])) == 0 || !number(parts[1][7 .. 9], y)
-                || !time(parts[2], secondOfDay))
+        if (!number(parts[1][0 .. 2], d) || (m = monthOf(parts[1][3 .. 6])) == 0
+                || !number(parts[1][7 .. 9], y) || !time(parts[2], secondOfDay))
             return false;
         y += y < 70 ? 2000 : 1900;
     }
     else if (parts.length == 5)
     {
         // asctime: Sun Nov  6 08:49:37 1994
-        if ((m = monthOf(parts[1])) == 0 || !number(parts[2], d) || !time(parts[3], secondOfDay) || !number(parts[4], y))
+        if ((m = monthOf(parts[1])) == 0 || !number(parts[2], d) || !time(parts[3], secondOfDay)
+                || !number(parts[4], y))
             return false;
     }
     else

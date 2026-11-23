@@ -45,11 +45,11 @@ class HeaderContentNegotiationStrategy : ContentNegotiationStrategy
             return mediaTypes.length != 0 ? mediaTypes : MEDIA_TYPE_ALL_LIST();
         }
         catch (InvalidMediaTypeException ex)
-            throw new HttpMediaTypeNotAcceptableException("Could not parse 'Accept' header " ~ headersText(headerValueArray)
-                    ~ ": " ~ ex.getMessage());
+            throw new HttpMediaTypeNotAcceptableException(
+                    "Could not parse 'Accept' header " ~ headersText(headerValueArray) ~ ": " ~ ex.getMessage());
         catch (InvalidMimeTypeException ex)
-            throw new HttpMediaTypeNotAcceptableException("Could not parse 'Accept' header " ~ headersText(headerValueArray)
-                    ~ ": " ~ ex.getMessage());
+            throw new HttpMediaTypeNotAcceptableException(
+                    "Could not parse 'Accept' header " ~ headersText(headerValueArray) ~ ": " ~ ex.getMessage());
     }
 
     private static string headersText(string[] values) pure nothrow
@@ -69,7 +69,8 @@ class ContentNegotiationManager : ContentNegotiationStrategy
     /// With `strategies`; the header strategy when none are given.
     this(ContentNegotiationStrategy[] strategies...)
     {
-        this.strategies = strategies.length != 0 ? strategies.dup : [cast(ContentNegotiationStrategy) new HeaderContentNegotiationStrategy];
+        this.strategies = strategies.length != 0 ? strategies.dup
+            : [cast(ContentNegotiationStrategy) new HeaderContentNegotiationStrategy];
     }
 
     /// The strategies.

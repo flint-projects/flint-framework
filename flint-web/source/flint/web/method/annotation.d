@@ -41,8 +41,8 @@ class TypeMismatchException : RuntimeException
     ///
     this(Any value, string requiredType, Throwable cause)
     {
-        super("Failed to convert value of type '" ~ valueTypeName(value) ~ "' to required type '"
-                ~ javaTypeName(requiredType) ~ "'" ~ causeText(cause), cause);
+        super("Failed to convert value of type '" ~ valueTypeName(
+                value) ~ "' to required type '" ~ javaTypeName(requiredType) ~ "'" ~ causeText(cause), cause);
         this.value = value;
         this.requiredType = requiredType;
         skipBacktrace(this);
@@ -131,8 +131,8 @@ class MethodArgumentConversionNotSupportedException : RuntimeException
     ///
     this(Any value, string requiredType, string name, MethodParameter param, Throwable cause)
     {
-        super("Method parameter '" ~ name ~ "': Failed to convert value of type '" ~ valueTypeName(value)
-                ~ "' to required type '" ~ javaTypeName(requiredType) ~ "'", cause);
+        super("Method parameter '" ~ name ~ "': Failed to convert value of type '" ~ valueTypeName(
+                value) ~ "' to required type '" ~ javaTypeName(requiredType) ~ "'", cause);
         this.name = name;
         this.parameter = param;
         this.requiredType = requiredType;
@@ -187,8 +187,8 @@ abstract class AbstractNamedValueMethodArgumentResolver : HandlerMethodArgumentR
         return NamedValueInfo(info.name, info.required, defaultValue);
     }
 
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory)
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         auto namedValueInfo = getNamedValueInfo(parameter);
         Any arg = resolveName(namedValueInfo.name, parameter, webRequest);
@@ -207,9 +207,10 @@ abstract class AbstractNamedValueMethodArgumentResolver : HandlerMethodArgumentR
             try
                 arg = binderFactory.convertIfNecessary(arg, parameter.getNestedParameterType(), parameter);
             catch (ConversionFailedException ex)
-                throw new MethodArgumentTypeMismatchException(arg, parameter.getNestedParameterType(),
-                        namedValueInfo.name, parameter, ex);
-            if (arg.isNull() && namedValueInfo.defaultValue is null && namedValueInfo.required && !parameter.isOptional())
+                throw new MethodArgumentTypeMismatchException(arg,
+                        parameter.getNestedParameterType(), namedValueInfo.name, parameter, ex);
+            if (arg.isNull() && namedValueInfo.defaultValue is null && namedValueInfo.required
+                    && !parameter.isOptional())
                 handleMissingValueAfterConversion(namedValueInfo.name, parameter, webRequest);
         }
         handleResolvedValue(arg, namedValueInfo.name, parameter, mavContainer, webRequest);
@@ -228,8 +229,11 @@ abstract class AbstractNamedValueMethodArgumentResolver : HandlerMethodArgumentR
     /// ditto
     protected void handleMissingValue(string name, MethodParameter parameter)
     {
+        // dfmt off
         throw new IllegalStateException("Missing argument '" ~ name ~ "' for method parameter of type "
-                ~ simpleJavaName(parameter.getNestedParameterType()));
+                ~ simpleJavaName(
+        // dfmt on
+        parameter.getNestedParameterType()));
     }
 
     /// Throws for a value that became null after conversion.
@@ -246,10 +250,12 @@ abstract class AbstractNamedValueMethodArgumentResolver : HandlerMethodArgumentR
                 return Any.of(false);
             switch (paramType)
             {
-            case "byte", "ubyte", "short", "ushort", "int", "uint", "long", "ulong", "float", "double", "char":
-                throw new IllegalStateException("Optional " ~ paramType ~ " parameter '" ~ name
-                        ~ "' is present but cannot be translated into a null value due to being declared as a "
-                        ~ "primitive type. Consider declaring it as object wrapper for the corresponding primitive type.");
+            case "byte", "ubyte", "short", "ushort", "int", "uint", "long", "ulong", "float", "double",
+                    "char":
+                    throw new IllegalStateException("Optional " ~ paramType ~ " parameter '" ~ name
+                            ~ "' is present but cannot be translated into a null value due to being declared as a "
+                            ~ "primitive type. Consider declaring it as object wrapper for the corresponding "
+                            ~ "primitive type.");
             default:
                 break;
             }
@@ -344,8 +350,8 @@ class CookieValueMethodArgumentResolver : AbstractNamedValueMethodArgumentResolv
     {
         foreach (cookie; request.getNativeRequest().getCookies())
             if (cookie.getName() == name)
-                return parameter.getNestedParameterType() == "flint.jakarta.servlet.http.Cookie" ? Any.of(cookie)
-                    : Any.of(cookie.getValue());
+                return parameter.getNestedParameterType() == "flint.jakarta.servlet.http.Cookie"
+                    ? Any.of(cookie) : Any.of(cookie.getValue());
         return Any.init;
     }
 

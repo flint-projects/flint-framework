@@ -469,7 +469,8 @@ abstract class HttpServlet : GenericServlet
             doTrace(req, resp);
             break;
         default:
-            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, "Method [" ~ method ~ "] is not implemented by this Servlet for this URI");
+            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
+                    "Method [" ~ method ~ "] is not implemented by this Servlet for this URI");
         }
     }
 

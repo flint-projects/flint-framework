@@ -203,14 +203,17 @@ final class StandaloneMockMvcBuilder
         foreach (descriptor; descriptors)
             table.add(descriptor);
         auto interceptorList = interceptors;
-        auto configurerList = configurers ~ [cast(WebMvcConfigurer) new class WebMvcConfigurer
-        {
-            override void addInterceptors(InterceptorRegistry registry)
+        auto configurerList = configurers ~ [
+            cast(WebMvcConfigurer) new class WebMvcConfigurer
             {
-                foreach (interceptor; interceptorList)
-                    registry.addInterceptor(interceptor);
+                override void addInterceptors(InterceptorRegistry registry)
+                {
+                    foreach (interceptor; interceptorList)
+                        registry.addInterceptor(interceptor);
+                }
             }
-        }];
+
+        ];
         auto support = new WebMvcConfigurationSupport(mappings, exceptionHandlers, beanFactory, configurerList, table);
         support.setAdviceOrder(adviceOrder);
         HttpMessageConverter[] converters = messageConverters;

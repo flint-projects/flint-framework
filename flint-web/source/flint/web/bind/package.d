@@ -53,7 +53,8 @@ class ServletRequestBindingException : ServletException, ErrorResponse
 
     ProblemDetail getBody()
     {
-        return body;
+        return
+        body;
     }
 
     override string getDetailMessageCode()
@@ -119,133 +120,125 @@ class MissingServletRequestParameterException : MissingRequestValueException
 
     private string computeMessage()
     {
-        return "Required request parameter '" ~ parameterName ~ "' for method parameter type "
-            ~ simpleJavaName(parameterType) ~ " is "
-            ~ (isMissingAfterConversion() ? "present but converted to null" : "not present");
+        return "Required request parameter '" ~ parameterName ~ "' for method parameter type " ~ simpleJavaName(
+                // dfmt off
+                parameterType) ~ " is "
+                        ~ (isMissingAfterConversion() ? "present but converted to null" : "not present");
+                // dfmt on
     }
 
     private static string initBodyDetail(string name)
     {
-        return "Required parameter '" ~ name ~ "' is not present.";
-    }
+        return "Required parameter '" ~ name ~ "' is not present.";}
 
-    /// The parameter name.
-    final string getParameterName() const pure nothrow @nogc
-    {
-        return parameterName;
-    }
+        /// The parameter name.
+        final string getParameterName() const pure nothrow @nogc
+        {
+            return parameterName;}
 
-    /// The parameter type.
-    final string getParameterType() const pure nothrow @nogc
-    {
-        return parameterType;
-    }
+            /// The parameter type.
+            final string getParameterType() const pure nothrow @nogc
+            {
+                return parameterType;}
 
-    /// The method parameter, or `null`.
-    MethodParameter getMethodParameter() pure nothrow @nogc
-    {
-        return parameter;
-    }
-}
+                /// The method parameter, or `null`.
+                MethodParameter getMethodParameter() pure nothrow @nogc
+                {
+                    return parameter;}
+                }
 
-/// `MissingPathVariableException`: a URI template variable is missing (500, a server-side mistake).
-class MissingPathVariableException : MissingRequestValueException
-{
-    private string variableName;
-    private MethodParameter parameter;
+                /// `MissingPathVariableException`: a URI template variable is missing (500, a server-side mistake).
+                class MissingPathVariableException : MissingRequestValueException
+                {
+                    private string variableName; private MethodParameter parameter; ///
+                    this(string variableName, MethodParameter parameter, bool missingAfterConversion = false)
+                    {
+                        super("", missingAfterConversion, null, [Any.of(variableName)]); this.variableName
+                            = variableName; this.parameter = parameter; msg = "Required URI template variable '"
+                            ~ variableName ~ "' for method parameter type " ~ simpleJavaName(parameter is null
+                                    ? "" : parameter.getNestedParameterType()) ~ " is " ~ (missingAfterConversion
+                                    ? "present but converted to null" : "not present"); getBody().setDetail(
+                                    "Required path variable '" ~ variableName ~ "' is not present.");}
 
-    ///
-    this(string variableName, MethodParameter parameter, bool missingAfterConversion = false)
-    {
-        super("", missingAfterConversion, null, [Any.of(variableName)]);
-        this.variableName = variableName;
-        this.parameter = parameter;
-        msg = "Required URI template variable '" ~ variableName ~ "' for method parameter type "
-            ~ simpleJavaName(parameter is null ? "" : parameter.getNestedParameterType()) ~ " is "
-            ~ (missingAfterConversion ? "present but converted to null" : "not present");
-        getBody().setDetail("Required path variable '" ~ variableName ~ "' is not present.");
-    }
+                        override HttpStatusCode getStatusCode()
+                        {
+                            return isMissingAfterConversion() ? HttpStatus.BAD_REQUEST
+                                : HttpStatus.INTERNAL_SERVER_ERROR;}
 
-    override HttpStatusCode getStatusCode()
-    {
-        return isMissingAfterConversion() ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR;
-    }
+                            /// The variable name.
+                            final string getVariableName() const pure nothrow @nogc
+                            {
+                                return variableName;}
 
-    /// The variable name.
-    final string getVariableName() const pure nothrow @nogc
-    {
-        return variableName;
-    }
+                                /// The method parameter.
+                                final MethodParameter getParameter() pure nothrow @nogc
+                                {
+                                    return parameter;}
+                                }
 
-    /// The method parameter.
-    final MethodParameter getParameter() pure nothrow @nogc
-    {
-        return parameter;
-    }
-}
-
-/// `MissingRequestHeaderException`.
-class MissingRequestHeaderException : MissingRequestValueException
-{
-    private string headerName;
-    private MethodParameter parameter;
-
-    ///
-    this(string headerName, MethodParameter parameter, bool missingAfterConversion = false)
-    {
-        super("", missingAfterConversion, null, [Any.of(headerName)]);
-        this.headerName = headerName;
-        this.parameter = parameter;
+                                /// `MissingRequestHeaderException`.
+                                class MissingRequestHeaderException : MissingRequestValueException
+                                {
+                                    private string headerName; private MethodParameter parameter; ///
+                                    this(string headerName, MethodParameter parameter,
+                                            bool missingAfterConversion = false)
+                                    {
+                                        super("", missingAfterConversion, null, [Any.of(headerName)]);
+                                            this.headerName = headerName; this.parameter = parameter; // dfmt off
         msg = "Required request header '" ~ headerName ~ "' for method parameter type "
-            ~ simpleJavaName(parameter is null ? "" : parameter.getNestedParameterType()) ~ " is "
-            ~ (missingAfterConversion ? "present but converted to null" : "not present");
-        getBody().setDetail("Required header '" ~ headerName ~ "' is not present.");
-    }
+                ~ simpleJavaName(parameter is null
+        // dfmt on
+                                             ? "" : parameter.getNestedParameterType()) ~ " is " ~ (
+                                                missingAfterConversion ? "present but converted to null" : "not present");
+                                        getBody().setDetail("Required header '" ~ headerName ~ "' is not present.");
+                                    }
 
-    /// The header name.
-    final string getHeaderName() const pure nothrow @nogc
-    {
-        return headerName;
-    }
+                                    /// The header name.
+                                    final string getHeaderName() const pure nothrow @nogc
+                                    {
+                                        return headerName;
+                                    }
 
-    /// The method parameter.
-    final MethodParameter getParameter() pure nothrow @nogc
-    {
-        return parameter;
-    }
-}
+                                    /// The method parameter.
+                                    final MethodParameter getParameter() pure nothrow @nogc
+                                    {
+                                        return parameter;
+                                    }
+                                }
 
-/// `MissingRequestCookieException`.
-class MissingRequestCookieException : MissingRequestValueException
-{
-    private string cookieName;
-    private MethodParameter parameter;
+                                /// `MissingRequestCookieException`.
+                                class MissingRequestCookieException : MissingRequestValueException
+                                {
+                                    private string cookieName;
+                                    private MethodParameter parameter;
 
-    ///
-    this(string cookieName, MethodParameter parameter, bool missingAfterConversion = false)
-    {
-        super("", missingAfterConversion, null, [Any.of(cookieName)]);
-        this.cookieName = cookieName;
-        this.parameter = parameter;
-        msg = "Required cookie '" ~ cookieName ~ "' for method parameter type "
-            ~ simpleJavaName(parameter is null ? "" : parameter.getNestedParameterType()) ~ " is "
-            ~ (missingAfterConversion ? "present but converted to null" : "not present");
-        getBody().setDetail("Required cookie '" ~ cookieName ~ "' is not present.");
-    }
+                                    ///
+                                    this(string cookieName, MethodParameter parameter,
+                                            bool missingAfterConversion = false)
+                                    {
+                                        super("", missingAfterConversion, null, [Any.of(cookieName)]);
+                                        this.cookieName = cookieName;
+                                        this.parameter = parameter;
+                                        msg = "Required cookie '" ~ cookieName
+                                            ~ "' for method parameter type " ~ simpleJavaName(parameter is null
+                                                    ? "" : parameter.getNestedParameterType()) ~ " is " ~ (missingAfterConversion
+                                                    ? "present but converted to null" : "not present");
+                                        getBody().setDetail("Required cookie '" ~ cookieName ~ "' is not present.");
+                                    }
 
-    /// The cookie name.
-    final string getCookieName() const pure nothrow @nogc
-    {
-        return cookieName;
-    }
-}
+                                    /// The cookie name.
+                                    final string getCookieName() const pure nothrow @nogc
+                                    {
+                                        return cookieName;
+                                    }
+                                }
 
-/// Java's `Class.getSimpleName()` for a D type name: `string` → `String`, `long` → `long`, `app.Owner` → `Owner`.
-package(flint) string simpleJavaName(string type) pure nothrow
-{
-    const java = javaTypeName(type);
-    foreach_reverse (i, c; java)
-        if (c == '.')
-            return java[i + 1 .. $];
-    return java;
-}
+                                /// Java's `Class.getSimpleName()` for a D type name: `string` → `String`, `long` → `long`, `app.Owner` → `Owner`.
+                                package(flint) string simpleJavaName(string type) pure nothrow
+                                {
+                                    const java = javaTypeName(type);
+                                    foreach_reverse (i, c; java)
+                                        if (c == '.')
+                                            return java[i + 1 .. $];
+                                    return java;
+                                }

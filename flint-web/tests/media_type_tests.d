@@ -77,9 +77,11 @@ unittest
     // parseMediaTypeNoSubtype, NoSubtypeSlash, TypeRange, IllegalType, IllegalSubtype,
     // EmptyParameterAttribute, EmptyParameterValue, IllegalParameterAttribute, IllegalParameterValue,
     // IllegalQualityFactor, IllegalQualityFactorWithUpperCaseParameterName, IllegalCharset
-    foreach (input; ["audio", "audio/", "*/json", "audio(/basic", "audio/basic)", "audio/*;=value",
-            "audio/*;attr=", "audio/*;attr<=value", "audio/*;attr=v>alue", "audio/basic;q=1.1",
-            "audio/basic;Q=1.1", "text/html; charset=foo-bar"])
+    foreach (input; [
+        "audio", "audio/", "*/json", "audio(/basic", "audio/basic)", "audio/*;=value",
+        "audio/*;attr=", "audio/*;attr<=value",
+        "audio/*;attr=v>alue", "audio/basic;q=1.1", "audio/basic;Q=1.1", "text/html; charset=foo-bar"
+    ])
         assertThrows!InvalidMediaTypeException(() { MediaType.parseMediaType(input); });
 }
 
@@ -209,13 +211,15 @@ unittest
 @("MediaTypeTests.removeQualityValue")
 unittest
 {
-    assert(MediaType.parseMediaType("audio/basic;q=0.8").removeQualityValue() == MediaType.parseMediaType("audio/basic"));
+    assert(MediaType.parseMediaType("audio/basic;q=0.8").removeQualityValue() == MediaType.parseMediaType(
+            "audio/basic"));
 }
 
 @("MediaTypeTests.removeQualityValueWithUpperCaseParameterName")
 unittest
 {
-    assert(MediaType.parseMediaType("audio/basic;Q=0.8").removeQualityValue() == MediaType.parseMediaType("audio/basic"));
+    assert(MediaType.parseMediaType("audio/basic;Q=0.8").removeQualityValue() == MediaType.parseMediaType(
+            "audio/basic"));
 }
 
 @("MediaTypeTests.sortBySpecificity")

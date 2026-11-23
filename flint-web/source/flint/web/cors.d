@@ -246,7 +246,8 @@ final class CorsConfiguration
         if (other is null)
             return new CorsConfiguration(this);
         auto config = new CorsConfiguration(this);
-        auto origins = combineLists(getAllowedOrigins(), other.getAllowedOrigins(), permitAllOrigins, other.permitAllOrigins);
+        auto origins = combineLists(getAllowedOrigins(), other.getAllowedOrigins(),
+                permitAllOrigins, other.permitAllOrigins);
         auto patterns = combineLists(allowedOriginPatterns, other.allowedOriginPatterns, false, false);
         if (origins.length == 1 && origins[0] == ALL && permitAllOrigins && patterns.length != 0)
         {
@@ -276,8 +277,8 @@ final class CorsConfiguration
         return config;
     }
 
-    private static const(string)[] combineLists(const(string)[] source, const(string)[] other, bool sourceDefault,
-            bool otherDefault) pure nothrow
+    private static const(string)[] combineLists(const(string)[] source, const(string)[] other,
+            bool sourceDefault, bool otherDefault) pure nothrow
     {
         if (other is null)
             return source;
@@ -310,11 +311,13 @@ final class CorsConfiguration
     {
         if (!allowCredentials.isNull && allowCredentials.get)
             foreach (o; allowedOrigins)
-                if (o == ALL)
-                    throw new IllegalArgumentException("When allowCredentials is true, allowedOrigins cannot contain the "
-                            ~ "special value \"*\" since that cannot be set on the \"Access-Control-Allow-Origin\" response "
-                            ~ "header. To allow credentials to a set of origins, list them explicitly or consider using "
-                            ~ "\"allowedOriginPatterns\" instead.");
+                if (o == ALL)// dfmt off
+                    throw new IllegalArgumentException("When allowCredentials is true, allowedOrigins cannot "
+                            ~ "contain the " ~ "special value \"*\" since that cannot be set on the "
+                            ~ "\"Access-Control-Allow-Origin\" response " ~ "header. To allow credentials to "
+                            ~ "a set of origins, list them explicitly or consider using " ~
+                            "\"allowedOriginPatterns\" instead.");
+                    // dfmt on
     }
 
     /// The origin to answer for `origin`, or `null` when it is not allowed.
@@ -437,7 +440,8 @@ final class CorsConfiguration
                     return true;
             return false;
         }
-        return text.length != 0 && (pattern[0] | 0x20) == (text[0] | 0x20) && wildcardMatch(pattern[1 .. $], text[1 .. $]);
+        return text.length != 0 && (pattern[0] | 0x20) == (text[0] | 0x20) && wildcardMatch(pattern[1 .. $],
+                text[1 .. $]);
     }
 }
 
@@ -536,8 +540,8 @@ class DefaultCorsProcessor : CorsProcessor
             return true;
         if (response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) !is null)
             return true;
-        return handleInternal(new ServletServerHttpRequest(request), new ServletServerHttpResponse(response), config,
-                CorsUtils.isPreFlightRequest(request));
+        return handleInternal(new ServletServerHttpRequest(request),
+                new ServletServerHttpResponse(response), config, CorsUtils.isPreFlightRequest(request));
     }
 
     /// 403 with `Invalid CORS request`.
@@ -549,8 +553,8 @@ class DefaultCorsProcessor : CorsProcessor
     }
 
     /// Spring's `handleInternal`.
-    protected bool handleInternal(ServletServerHttpRequest request, ServletServerHttpResponse response,
-            CorsConfiguration config, bool preFlightRequest)
+    protected bool handleInternal(ServletServerHttpRequest request,
+            ServletServerHttpResponse response, CorsConfiguration config, bool preFlightRequest)
     {
         const requestOrigin = request.getHeaders().getOrigin();
         const allowOrigin = config.checkOrigin(requestOrigin);
@@ -574,8 +578,8 @@ class DefaultCorsProcessor : CorsProcessor
             rejectRequest(response);
             return false;
         }
-        auto requestHeaders = preFlightRequest ? request.getHeaders().getAccessControlRequestHeaders()
-            : request.getHeaders().headerNames();
+        auto requestHeaders = preFlightRequest ? request.getHeaders()
+            .getAccessControlRequestHeaders() : request.getHeaders().headerNames();
         auto allowHeaders = config.checkHeaders(requestHeaders);
         if (preFlightRequest && allowHeaders is null)
         {
@@ -625,8 +629,11 @@ class UrlBasedCorsConfigurationSource : CorsConfigurationSource
     {
         auto path = request.getRequestURI();
         const contextPath = request.getContextPath();
-        if (contextPath.length != 0 && path.length >= contextPath.length && path[0 .. contextPath.length] == contextPath)
-            path = path[contextPath.length .. $];
+        // dfmt off
+        if (contextPath.length != 0 && path.length >= contextPath.length
+                && path[0 .. contextPath.length] == contextPath)
+         // dfmt on
+        path = path[contextPath.length .. $];
         foreach (entry; entries)
             if (entry.pattern.matches(path))
                 return entry.config;

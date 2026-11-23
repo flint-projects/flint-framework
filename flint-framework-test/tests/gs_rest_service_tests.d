@@ -39,8 +39,9 @@ unittest
 unittest
 {
     auto mockMvc = MockMvcBuilders.standaloneSetup(new GreetingController()).build();
-    mockMvc.perform(get("/greeting").param("name", "Spring Community")).andDo(MockMvcResultHandlers.log())
-        .andExpect(status().isOk()).andExpect(jsonPath("$.content").value("Hello, Spring Community!"));
+    mockMvc.perform(get("/greeting").param("name", "Spring Community"))
+        .andDo(MockMvcResultHandlers.log()).andExpect(status().isOk())
+        .andExpect(jsonPath("$.content").value("Hello, Spring Community!"));
 }
 
 @("gs-rest-service golden behaviours through MockMvc")
@@ -49,45 +50,46 @@ unittest
     auto mockMvc = MockMvcBuilders.standaloneSetup(new GreetingController()).build();
 
     // default name: body bytes, content type and the record's property order
-    mockMvc.perform(get("/greeting")).andExpect(status().isOk())
-        .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-        .andExpect(content().string(`{"id":1,"content":"Hello, World!"}`));
+    mockMvc.perform(get("/greeting")).andExpect(status().isOk()).andExpect(content()
+            .contentType(MediaType.APPLICATION_JSON)).andExpect(content().string(`{"id":1,"content":"Hello, World!"}`));
     // name parameter from the query string
     mockMvc.perform(get("/greeting?name=User")).andExpect(jsonPath("$.id").value(2L))
         .andExpect(jsonPath("$.content").value("Hello, User!"));
     // percent-encoded UTF-8 (R14)
     mockMvc.perform(get("/greeting?name=%C3%A9t%C3%A9")).andExpect(jsonPath("$.content").value("Hello, été!"));
     // '+' is not a space in a URI query; %20 is
-    mockMvc.perform(get("/greeting?name=Jane+Q%20Public")).andExpect(jsonPath("$.content").value("Hello, Jane+Q Public!"));
+    mockMvc.perform(get("/greeting?name=Jane+Q%20Public")).andExpect(jsonPath("$.content")
+            .value("Hello, Jane+Q Public!"));
     // empty name takes the default
     mockMvc.perform(get("/greeting?name=")).andExpect(jsonPath("$.content").value("Hello, World!"));
     // repeated name joins with a comma
     mockMvc.perform(get("/greeting?name=a&name=b")).andExpect(jsonPath("$.content").value("Hello, a,b!"));
     // JSON escaping as Jackson writes it
-    mockMvc.perform(get("/greeting?name=%22quoted%22%5Cslash%3C%3E"))
-        .andExpect(content().string(`{"id":7,"content":"Hello, \"quoted\"\\slash<>!"}`));
+    mockMvc.perform(get("/greeting?name=%22quoted%22%5Cslash%3C%3E")).andExpect(content()
+            .string(`{"id":7,"content":"Hello, \"quoted\"\\slash<>!"}`));
     // unknown parameter is ignored
     mockMvc.perform(get("/greeting?other=1")).andExpect(jsonPath("$.id").value(8));
     // Accept application/json
     mockMvc.perform(get("/greeting").accept(MediaType.APPLICATION_JSON)).andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(9));
     // Accept application/xml: the handler runs (counter 10), then 406 with Spring's Accept header
-    mockMvc.perform(get("/greeting").accept("application/xml")).andExpect(status().isNotAcceptable())
-        .andExpect(header().string("Accept", "application/json, application/*+json"));
+    mockMvc.perform(get("/greeting").accept("application/xml")).andExpect(status()
+            .isNotAcceptable()).andExpect(header().string("Accept", "application/json, application/*+json"));
     // HEAD reaches the handler (counter 11)
     mockMvc.perform(MockMvcRequestBuilders.head("/greeting")).andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(11));
     // OPTIONS lists the allowed methods
     mockMvc.perform(MockMvcRequestBuilders.options("/greeting")).andExpect(status().isOk())
-        .andExpect(header().string("Allow", "GET,HEAD,OPTIONS")).andExpect(header().string("Accept-Patch", ""))
-        .andExpect(header().string("Accept-Query", ""));
+        .andExpect(header().string("Allow", "GET,HEAD,OPTIONS")).andExpect(header()
+            .string("Accept-Patch", "")).andExpect(header().string("Accept-Query", ""));
     // POST and DELETE are not allowed
-    mockMvc.perform(MockMvcRequestBuilders.post("/greeting")).andExpect(status().isMethodNotAllowed())
-        .andExpect(header().string("Allow", "GET"));
-    mockMvc.perform(MockMvcRequestBuilders.delete_("/greeting")).andExpect(status().isMethodNotAllowed())
-        .andExpect(status().reason("Method 'DELETE' is not supported."));
+    mockMvc.perform(MockMvcRequestBuilders.post("/greeting")).andExpect(status()
+            .isMethodNotAllowed()).andExpect(header().string("Allow", "GET"));
+    mockMvc.perform(MockMvcRequestBuilders.delete_("/greeting")).andExpect(status()
+            .isMethodNotAllowed()).andExpect(status().reason("Method 'DELETE' is not supported."));
     // unknown path and trailing slash are 404 (NoResourceFoundException)
-    mockMvc.perform(get("/nope")).andExpect(status().isNotFound()).andExpect(status().reason("No static resource nope."));
+    mockMvc.perform(get("/nope")).andExpect(status().isNotFound()).andExpect(status()
+            .reason("No static resource nope."));
     mockMvc.perform(get("/greeting/")).andExpect(status().isNotFound());
     // the counter after the errors: 12, as in the golden run
     mockMvc.perform(get("/greeting?name=again")).andExpect(jsonPath("$.id").value(12))

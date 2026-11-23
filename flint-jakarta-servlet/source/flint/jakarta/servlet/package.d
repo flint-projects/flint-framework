@@ -21,8 +21,10 @@ import flint.java.io : InputStream, IOException, OutputStream, PrintWriter;
 class ServletException : Exception
 {
     /// With a message and an optional root cause.
-    this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line = __LINE__)
-        pure nothrow @nogc
+    // dfmt off
+    this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line =
+            __LINE__) pure nothrow @nogc
+     // dfmt on
     {
         super(message, file, line, rootCause);
     }

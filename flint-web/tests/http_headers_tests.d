@@ -119,8 +119,10 @@ unittest
     HttpHeaders headers;
     headers.add("Accept", "text/html,text/pdf");
     headers.add("Accept", "text/plain,text/csv");
-    assert(headers.getAccept() == [MediaType("text", "html"), MediaType("text", "pdf"),
-            MediaType("text", "plain"), MediaType("text", "csv")]);
+    assert(headers.getAccept() == [
+        MediaType("text", "html"), MediaType("text", "pdf"), MediaType("text", "plain"),
+        MediaType("text", "csv")
+    ]);
 }
 
 @("HttpHeadersTests.allow")
@@ -435,9 +437,11 @@ unittest
 unittest
 {
     HttpHeaders headers;
-    foreach (row; [["@0", "0"], ["@1", "1000"], ["@10", "10000"], ["@-1", "-1000"],
+    foreach (row; [
+            ["@0", "0"], ["@1", "1000"], ["@10", "10000"], ["@-1", "-1000"],
             ["@1659578233", "1659578233000"], ["@-62135596800", "-62135596800000"],
-            ["@253402214400", "253402214400000"]])
+            ["@253402214400", "253402214400000"]
+        ])
     {
         import std.conv : to;
 

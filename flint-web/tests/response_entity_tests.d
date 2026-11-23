@@ -18,8 +18,8 @@ import flint.java.util : Optional;
 @("ResponseEntityTests.normal")
 unittest
 {
-    auto responseEntity = ResponseEntity.status(HttpStatus.OK.code()).header("My-Custom-Header", "HeaderValue1",
-            "HeaderValue2").body(42);
+    auto responseEntity = ResponseEntity.status(HttpStatus.OK.code()).header("My-Custom-Header",
+            "HeaderValue1", "HeaderValue2").body(42);
     assert(responseEntity.getStatusCode() == HttpStatus.OK);
     assert(responseEntity.getHeaders().containsHeader("My-Custom-Header"));
     assert(responseEntity.getHeaders().get("My-Custom-Header") == ["HeaderValue1", "HeaderValue2"]);
@@ -115,14 +115,10 @@ unittest
     URI location = URI.create("location");
     long contentLength = 67_890;
     MediaType contentType = MediaType.TEXT_PLAIN;
-    auto responseEntity = ResponseEntity.ok()
-        .allow(HttpMethod.GET)
-        .lastModified(12_345L)
-        .location(location)
-        .contentLength(contentLength)
-        .contentType(contentType)
-        .headers((HttpHeaders headers) { assert(headers.size() == 5); })
-        .build();
+    auto responseEntity = ResponseEntity.ok().allow(HttpMethod.GET).lastModified(12_345L)
+        .location(location).contentLength(contentLength).contentType(contentType).headers((HttpHeaders headers) {
+        assert(headers.size() == 5);
+    }).build();
     assert(responseEntity.getStatusCode() == HttpStatus.OK);
     HttpHeaders responseHeaders = responseEntity.getHeaders();
     assert(responseHeaders.getFirst(HttpHeaders.ALLOW) == HttpMethod.GET.name());

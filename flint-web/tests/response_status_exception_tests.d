@@ -6,8 +6,8 @@ Upstream ErrorResponseExceptionTests needs spring-context's MessageSource and is
 module flint.web.response_status_exception_tests;
 
 import flint.http : HttpHeaders, HttpStatus, MediaType;
-import flint.web : ErrorResponse, HttpMediaTypeNotAcceptableException, HttpMediaTypeNotSupportedException,
-    HttpRequestMethodNotSupportedException;
+import flint.web : ErrorResponse, HttpMediaTypeNotAcceptableException,
+    HttpMediaTypeNotSupportedException, HttpRequestMethodNotSupportedException;
 import flint.web.server : ResponseStatusException;
 
 @safe:
@@ -60,7 +60,9 @@ unittest
 unittest
 {
     MediaType contentType = MediaType.TEXT_PLAIN;
-    auto unsupported = new HttpMediaTypeNotSupportedException(contentType, [MediaType.APPLICATION_JSON]);
+    auto unsupported = new HttpMediaTypeNotSupportedException(contentType, [
+        MediaType.APPLICATION_JSON
+    ]);
     assert(unsupported.getMessage() == "Content-Type 'text/plain' is not supported");
     assert(unsupported.getStatusCode() == HttpStatus.UNSUPPORTED_MEDIA_TYPE);
     assert(unsupported.getBody().getDetail() == "Content-Type 'text/plain' is not supported.");
@@ -69,6 +71,8 @@ unittest
     assert(notAcceptable.getStatusCode() == HttpStatus.NOT_ACCEPTABLE);
     assert(notAcceptable.getBody().getDetail() == "Acceptable representations: [application/json].");
     auto parse = new HttpMediaTypeNotAcceptableException("bad");
-    assert(parse.getDetailMessageCode()
-            == "problemDetail.org.springframework.web.HttpMediaTypeNotAcceptableException.parseError");
+    // dfmt off
+    assert(parse.getDetailMessageCode() ==
+            "problemDetail.org.springframework.web.HttpMediaTypeNotAcceptableException.parseError");
+    // dfmt on
 }

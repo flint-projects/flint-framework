@@ -14,8 +14,8 @@ module flint.web.servlet.handler;
 import flint.engine.aot.any : Any;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
 import flint.web.cors : CorsConfiguration, CorsConfigurationSource, CorsProcessor, CorsUtils, DefaultCorsProcessor;
-import flint.web.servlet : HandlerExceptionResolver, HandlerExecutionChain, HandlerInterceptor, HandlerMapping,
-    ModelAndView;
+import flint.web.servlet : HandlerExceptionResolver, HandlerExecutionChain, HandlerInterceptor,
+    HandlerMapping, ModelAndView;
 import flint.web.servlet.resource : HttpRequestHandler;
 import flint.web.util.pattern : PathPattern, PathPatternParser;
 
@@ -71,7 +71,10 @@ final class MappedInterceptor : HandlerInterceptor
         interceptor.postHandle(request, response, handler, modelAndView);
     }
 
-    override void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex)
+    // dfmt off
+    override void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
+            Exception ex)
+     // dfmt on
     {
         interceptor.afterCompletion(request, response, handler, ex);
     }
@@ -167,8 +170,8 @@ abstract class AbstractHandlerMapping : HandlerMapping
     }
 
     /// A preflight handler, or the CORS interceptor first in `chain`.
-    protected HandlerExecutionChain getCorsHandlerExecutionChain(HttpServletRequest request, HandlerExecutionChain chain,
-            CorsConfiguration config)
+    protected HandlerExecutionChain getCorsHandlerExecutionChain(HttpServletRequest request,
+            HandlerExecutionChain chain, CorsConfiguration config)
     {
         auto processor = corsProcessor !is null ? corsProcessor : new DefaultCorsProcessor;
         if (CorsUtils.isPreFlightRequest(request))
@@ -267,8 +270,10 @@ abstract class AbstractHandlerExceptionResolver : HandlerExceptionResolver
         this.preventResponseCaching = preventResponseCaching;
     }
 
+    // dfmt off
     ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler,
             Exception ex)
+     // dfmt on
     {
         if (!shouldApplyTo(request, handler))
             return null;
@@ -284,8 +289,8 @@ abstract class AbstractHandlerExceptionResolver : HandlerExceptionResolver
     }
 
     /// Resolves `ex`, or returns `null`.
-    protected abstract ModelAndView doResolveException(HttpServletRequest request, HttpServletResponse response,
-            Object handler, Exception ex);
+    protected abstract ModelAndView doResolveException(HttpServletRequest request,
+            HttpServletResponse response, Object handler, Exception ex);
 }
 
 /// `HandlerExceptionResolverComposite`.
@@ -305,8 +310,10 @@ class HandlerExceptionResolverComposite : HandlerExceptionResolver
         return resolvers;
     }
 
+    // dfmt off
     ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler,
             Exception ex)
+     // dfmt on
     {
         foreach (resolver; resolvers)
             if (auto mav = resolver.resolveException(request, response, handler, ex))

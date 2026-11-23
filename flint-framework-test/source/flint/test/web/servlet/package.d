@@ -15,8 +15,8 @@ module flint.test.web.servlet;
 import flint.engine.aot.any : Any;
 import flint.jakarta.servlet : Filter, FilterChain, Servlet, ServletContext, ServletRequest, ServletResponse;
 import flint.mock.web : MockHttpServletRequest, MockHttpServletResponse, MockServletContext;
-import flint.web.servlet : DispatcherServlet, DispatcherStrategies, HandlerExecutionChain, HandlerInterceptor,
-    ModelAndView;
+import flint.web.servlet : DispatcherServlet, DispatcherStrategies, HandlerExecutionChain,
+    HandlerInterceptor, ModelAndView;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
 
 @safe:
@@ -230,8 +230,8 @@ class TestDispatcherServlet : DispatcherServlet
         return chain;
     }
 
-    protected override ModelAndView processHandlerException(HttpServletRequest request, HttpServletResponse response,
-            Object handler, Exception ex)
+    protected override ModelAndView processHandlerException(HttpServletRequest request,
+            HttpServletResponse response, Object handler, Exception ex)
     {
         auto mav = super.processHandlerException(request, response, handler, ex);
         if (current !is null)

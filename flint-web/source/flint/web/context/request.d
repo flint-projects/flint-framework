@@ -168,8 +168,8 @@ class ServletWebRequest : ServletRequestAttributes, NativeWebRequest
 
     string getDescription(bool includeClientInfo)
     {
-        return "uri=" ~ getRequest().getRequestURI()
-            ~ (includeClientInfo ? ";client=" ~ getRequest().getRemoteAddr() : "");
+        return "uri=" ~ getRequest().getRequestURI() ~ (includeClientInfo ? ";client=" ~ getRequest()
+                .getRemoteAddr() : "");
     }
 
     override string toString()

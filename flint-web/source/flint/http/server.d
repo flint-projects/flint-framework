@@ -12,8 +12,8 @@ which is why `@ResponseBody` responses carry `Content-Length` while `ResponseEnt
 +/
 module flint.http.server;
 
-import flint.http : HttpHeaders, HttpInputMessage, HttpMethod, HttpOutputMessage, HttpRequest, HttpStatusCode,
-    MediaType;
+import flint.http : HttpHeaders, HttpInputMessage, HttpMethod, HttpOutputMessage, HttpRequest,
+    HttpStatusCode, MediaType;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
 import flint.java.net : URI;
 

@@ -30,8 +30,8 @@ class ResponseStatusExceptionResolver : AbstractHandlerExceptionResolver
         this.descriptors = descriptors;
     }
 
-    protected override ModelAndView doResolveException(HttpServletRequest request, HttpServletResponse response,
-            Object handler, Exception ex)
+    protected override ModelAndView doResolveException(HttpServletRequest request,
+            HttpServletResponse response, Object handler, Exception ex)
     {
         if (auto rse = cast(ResponseStatusException) ex)
             return resolveResponseStatusException(rse, request, response, handler);
@@ -64,16 +64,17 @@ class ResponseStatusExceptionResolver : AbstractHandlerExceptionResolver
     }
 
     /// `@ResponseStatus` on the exception's class: `sendError(code, reason)` or `sendError(code)`.
-    protected ModelAndView resolveResponseStatus(ResponseStatus responseStatus, HttpServletRequest request,
-            HttpServletResponse response, Object handler, Exception ex)
+    protected ModelAndView resolveResponseStatus(ResponseStatus responseStatus,
+            HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex)
     {
         const statusCode = responseStatus.code.value();
-        return applyStatusAndReason(statusCode, responseStatus.reason.length != 0 ? responseStatus.reason : null, response);
+        return applyStatusAndReason(statusCode, responseStatus.reason.length != 0
+                ? responseStatus.reason : null, response);
     }
 
     /// `ResponseStatusException`: its headers, then `sendError(status, reason)`.
-    protected ModelAndView resolveResponseStatusException(ResponseStatusException ex, HttpServletRequest request,
-            HttpServletResponse response, Object handler)
+    protected ModelAndView resolveResponseStatusException(ResponseStatusException ex,
+            HttpServletRequest request, HttpServletResponse response, Object handler)
     {
         foreach (name, values; ex.getHeaders())
             foreach (value; values)

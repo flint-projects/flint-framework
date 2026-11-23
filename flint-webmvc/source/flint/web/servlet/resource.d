@@ -69,7 +69,8 @@ class NoResourceFoundException : ServletException, ErrorResponse
 
     ProblemDetail getBody()
     {
-        return body;
+        return
+        body;
     }
 }
 
@@ -125,7 +126,8 @@ class SimpleUrlHandlerMapping : AbstractHandlerMapping
         {
             if (auto info = entry.pattern.matchAndExtract(path))
             {
-                request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, Any.of(entry.pattern.getPatternString()));
+                request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE,
+                        Any.of(entry.pattern.getPatternString()));
                 request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, Any.of(path));
                 return entry.handler;
             }

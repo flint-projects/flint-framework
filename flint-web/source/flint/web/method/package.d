@@ -14,8 +14,8 @@ module flint.web.method;
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : MergedAnnotation, findAnnotation;
-import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec, ExceptionHandlerSpec, ExceptionInvoker, HandlerArguments,
-    HandlerInvoker, HandlerMapping;
+import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec, ExceptionHandlerSpec,
+    ExceptionInvoker, HandlerArguments, HandlerInvoker, HandlerMapping;
 
 @safe:
 

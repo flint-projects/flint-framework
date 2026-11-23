@@ -32,8 +32,8 @@ interface HandlerMethodArgumentResolver
     bool supportsParameter(MethodParameter parameter);
 
     /// The argument value for `parameter`.
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory);
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory);
 }
 
 /// `HandlerMethodReturnValueHandler`.
@@ -43,8 +43,8 @@ interface HandlerMethodReturnValueHandler
     bool supportsReturnType(MethodParameter returnType);
 
     /// Handles `returnValue`, writing the response or setting the model and view.
-    void handleReturnValue(Any returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer,
-            NativeWebRequest webRequest);
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest);
 }
 
 /// `HandlerMethodArgumentResolverComposite`.
@@ -78,8 +78,8 @@ class HandlerMethodArgumentResolverComposite : HandlerMethodArgumentResolver
         return getArgumentResolver(parameter) !is null;
     }
 
-    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest,
-            WebDataBinderFactory binderFactory)
+    Any resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer,
+            NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         auto resolver = getArgumentResolver(parameter);
         if (resolver is null)
@@ -127,8 +127,8 @@ class HandlerMethodReturnValueHandlerComposite : HandlerMethodReturnValueHandler
         return selectHandler(Any.init, returnType) !is null;
     }
 
-    void handleReturnValue(Any returnValue, MethodParameter returnType, ModelAndViewContainer mavContainer,
-            NativeWebRequest webRequest)
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
     {
         auto handler = selectHandler(returnValue, returnType);
         if (handler is null)
@@ -224,7 +224,9 @@ class ModelAndViewContainer
     }
 
     /// The status for the view, or `null`.
+    // dfmt off
     const(HttpStatusCode)* getStatus() const pure nothrow @nogc return
+    // dfmt on
     {
         return hasStatus ? &status : null;
     }
@@ -267,8 +269,8 @@ class InvocableHandlerMethod : HandlerMethod
     }
 
     /// Spring's `getMethodArgumentValues`.
-    protected Any[] getMethodArgumentValues(NativeWebRequest request, ModelAndViewContainer mavContainer,
-            Any[] providedArgs)
+    protected Any[] getMethodArgumentValues(NativeWebRequest request,
+            ModelAndViewContainer mavContainer, Any[] providedArgs)
     {
         auto parameters = getMethodParameters();
         auto args = new Any[parameters.length];
@@ -289,7 +291,8 @@ class InvocableHandlerMethod : HandlerMethod
         {
             if (provided.isNull())
                 continue;
-            if (provided.typeName() == parameter.getParameterType() || isInstance(provided, parameter.getParameterType()))
+            if (provided.typeName() == parameter.getParameterType() || isInstance(provided,
+                    parameter.getParameterType()))
             {
                 result = provided;
                 return true;
@@ -324,8 +327,8 @@ class InvocableHandlerMethod : HandlerMethod
     {
         import std.conv : to;
 
-        return "Could not resolve parameter [" ~ param.getParameterIndex().to!string ~ "] in "
-            ~ param.getExecutable() ~ (message.length != 0 ? ": " ~ message : "");
+        return "Could not resolve parameter [" ~ param.getParameterIndex()
+            .to!string ~ "] in " ~ param.getExecutable() ~ (message.length != 0 ? ": " ~ message : "");
     }
 }
 

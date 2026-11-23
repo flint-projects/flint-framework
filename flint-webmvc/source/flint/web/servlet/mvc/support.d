@@ -34,8 +34,8 @@ class DefaultHandlerExceptionResolver : AbstractHandlerExceptionResolver
         setOrder(int.max);
     }
 
-    protected override ModelAndView doResolveException(HttpServletRequest request, HttpServletResponse response,
-            Object handler, Exception ex)
+    protected override ModelAndView doResolveException(HttpServletRequest request,
+            HttpServletResponse response, Object handler, Exception ex)
     {
         try
         {
@@ -72,8 +72,8 @@ class DefaultHandlerExceptionResolver : AbstractHandlerExceptionResolver
     }
 
     /// Copies the error response's headers and calls `sendError(status, detail)`.
-    protected ModelAndView handleErrorResponse(ErrorResponse errorResponse, HttpServletRequest request,
-            HttpServletResponse response, Object handler)
+    protected ModelAndView handleErrorResponse(ErrorResponse errorResponse,
+            HttpServletRequest request, HttpServletResponse response, Object handler)
     {
         if (!response.isCommitted())
         {

@@ -46,8 +46,8 @@ private bool isDigit(int c) pure nothrow @nogc
 
 private bool isSubDelimiter(int c) pure nothrow @nogc
 {
-    return c == '!' || c == '$' || c == '&' || c == '\'' || c == '(' || c == ')' || c == '*' || c == '+' || c == ','
-        || c == ';' || c == '=';
+    return c == '!' || c == '$' || c == '&' || c == '\'' || c == '(' || c == ')' || c == '*' || c == '+'
+        || c == ',' || c == ';' || c == '=';
 }
 
 private bool isUnreserved(int c) pure nothrow @nogc
@@ -268,7 +268,7 @@ final class UriComponents
         foreach (i, pair; queryParams)
         {
             text ~= (i == 0 ? "" : "&") ~ pair[0];
-            if (pair[1] !is null)
+            if (pair[1]!is null)
                 text ~= "=" ~ pair[1];
         }
         return text;
@@ -294,13 +294,15 @@ final class UriComponents
         auto result = new UriComponents;
         result.scheme = scheme is null ? null : UriUtils.encodeUriComponent(scheme, UriComponentType.SCHEME);
         result.userInfo = userInfo is null ? null : UriUtils.encodeUriComponent(userInfo, UriComponentType.USER_INFO);
-        result.host = host is null ? null : UriUtils.encodeUriComponent(host,
-                host.length != 0 && host[0] == '[' ? UriComponentType.HOST_IPV6 : UriComponentType.HOST_IPV4);
+        result.host = host is null ? null : UriUtils.encodeUriComponent(host, host.length != 0
+                && host[0] == '[' ? UriComponentType.HOST_IPV6 : UriComponentType.HOST_IPV4);
         result.port = port;
         result.path = path is null ? null : encodeTemplate(path, UriComponentType.PATH);
         foreach (pair; queryParams)
-            result.queryParams ~= [encodeTemplate(pair[0], UriComponentType.QUERY_PARAM),
-                pair[1] is null ? null : encodeTemplate(pair[1], UriComponentType.QUERY_PARAM)];
+            result.queryParams ~= [
+            encodeTemplate(pair[0], UriComponentType.QUERY_PARAM),
+            pair[1] is null ? null : encodeTemplate(pair[1], UriComponentType.QUERY_PARAM)
+        ];
         result.fragment = fragment is null ? null : encodeTemplate(fragment, UriComponentType.FRAGMENT);
         result.encoded = true;
         return result;
@@ -391,8 +393,8 @@ final class UriComponents
                         if (!found)
                         {
                             if (next >= values.length)
-                                throw new IllegalArgumentException("Not enough variable values available to expand '"
-                                        ~ name ~ "'");
+                                throw new IllegalArgumentException(
+                                        "Not enough variable values available to expand '" ~ name ~ "'");
                             value = values[next++];
                         }
                         text ~= encoded ? UriUtils.encodeUriComponent(value, type) : value;
@@ -412,8 +414,10 @@ final class UriComponents
         result.port = port is null ? null : expandOne(port, UriComponentType.PORT);
         result.path = expandOne(path, UriComponentType.PATH_SEGMENT);
         foreach (pair; queryParams)
-            result.queryParams ~= [expandOne(pair[0], UriComponentType.QUERY_PARAM),
-                expandOne(pair[1], UriComponentType.QUERY_PARAM)];
+            result.queryParams ~= [
+            expandOne(pair[0], UriComponentType.QUERY_PARAM),
+            expandOne(pair[1], UriComponentType.QUERY_PARAM)
+        ];
         result.fragment = expandOne(fragment, UriComponentType.FRAGMENT);
         result.encoded = encoded;
         return result;
@@ -653,8 +657,8 @@ final class UriComponentsBuilder
         {
             const endsWithSlash = pathValue[$ - 1] == '/';
             const startsWithSlash = path[0] == '/';
-            pathValue = endsWithSlash && startsWithSlash ? pathValue ~ path[1 .. $]
-                : !endsWithSlash && !startsWithSlash ? pathValue ~ "/" ~ path : pathValue ~ path;
+            pathValue = endsWithSlash && startsWithSlash ? pathValue ~ path[1 .. $] : !endsWithSlash
+                && !startsWithSlash ? pathValue ~ "/" ~ path : pathValue ~ path;
         }
         return this;
     }
@@ -704,7 +708,9 @@ final class UriComponentsBuilder
                         eq = k;
                         break;
                     }
-                queryParamsValue ~= eq < 0 ? [pair, cast(string) null] : [pair[0 .. eq], pair[eq + 1 .. $]];
+                queryParamsValue ~= eq < 0 ? [pair, cast(string) null] : [
+                    pair[0 .. eq], pair[eq + 1 .. $]
+                ];
             }
         }
         return this;

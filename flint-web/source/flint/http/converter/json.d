@@ -54,8 +54,8 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
 
     protected override Any readInternal(string typeName, HttpInputMessage inputMessage)
     {
-        throw new HttpMessageNotReadableException("JSON parse error: reading " ~ typeName
-                ~ " waits for flint.jackson.databind", null, inputMessage);
+        throw new HttpMessageNotReadableException(
+                "JSON parse error: reading " ~ typeName ~ " waits for flint.jackson.databind", null, inputMessage);
     }
 
     protected override void writeInternal(Any value, HttpOutputMessage outputMessage)

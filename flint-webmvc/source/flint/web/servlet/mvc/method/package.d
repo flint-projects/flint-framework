@@ -156,10 +156,10 @@ final class RequestMappingInfo
                 foreach (t; MediaType.parseMediaTypes(e.value))
                     this.produces ~= MediaTypeExpression(t, false);
             else if (equalsIgnoreCase(e.name, "Content-Type") && !e.isNegated && e.hasValue)
-                foreach (t; MediaType.parseMediaTypes(e.value))
-                    this.consumes ~= MediaTypeExpression(t, false);
-            else
-                this.headers ~= e;
+                        foreach (t; MediaType.parseMediaTypes(e.value))
+                            this.consumes ~= MediaTypeExpression(t, false);
+                    else
+                        this.headers ~= e;
         }
         foreach (c; consumes)
             this.consumes ~= MediaTypeExpression.parse(c);
@@ -340,8 +340,8 @@ final class RequestMappingInfo
             return found(consumes);
         MediaType contentType;
         try
-            contentType = request.getContentType().length != 0 ? MediaType.parseMediaType(request.getContentType())
-                : MediaType.APPLICATION_OCTET_STREAM;
+            contentType = request.getContentType().length != 0
+                ? MediaType.parseMediaType(request.getContentType()) : MediaType.APPLICATION_OCTET_STREAM;
         catch (InvalidMediaTypeException)
             return Matched!MediaTypeExpression.init;
         MediaTypeExpression[] matched;
@@ -517,11 +517,12 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     void registerMapping(RequestMappingInfo info, HandlerMethod handlerMethod)
     {
         foreach (existing; registrations)
-            if (existing.info.toString() == info.toString() && existing.handlerMethod !is handlerMethod)
+            if (existing.info.toString() == info.toString() && existing.handlerMethod !is handlerMethod)// dfmt off
                 throw new IllegalStateException("Ambiguous mapping. Cannot map '" ~ handlerMethod.getBeanName()
-                        ~ "' method \n" ~ handlerMethod.toString() ~ "\nto " ~ info.toString()
-                        ~ ": There is already '" ~ existing.handlerMethod.getBeanName() ~ "' bean method\n"
-                        ~ existing.handlerMethod.toString() ~ " mapped.");
+                        ~ "' method \n" ~ handlerMethod.toString() ~ "\nto " ~ info
+                 // dfmt on
+                    .toString() ~ ": There is already '" ~ existing.handlerMethod.getBeanName()
+                    ~ "' bean method\n" ~ existing.handlerMethod.toString() ~ " mapped.");
         registrations ~= Registration(info, handlerMethod);
     }
 
@@ -585,8 +586,8 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
         {
             auto second = matches[1];
             if (best.info.compareTo(second.info, request) == 0)
-                throw new IllegalStateException("Ambiguous handler methods mapped for '" ~ lookupPath ~ "': {"
-                        ~ best.handlerMethod.toString() ~ ", " ~ second.handlerMethod.toString() ~ "}");
+                throw new IllegalStateException("Ambiguous handler methods mapped for '" ~ lookupPath
+                        ~ "': {" ~ best.handlerMethod.toString() ~ ", " ~ second.handlerMethod.toString() ~ "}");
         }
         request.setAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE, Any.of(cast(Object) best.handlerMethod));
         handleMatch(best.info, lookupPath, request);
@@ -688,6 +689,6 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     }
 
     /// The handler for an unmapped OPTIONS request; supplied by the annotation-based subclass.
-    protected abstract HandlerMethod createOptionsHandler(string[] declaredMethods, MediaType[] acceptPatch,
-            MediaType[] acceptQuery);
+    protected abstract HandlerMethod createOptionsHandler(string[] declaredMethods,
+            MediaType[] acceptPatch, MediaType[] acceptQuery);
 }

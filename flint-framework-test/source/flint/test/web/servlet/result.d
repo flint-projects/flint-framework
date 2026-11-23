@@ -93,7 +93,7 @@ final class StatusResultMatchers
         return ResultMatcher.of((MvcResult result) {
             const actual = result.getResponse().getStatus();
             AssertionErrors.assertEquals("Range for response status value " ~ intText(actual), name,
-                    seriesName(actual / 100));
+                seriesName(actual / 100));
         });
     }
 
@@ -112,36 +112,123 @@ final class StatusResultMatchers
         return value.to!string;
     }
 
-    ResultMatcher is1xxInformational() { return series(1, "INFORMATIONAL"); } ///
-    ResultMatcher is2xxSuccessful() { return series(2, "SUCCESSFUL"); } ///
-    ResultMatcher is3xxRedirection() { return series(3, "REDIRECTION"); } ///
-    ResultMatcher is4xxClientError() { return series(4, "CLIENT_ERROR"); } ///
-    ResultMatcher is5xxServerError() { return series(5, "SERVER_ERROR"); } ///
+    ResultMatcher is1xxInformational()
+    {
+        return series(1, "INFORMATIONAL");
+    } ///
+    ResultMatcher is2xxSuccessful()
+    {
+        return series(2, "SUCCESSFUL");
+    } ///
+    ResultMatcher is3xxRedirection()
+    {
+        return series(3, "REDIRECTION");
+    } ///
+    ResultMatcher is4xxClientError()
+    {
+        return series(4, "CLIENT_ERROR");
+    } ///
+    ResultMatcher is5xxServerError()
+    {
+        return series(5, "SERVER_ERROR");
+    } ///
 
-    ResultMatcher isOk() { return matcher(HttpStatus.OK); } ///
-    ResultMatcher isCreated() { return matcher(HttpStatus.CREATED); } ///
-    ResultMatcher isAccepted() { return matcher(HttpStatus.ACCEPTED); } ///
-    ResultMatcher isNoContent() { return matcher(HttpStatus.NO_CONTENT); } ///
-    ResultMatcher isMovedPermanently() { return matcher(HttpStatus.MOVED_PERMANENTLY); } ///
-    ResultMatcher isFound() { return matcher(HttpStatus.FOUND); } ///
-    ResultMatcher isSeeOther() { return matcher(HttpStatus.SEE_OTHER); } ///
-    ResultMatcher isNotModified() { return matcher(HttpStatus.NOT_MODIFIED); } ///
-    ResultMatcher isTemporaryRedirect() { return matcher(HttpStatus.TEMPORARY_REDIRECT); } ///
-    ResultMatcher isPermanentRedirect() { return matcher(HttpStatus.PERMANENT_REDIRECT); } ///
-    ResultMatcher isBadRequest() { return matcher(HttpStatus.BAD_REQUEST); } ///
-    ResultMatcher isUnauthorized() { return matcher(HttpStatus.UNAUTHORIZED); } ///
-    ResultMatcher isForbidden() { return matcher(HttpStatus.FORBIDDEN); } ///
-    ResultMatcher isNotFound() { return matcher(HttpStatus.NOT_FOUND); } ///
-    ResultMatcher isMethodNotAllowed() { return matcher(HttpStatus.METHOD_NOT_ALLOWED); } ///
-    ResultMatcher isNotAcceptable() { return matcher(HttpStatus.NOT_ACCEPTABLE); } ///
-    ResultMatcher isConflict() { return matcher(HttpStatus.CONFLICT); } ///
-    ResultMatcher isGone() { return matcher(HttpStatus.GONE); } ///
-    ResultMatcher isUnsupportedMediaType() { return matcher(HttpStatus.UNSUPPORTED_MEDIA_TYPE); } ///
-    ResultMatcher isUnprocessableContent() { return matcher(HttpStatus.UNPROCESSABLE_CONTENT); } ///
-    ResultMatcher isTooManyRequests() { return matcher(HttpStatus.TOO_MANY_REQUESTS); } ///
-    ResultMatcher isInternalServerError() { return matcher(HttpStatus.INTERNAL_SERVER_ERROR); } ///
-    ResultMatcher isNotImplemented() { return matcher(HttpStatus.NOT_IMPLEMENTED); } ///
-    ResultMatcher isServiceUnavailable() { return matcher(HttpStatus.SERVICE_UNAVAILABLE); } ///
+    ResultMatcher isOk()
+    {
+        return matcher(HttpStatus.OK);
+    } ///
+    ResultMatcher isCreated()
+    {
+        return matcher(HttpStatus.CREATED);
+    } ///
+    ResultMatcher isAccepted()
+    {
+        return matcher(HttpStatus.ACCEPTED);
+    } ///
+    ResultMatcher isNoContent()
+    {
+        return matcher(HttpStatus.NO_CONTENT);
+    } ///
+    ResultMatcher isMovedPermanently()
+    {
+        return matcher(HttpStatus.MOVED_PERMANENTLY);
+    } ///
+    ResultMatcher isFound()
+    {
+        return matcher(HttpStatus.FOUND);
+    } ///
+    ResultMatcher isSeeOther()
+    {
+        return matcher(HttpStatus.SEE_OTHER);
+    } ///
+    ResultMatcher isNotModified()
+    {
+        return matcher(HttpStatus.NOT_MODIFIED);
+    } ///
+    ResultMatcher isTemporaryRedirect()
+    {
+        return matcher(HttpStatus.TEMPORARY_REDIRECT);
+    } ///
+    ResultMatcher isPermanentRedirect()
+    {
+        return matcher(HttpStatus.PERMANENT_REDIRECT);
+    } ///
+    ResultMatcher isBadRequest()
+    {
+        return matcher(HttpStatus.BAD_REQUEST);
+    } ///
+    ResultMatcher isUnauthorized()
+    {
+        return matcher(HttpStatus.UNAUTHORIZED);
+    } ///
+    ResultMatcher isForbidden()
+    {
+        return matcher(HttpStatus.FORBIDDEN);
+    } ///
+    ResultMatcher isNotFound()
+    {
+        return matcher(HttpStatus.NOT_FOUND);
+    } ///
+    ResultMatcher isMethodNotAllowed()
+    {
+        return matcher(HttpStatus.METHOD_NOT_ALLOWED);
+    } ///
+    ResultMatcher isNotAcceptable()
+    {
+        return matcher(HttpStatus.NOT_ACCEPTABLE);
+    } ///
+    ResultMatcher isConflict()
+    {
+        return matcher(HttpStatus.CONFLICT);
+    } ///
+    ResultMatcher isGone()
+    {
+        return matcher(HttpStatus.GONE);
+    } ///
+    ResultMatcher isUnsupportedMediaType()
+    {
+        return matcher(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    } ///
+    ResultMatcher isUnprocessableContent()
+    {
+        return matcher(HttpStatus.UNPROCESSABLE_CONTENT);
+    } ///
+    ResultMatcher isTooManyRequests()
+    {
+        return matcher(HttpStatus.TOO_MANY_REQUESTS);
+    } ///
+    ResultMatcher isInternalServerError()
+    {
+        return matcher(HttpStatus.INTERNAL_SERVER_ERROR);
+    } ///
+    ResultMatcher isNotImplemented()
+    {
+        return matcher(HttpStatus.NOT_IMPLEMENTED);
+    } ///
+    ResultMatcher isServiceUnavailable()
+    {
+        return matcher(HttpStatus.SERVICE_UNAVAILABLE);
+    } ///
 
     /// Asserts the `sendError` message.
     ResultMatcher reason(string reason)
@@ -184,8 +271,9 @@ final class ContentResultMatchers
             const actual = result.getResponse().getContentType();
             AssertionErrors.assertNotNull("Content type not set", actual is null);
             auto actualType = MediaType.parseMediaType(actual);
-            AssertionErrors.assertTrue("Content type [" ~ actual ~ "] is not compatible with [" ~ contentType.toString() ~ "]",
-                    actualType.isCompatibleWith(contentType));
+            AssertionErrors.assertTrue(
+                "Content type [" ~ actual ~ "] is not compatible with [" ~ contentType.toString() ~ "]",
+                actualType.isCompatibleWith(contentType));
         });
     }
 
@@ -194,7 +282,7 @@ final class ContentResultMatchers
     {
         return ResultMatcher.of((MvcResult result) {
             AssertionErrors.assertEquals("Character encoding", characterEncoding,
-                    result.getResponse().getCharacterEncoding());
+                result.getResponse().getCharacterEncoding());
         });
     }
 
@@ -202,7 +290,8 @@ final class ContentResultMatchers
     ResultMatcher string(immutable(char)[] expectedContent)
     {
         return ResultMatcher.of((MvcResult result) {
-            AssertionErrors.assertEquals("Response content", expectedContent, result.getResponse().getContentAsString());
+            AssertionErrors.assertEquals("Response content", expectedContent, result.getResponse()
+                .getContentAsString());
         });
     }
 
@@ -210,7 +299,8 @@ final class ContentResultMatchers
     ResultMatcher bytes(const(ubyte)[] expectedContent)
     {
         return ResultMatcher.of((MvcResult result) {
-            AssertionErrors.assertTrue("Response content", result.getResponse().getContentAsByteArray() == expectedContent);
+            AssertionErrors.assertTrue("Response content", result.getResponse()
+                .getContentAsByteArray() == expectedContent);
         });
     }
 
@@ -222,8 +312,8 @@ final class ContentResultMatchers
 
             auto expected = parseJSON(jsonContent);
             auto actual = parseJSON(result.getResponse().getContentAsString("UTF-8"));
-            AssertionErrors.assertTrue("JSON content expected:<" ~ jsonContent ~ "> but was:<"
-                    ~ result.getResponse().getContentAsString("UTF-8") ~ ">", expected == actual);
+            AssertionErrors.assertTrue("JSON content expected:<" ~ jsonContent ~ "> but was:<" ~ result.getResponse()
+                .getContentAsString("UTF-8") ~ ">", expected == actual);
         });
     }
 }
@@ -235,7 +325,8 @@ final class HeaderResultMatchers
     ResultMatcher string(immutable(char)[] name, immutable(char)[] value)
     {
         return ResultMatcher.of((MvcResult result) {
-            AssertionErrors.assertEquals("Response header '" ~ name ~ "'", value, result.getResponse().getHeader(name));
+            AssertionErrors.assertEquals("Response header '" ~ name ~ "'", value,
+                result.getResponse().getHeader(name));
         });
     }
 
@@ -244,7 +335,8 @@ final class HeaderResultMatchers
     {
         auto expected = values.dup;
         return ResultMatcher.of((MvcResult result) {
-            AssertionErrors.assertTrue("Response header '" ~ name ~ "'", result.getResponse().getHeaders(name) == expected);
+            AssertionErrors.assertTrue("Response header '" ~ name ~ "'", result.getResponse()
+                .getHeaders(name) == expected);
         });
     }
 
@@ -253,7 +345,7 @@ final class HeaderResultMatchers
     {
         return ResultMatcher.of((MvcResult result) {
             AssertionErrors.assertTrue("Response should contain header '" ~ name ~ "'",
-                    result.getResponse().containsHeader(name));
+                result.getResponse().containsHeader(name));
         });
     }
 
@@ -262,7 +354,7 @@ final class HeaderResultMatchers
     {
         return ResultMatcher.of((MvcResult result) {
             AssertionErrors.assertTrue("Response should not contain header '" ~ name ~ "'",
-                    !result.getResponse().containsHeader(name));
+                !result.getResponse().containsHeader(name));
         });
     }
 
@@ -420,7 +512,8 @@ final class PrintingResultHandler : ResultHandler
             text ~= padded ~ " = " ~ value ~ "\n";
         }
 
-        immutable(char)[] headersText(immutable(char)[][] names, immutable(char)[][] delegate(immutable(char)[]) @safe valuesOf)
+        immutable(char)[] headersText(immutable(char)[][] names,
+                immutable(char)[][]delegate(immutable(char)[]) @safe valuesOf)
         {
             immutable(char)[] t = "[";
             foreach (i, name; names)
@@ -445,7 +538,8 @@ final class PrintingResultHandler : ResultHandler
         }
         line("Parameters", params ~ "}");
         line("Headers", headersText(request.getHeaderNames(), (n) => request.getHeaders(n)));
-        line("Body", request.getContentAsByteArray() is null ? "null" : cast(immutable(char)[]) request.getContentAsByteArray().idup);
+        line("Body", request.getContentAsByteArray() is null
+                ? "null" : cast(immutable(char)[]) request.getContentAsByteArray().idup);
         line("Session Attrs", "{}");
         heading("Handler");
         auto handler = result.getHandler();

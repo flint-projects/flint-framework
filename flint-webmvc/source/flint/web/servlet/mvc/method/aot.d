@@ -11,13 +11,12 @@ argument with `Any.get!T`. It is deleted when the generator lands; applications 
 module flint.web.servlet.mvc.method.aot;
 
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : Descriptor, MergedAnnotation, MethodDescriptor, descriptorOf, findAnnotation,
-    mergedAnnotations;
-import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec, ExceptionHandlerSpec, HandlerArguments,
-    HandlerMapping;
+import flint.engine.aot.descriptor : Descriptor, MergedAnnotation, MethodDescriptor, descriptorOf,
+    findAnnotation, mergedAnnotations;
+import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec, ExceptionHandlerSpec, HandlerArguments, HandlerMapping;
 import flint.engine.aot.name : typeNameOf;
-import flint.web.bind.annotation : CookieValue, ExceptionHandler, ModelAttribute, PathVariable, RequestBody,
-    RequestHeader, RequestMapping, RequestParam, ResponseStatus, ValueConstants;
+import flint.web.bind.annotation : CookieValue, ExceptionHandler, ModelAttribute, PathVariable,
+    RequestBody, RequestHeader, RequestMapping, RequestParam, ResponseStatus, ValueConstants;
 import flint.web.util.pattern : PathPatternParser;
 import std.traits : ReturnType;
 
@@ -67,8 +66,8 @@ HandlerMapping[] requestMappingsOf(C)(string beanName)
                         row.produces = mapping.produces.length != 0 ? mapping.produces.dup : typeProduces;
                         row.arguments = argumentsOf!overload();
                         row.returnType = returnTypeName!overload();
-                        row.responseBody = typeResponseBody
-                            || findAnnotation(methodAnnotations, "flint.web.bind.annotation.ResponseBody") !is null;
+                        row.responseBody = typeResponseBody || findAnnotation(methodAnnotations,
+                                "flint.web.bind.annotation.ResponseBody") !is null;
                         if (auto status = findAnnotation(methodAnnotations, typeNameOf!ResponseStatus))
                         {
                             const value = status.value.get!ResponseStatus;
@@ -81,8 +80,8 @@ HandlerMapping[] requestMappingsOf(C)(string beanName)
                         descriptor.annotations = methodAnnotations;
                         foreach (ref annotation; typeAnnotations)
                             if (annotation.type == "flint.web.bind.annotation.CrossOrigin")
-                                descriptor.annotations ~= MergedAnnotation(annotation.type, annotation.value,
-                                        cast(ubyte)(annotation.distance + 100));
+                                descriptor.annotations ~= MergedAnnotation(annotation.type,
+                                        annotation.value, cast(ubyte)(annotation.distance + 100));
                         row.method = descriptor;
                         row.invoke = &invokeHandler!(C, overload);
                         row.source = __traits(identifier, C) ~ "." ~ member;
@@ -131,8 +130,8 @@ ExceptionHandlerSpec[] exceptionHandlersOf(C)(string beanName)
                         row.adviceBasePackages = basePackages;
                         row.arguments = argumentsOf!overload();
                         row.returnType = returnTypeName!overload();
-                        row.responseBody = typeResponseBody
-                            || findAnnotation(methodAnnotations, "flint.web.bind.annotation.ResponseBody") !is null;
+                        row.responseBody = typeResponseBody || findAnnotation(methodAnnotations,
+                                "flint.web.bind.annotation.ResponseBody") !is null;
                         if (auto status = findAnnotation(methodAnnotations, typeNameOf!ResponseStatus))
                             row.responseStatus = status.value.get!ResponseStatus.code.value();
                         row.invoke = &invokeExceptionHandler!(C, overload);
@@ -174,8 +173,8 @@ private template isFrameworkType(T)
 
 private template isPublicMethod(C, string member)
 {
-    static if (__traits(compiles, __traits(getMember, C, member)) && member != "this" && member != "__ctor"
-            && member != "__dtor" && member.length >= 2 && member[0 .. 2] != "__")
+    static if (__traits(compiles, __traits(getMember, C, member)) && member != "this"
+            && member != "__ctor" && member != "__dtor" && member.length >= 2 && member[0 .. 2] != "__")
     {
         enum isPublicMethod = __traits(getVisibility, __traits(getMember, C, member)) == "public"
             && is(typeof(__traits(getMember, C, member)) == function);
@@ -316,8 +315,8 @@ private void invokeHandler(C, alias method)(Object bean, HandlerArguments argume
     }
 }
 
-private void invokeExceptionHandler(C, alias method)(Object bean, Exception exception, HandlerArguments arguments,
-        ref Any result) @safe
+private void invokeExceptionHandler(C, alias method)(Object bean, Exception exception,
+        HandlerArguments arguments, ref Any result) @safe
 {
     invokeHandler!(C, method)(bean, arguments, result);
 }

@@ -225,7 +225,8 @@ class ErrorResponseException : NestedRuntimeException, ErrorResponse
 
     final ProblemDetail getBody()
     {
-        return body;
+        return
+        body;
     }
 
     string getTypeMessageCode()
@@ -262,8 +263,10 @@ class ErrorResponseException : NestedRuntimeException, ErrorResponse
     /// Recomputes Java's `getMessage()` text after a subclass constructor changes what it depends on.
     protected string computeMessage()
     {
+        // dfmt off
         return status.toString() ~ (!headers.isEmpty() ? ", headers=" ~ headers.toString() : "") ~ ", "
-            ~ body.toString();
+                ~ body.toString();
+        // dfmt on
     }
 }
 
@@ -336,7 +339,8 @@ class HttpRequestMethodNotSupportedException : ServletException, ErrorResponse
 
     ProblemDetail getBody()
     {
-        return body;
+        return
+        body;
     }
 
     Any[] getDetailMessageArguments()
@@ -376,7 +380,8 @@ abstract class HttpMediaTypeException : ServletException, ErrorResponse
 
     ProblemDetail getBody()
     {
-        return body;
+        return
+        body;
     }
 
     string getDetailMessageCode()
@@ -400,7 +405,9 @@ class HttpMediaTypeNotSupportedException : HttpMediaTypeException
     /// A `Content-Type` that could not be parsed.
     this(string message, MediaType[] mediaTypes = null)
     {
-        super(message, mediaTypes, ErrorResponse.getDefaultDetailMessageCode(typeid(HttpMediaTypeNotSupportedException), "parseError"), null);
+        super(message, mediaTypes,
+                ErrorResponse.getDefaultDetailMessageCode(typeid(HttpMediaTypeNotSupportedException),
+                    "parseError"), null);
         getBody().setDetail("Could not parse Content-Type.");
     }
 
@@ -408,8 +415,8 @@ class HttpMediaTypeNotSupportedException : HttpMediaTypeException
     this(Nullable!MediaType contentType, MediaType[] supportedMediaTypes,
             Nullable!HttpMethod httpMethod = Nullable!HttpMethod.init)
     {
-        this(contentType, supportedMediaTypes, httpMethod, "Content-Type "
-                ~ (!contentType.isNull ? "'" ~ contentType.get.toString() ~ "' " : "") ~ "is not supported");
+        this(contentType, supportedMediaTypes, httpMethod, "Content-Type " ~ (!contentType.isNull
+                ? "'" ~ contentType.get.toString() ~ "' " : "") ~ "is not supported");
     }
 
     /// ditto, for a known type.
@@ -419,15 +426,17 @@ class HttpMediaTypeNotSupportedException : HttpMediaTypeException
     }
 
     /// ditto, with a message.
-    this(Nullable!MediaType contentType, MediaType[] supportedMediaTypes, Nullable!HttpMethod httpMethod,
-            string message)
+    this(Nullable!MediaType contentType, MediaType[] supportedMediaTypes,
+            Nullable!HttpMethod httpMethod, string message)
     {
-        super(message, supportedMediaTypes, null, [Any.of(contentType.isNull ? null : contentType.get.toString()),
-                Any.of(supportedMediaTypes)]);
+        super(message, supportedMediaTypes, null, [
+            Any.of(contentType.isNull ? null : contentType.get.toString()),
+            Any.of(supportedMediaTypes)
+        ]);
         this.contentType = contentType;
         this.httpMethod = httpMethod;
-        getBody().setDetail("Content-Type '" ~ (contentType.isNull ? "null" : contentType.get.toString())
-                ~ "' is not supported.");
+        getBody().setDetail("Content-Type '" ~ (contentType.isNull
+                ? "null" : contentType.get.toString()) ~ "' is not supported.");
     }
 
     /// The unsupported type, if known.
@@ -462,7 +471,8 @@ class HttpMediaTypeNotAcceptableException : HttpMediaTypeException
     /// An `Accept` header that could not be parsed.
     this(string message)
     {
-        super(message, null, ErrorResponse.getDefaultDetailMessageCode(typeid(HttpMediaTypeNotAcceptableException), "parseError"), null);
+        super(message, null, ErrorResponse.getDefaultDetailMessageCode(typeid(HttpMediaTypeNotAcceptableException),
+                "parseError"), null);
         getBody().setDetail("Could not parse Accept header.");
     }
 

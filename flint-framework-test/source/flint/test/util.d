@@ -121,8 +121,8 @@ struct JsonPathExpectationsHelper
                 if (matches.length == 0)
                     AssertionErrors.fail("No matching value at JSON path \"" ~ expression ~ "\"");
                 if (matches.length != 1)
-                    AssertionErrors.fail("Got a list of values " ~ listText(matches) ~ " instead of the expected single value "
-                            ~ AssertionErrors.text(expectedValue));
+                    AssertionErrors.fail("Got a list of values " ~ listText(
+                            matches) ~ " instead of the expected single value " ~ AssertionErrors.text(expectedValue));
                 actual = matches[0];
             }
             else
@@ -136,8 +136,8 @@ struct JsonPathExpectationsHelper
         }
         T converted;
         if (!convert(actual, converted))
-            AssertionErrors.fail("At JSON path \"" ~ expression ~ "\", value <" ~ actual.toString() ~ "> of type <"
-                    ~ jsonTypeName(actual) ~ "> cannot be converted to type <" ~ T.stringof ~ ">");
+            AssertionErrors.fail("At JSON path \"" ~ expression ~ "\", value <" ~ actual.toString()
+                    ~ "> of type <" ~ jsonTypeName(actual) ~ "> cannot be converted to type <" ~ T.stringof ~ ">");
         AssertionErrors.assertEquals("JSON path \"" ~ expression ~ "\"", expectedValue, converted);
     }
 
@@ -156,11 +156,11 @@ struct JsonPathExpectationsHelper
         bool definite;
         auto matches = evaluate(content, definite);
         if (definite)
-            AssertionErrors.assertTrue("Expected no value at JSON path \"" ~ expression ~ "\" but found: "
-                    ~ (matches.length != 0 ? matches[0].toString() : ""), matches.length == 0);
+            AssertionErrors.assertTrue("Expected no value at JSON path \"" ~ expression ~ "\" but found: " ~ (
+                    matches.length != 0 ? matches[0].toString() : ""), matches.length == 0);
         else
-            AssertionErrors.assertTrue("Expected no value at JSON path \"" ~ expression ~ "\" but found: "
-                    ~ listText(matches), matches.length == 0);
+            AssertionErrors.assertTrue("Expected no value at JSON path \"" ~ expression ~ "\" but found: " ~ listText(
+                    matches), matches.length == 0);
     }
 
     /// Asserts the value at the path is an array.
@@ -186,7 +186,8 @@ struct JsonPathExpectationsHelper
     {
         bool definite;
         auto value = definiteValue(content);
-        AssertionErrors.assertTrue("Expected a boolean at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
+        AssertionErrors.assertTrue(
+                "Expected a boolean at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
                 value.type == JSONType.true_ || value.type == JSONType.false_);
     }
 
@@ -194,31 +195,37 @@ struct JsonPathExpectationsHelper
     void assertValueIsNumber(string content)
     {
         auto value = definiteValue(content);
-        AssertionErrors.assertTrue("Expected a number at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
-                value.type == JSONType.integer || value.type == JSONType.uinteger || value.type == JSONType.float_);
+        // dfmt off
+        AssertionErrors.assertTrue("Expected a number at JSON path \"" ~ expression ~ "\" but found: "
+                ~ value.toString(),
+        // dfmt on
+        value.type == JSONType.integer || value.type == JSONType.uinteger || value.type == JSONType.float_);
     }
 
     /// Asserts the value at the path is empty (an empty string, array or object, or null).
     void assertValueIsEmpty(string content)
     {
         auto value = definiteValue(content);
-        AssertionErrors.assertTrue("Expected an empty value at JSON path \"" ~ expression ~ "\" but found: "
-                ~ value.toString(), isEmpty(value));
+        AssertionErrors.assertTrue(
+                "Expected an empty value at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
+                isEmpty(value));
     }
 
     /// Asserts the value at the path is not empty.
     void assertValueIsNotEmpty(string content)
     {
         auto value = definiteValue(content);
-        AssertionErrors.assertTrue("Expected a non-empty value at JSON path \"" ~ expression ~ "\" but found: "
-                ~ value.toString(), !isEmpty(value));
+        AssertionErrors.assertTrue(
+                "Expected a non-empty value at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
+                !isEmpty(value));
     }
 
     private void assertType(string content, JSONType type, string description)
     {
         auto value = definiteValue(content);
-        AssertionErrors.assertTrue("Expected " ~ description ~ " at JSON path \"" ~ expression ~ "\" but found: "
-                ~ value.toString(), value.type == type);
+        AssertionErrors.assertTrue(
+                "Expected " ~ description ~ " at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
+                value.type == type);
     }
 
     private JSONValue definiteValue(string content)

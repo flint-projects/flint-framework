@@ -32,17 +32,29 @@ interface HandlerMapping
     /// The lookup path the mapping matched.
     enum string LOOKUP_PATH = "org.springframework.web.util.UrlPathHelper.PATH";
     /// The path within the handler mapping.
-    enum string PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE = "org.springframework.web.servlet.HandlerMapping.pathWithinHandlerMapping";
+    // dfmt off
+    enum string PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE =
+            "org.springframework.web.servlet.HandlerMapping.pathWithinHandlerMapping";
+    // dfmt on
     /// The pattern that matched best.
     enum string BEST_MATCHING_PATTERN_ATTRIBUTE = "org.springframework.web.servlet.HandlerMapping.bestMatchingPattern";
     /// Whether type-level mappings are introspected.
-    enum string INTROSPECT_TYPE_LEVEL_MAPPING = "org.springframework.web.servlet.HandlerMapping.introspectTypeLevelMapping";
+    // dfmt off
+    enum string INTROSPECT_TYPE_LEVEL_MAPPING =
+            "org.springframework.web.servlet.HandlerMapping.introspectTypeLevelMapping";
+    // dfmt on
     /// The URI template variables (`string[2][]`).
-    enum string URI_TEMPLATE_VARIABLES_ATTRIBUTE = "org.springframework.web.servlet.HandlerMapping.uriTemplateVariables";
+    // dfmt off
+    enum string URI_TEMPLATE_VARIABLES_ATTRIBUTE =
+            "org.springframework.web.servlet.HandlerMapping.uriTemplateVariables";
+    // dfmt on
     /// Matrix variables.
     enum string MATRIX_VARIABLES_ATTRIBUTE = "org.springframework.web.servlet.HandlerMapping.matrixVariables";
     /// The producible media types of the matched mapping (`MediaType[]`).
-    enum string PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE = "org.springframework.web.servlet.HandlerMapping.producibleMediaTypes";
+    // dfmt off
+    enum string PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE =
+            "org.springframework.web.servlet.HandlerMapping.producibleMediaTypes";
+    // dfmt on
 
     /// The handler chain for `request`, or `null` when this mapping has none.
     HandlerExecutionChain getHandler(HttpServletRequest request);
@@ -165,8 +177,8 @@ class HandlerExecutionChain
     {
         import std.conv : to;
 
-        return "HandlerExecutionChain with [" ~ (handler is null ? "null" : typeid(handler).name) ~ "] and "
-            ~ interceptorList.length.to!string ~ " interceptors";
+        return "HandlerExecutionChain with [" ~ (handler is null ? "null" : typeid(handler)
+                .name) ~ "] and " ~ interceptorList.length.to!string ~ " interceptors";
     }
 }
 
@@ -174,8 +186,10 @@ class HandlerExecutionChain
 interface HandlerExceptionResolver
 {
     /// A model and view (possibly empty, meaning "handled"), or `null` to let the next resolver try.
+    // dfmt off
     ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler,
             Exception ex);
+    // dfmt on
 }
 
 /// `View`: renders a model.
@@ -295,7 +309,9 @@ class ModelAndView
     }
 
     /// The response status, or `null`.
+    // dfmt off
     const(HttpStatusCode)* getStatus() const pure nothrow @nogc return
+    // dfmt on
     {
         return hasStatus ? &status : null;
     }
@@ -368,7 +384,8 @@ class NoHandlerFoundException : ServletException, ErrorResponse
 
     ProblemDetail getBody()
     {
-        return body;
+        return
+        body;
     }
 }
 
@@ -600,13 +617,14 @@ class DispatcherServlet : HttpServlet
         foreach (adapter; strategies.handlerAdapters)
             if (adapter.supports(handler))
                 return adapter;
-        throw new ServletException("No adapter for handler [" ~ (handler is null ? "null" : typeid(handler).name)
-                ~ "]: The DispatcherServlet configuration needs to include a HandlerAdapter that supports this handler");
+        throw new ServletException("No adapter for handler [" ~ (handler is null ? "null" : typeid(handler)
+                .name) ~ "]: The DispatcherServlet configuration needs to include a HandlerAdapter that "
+                ~ "supports this handler");
     }
 
     /// Spring's `processHandlerException`.
-    protected ModelAndView processHandlerException(HttpServletRequest request, HttpServletResponse response,
-            Object handler, Exception ex)
+    protected ModelAndView processHandlerException(HttpServletRequest request,
+            HttpServletResponse response, Object handler, Exception ex)
     {
         request.removeAttribute(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
         ModelAndView exMv;
@@ -664,9 +682,11 @@ class DispatcherServlet : HttpServlet
 
     private static void clearErrorRequestAttributes(HttpServletRequest request)
     {
-        foreach (name; [RequestDispatcher.ERROR_STATUS_CODE, RequestDispatcher.ERROR_EXCEPTION_TYPE,
-                RequestDispatcher.ERROR_MESSAGE, RequestDispatcher.ERROR_EXCEPTION, RequestDispatcher.ERROR_REQUEST_URI,
-                RequestDispatcher.ERROR_SERVLET_NAME])
+        foreach (name; [
+            RequestDispatcher.ERROR_STATUS_CODE, RequestDispatcher.ERROR_EXCEPTION_TYPE,
+            RequestDispatcher.ERROR_MESSAGE, RequestDispatcher.ERROR_EXCEPTION,
+            RequestDispatcher.ERROR_REQUEST_URI, RequestDispatcher.ERROR_SERVLET_NAME
+        ])
             request.removeAttribute(name);
     }
 }

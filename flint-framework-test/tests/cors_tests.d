@@ -18,9 +18,7 @@ private alias status = MockMvcResultMatchers.status;
 private alias header = MockMvcResultMatchers.header;
 
 /// A slice of spring-petclinic-rest's controllers: class-level `@CrossOrigin` and `@RequestMapping("api")`.
-@RestController
-@CrossOrigin(exposedHeaders: ["errors, content-type"])
-@RequestMapping("api")
+@RestController @CrossOrigin(exposedHeaders : ["errors, content-type"]) @RequestMapping("api")
 class PetclinicLikeController
 {
     ///
@@ -49,15 +47,15 @@ class PetclinicLikeController
 unittest
 {
     auto mockMvc = MockMvcBuilders.standaloneSetup(new PetclinicLikeController()).build();
-    auto result = mockMvc.perform(MockMvcRequestBuilders.get("/api/pettypes/2").header("Origin", "http://example.com"))
-        .andExpect(status().isOk())
-        .andExpect(header().stringValues("Vary", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"))
-        .andExpect(header().string("Access-Control-Allow-Origin", "*"))
-        .andExpect(header().string("Access-Control-Expose-Headers", "errors, content-type"))
-        .andReturn();
+    auto result = mockMvc.perform(MockMvcRequestBuilders.get("/api/pettypes/2").header("Origin",
+            "http://example.com")).andExpect(status().isOk()).andExpect(header().stringValues("Vary",
+            "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers")).andExpect(header()
+            .string("Access-Control-Allow-Origin",
+                "*")).andExpect(header().string("Access-Control-Expose-Headers", "errors, content-type")).andReturn();
     // CORS headers come before the body headers, as in the golden.
-    assert(result.getResponse().getHeaderNames()[0 .. 3] == ["Vary", "Access-Control-Allow-Origin",
-            "Access-Control-Expose-Headers"]);
+    assert(result.getResponse().getHeaderNames()[0 .. 3] == [
+        "Vary", "Access-Control-Allow-Origin", "Access-Control-Expose-Headers"
+    ]);
 }
 
 @("CORS preflight: the mapped method, headers, max age, and the container's Allow")
@@ -66,13 +64,14 @@ unittest
     auto mockMvc = MockMvcBuilders.standaloneSetup(new PetclinicLikeController()).build();
     mockMvc.perform(MockMvcRequestBuilders.options("/api/owners").header("Origin", "http://example.com")
             .header("Access-Control-Request-Method", "POST").header("Access-Control-Request-Headers", "content-type"))
-        .andExpect(status().isOk())
-        .andExpect(header().stringValues("Vary", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"))
-        .andExpect(header().string("Access-Control-Allow-Origin", "*"))
-        .andExpect(header().string("Access-Control-Allow-Methods", "POST"))
-        .andExpect(header().string("Access-Control-Allow-Headers", "content-type"))
-        .andExpect(header().string("Access-Control-Expose-Headers", "errors, content-type"))
-        .andExpect(header().string("Access-Control-Max-Age", "1800"))
+        .andExpect(status().isOk()).andExpect(header()
+            .stringValues("Vary",
+                "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers")).andExpect(header()
+            .string("Access-Control-Allow-Origin",
+                "*")).andExpect(header().string("Access-Control-Allow-Methods", "POST")).andExpect(header()
+            .string("Access-Control-Allow-Headers", "content-type")).andExpect(header()
+            .string("Access-Control-Expose-Headers",
+                "errors, content-type")).andExpect(header().string("Access-Control-Max-Age", "1800"))
         .andExpect(header().string("Allow", "GET, HEAD, PATCH, POST, PUT, DELETE, OPTIONS, TRACE"));
 }
 
@@ -80,12 +79,11 @@ unittest
 unittest
 {
     auto mockMvc = MockMvcBuilders.standaloneSetup(new PetclinicLikeController()).build();
-    mockMvc.perform(MockMvcRequestBuilders.options("/api/owners").header("Origin", "http://example.com")
-            .header("Access-Control-Request-Method", "PATCH"))
-        .andExpect(status().isOk())
-        .andExpect(header().doesNotExist("Vary"))
-        .andExpect(header().doesNotExist("Access-Control-Allow-Origin"))
-        .andExpect(header().string("Allow", "GET, HEAD, PATCH, POST, PUT, DELETE, OPTIONS, TRACE"));
+    mockMvc.perform(MockMvcRequestBuilders.options("/api/owners").header("Origin",
+            "http://example.com").header("Access-Control-Request-Method", "PATCH")).andExpect(status()
+            .isOk()).andExpect(header().doesNotExist("Vary")).andExpect(header()
+            .doesNotExist("Access-Control-Allow-Origin")).andExpect(header().string("Allow",
+            "GET, HEAD, PATCH, POST, PUT, DELETE, OPTIONS, TRACE"));
 }
 
 @("Global CORS from WebMvcConfigurer.addCorsMappings, and rejection of a foreign origin")
@@ -107,12 +105,11 @@ unittest
         }
     };
     auto mockMvc = MockMvcBuilders.standaloneSetup(new Plain()).addConfigurer(config).build();
-    mockMvc.perform(MockMvcRequestBuilders.get("/plain").header("Origin", "https://allowed.example"))
-        .andExpect(status().isOk())
-        .andExpect(header().string("Access-Control-Allow-Origin", "https://allowed.example"));
+    mockMvc.perform(MockMvcRequestBuilders.get("/plain").header("Origin",
+            "https://allowed.example")).andExpect(status().isOk()).andExpect(header()
+            .string("Access-Control-Allow-Origin", "https://allowed.example"));
     mockMvc.perform(MockMvcRequestBuilders.get("/plain").header("Origin", "https://other.example"))
-        .andExpect(status().isForbidden())
-        .andExpect(MockMvcResultMatchers.content().string("Invalid CORS request"));
+        .andExpect(status().isForbidden()).andExpect(MockMvcResultMatchers.content().string("Invalid CORS request"));
     // Same-origin requests are not CORS requests.
     mockMvc.perform(MockMvcRequestBuilders.get("/plain").header("Origin", "http://localhost"))
         .andExpect(status().isOk()).andExpect(header().doesNotExist("Access-Control-Allow-Origin"));

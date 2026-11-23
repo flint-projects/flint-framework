@@ -20,12 +20,12 @@ import flint.http.converter : ByteArrayHttpMessageConverter, HttpMessageConverte
 import flint.http.converter.json : JacksonJsonHttpMessageConverter;
 import flint.web.cors : CorsConfiguration, UrlBasedCorsConfigurationSource;
 import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodReturnValueHandler;
-import flint.web.servlet : DispatcherStrategies, HandlerExceptionResolver, HandlerInterceptor, HandlerMapping,
-    ViewResolver;
+import flint.web.servlet : DispatcherStrategies, HandlerExceptionResolver, HandlerInterceptor,
+    HandlerMapping, ViewResolver;
 import flint.web.servlet.handler : MappedInterceptor;
 import flint.web.servlet.mvc.annotation : ResponseStatusExceptionResolver;
-import flint.web.servlet.mvc.method.annotation : ExceptionHandlerExceptionResolver, RequestMappingHandlerAdapter,
-    RequestMappingHandlerMapping;
+import flint.web.servlet.mvc.method.annotation : ExceptionHandlerExceptionResolver,
+    RequestMappingHandlerAdapter, RequestMappingHandlerMapping;
 import flint.web.servlet.mvc.support : DefaultHandlerExceptionResolver;
 import flint.web.servlet.resource : HttpRequestHandlerAdapter, ResourceHttpRequestHandler, SimpleUrlHandlerMapping;
 
@@ -273,8 +273,8 @@ class WebMvcConfigurationSupport
     private int[string] adviceOrder;
 
     /// Over Flint AOT's tables, the bean factory and the application's configurers.
-    this(AotHandlerMapping[] mappings, ExceptionHandlerSpec[] exceptionHandlers, BeanFactory beanFactory,
-            WebMvcConfigurer[] configurers = null, DescriptorTable descriptors = null)
+    this(AotHandlerMapping[] mappings, ExceptionHandlerSpec[] exceptionHandlers,
+            BeanFactory beanFactory, WebMvcConfigurer[] configurers = null, DescriptorTable descriptors = null)
     {
         this.mappings = mappings;
         this.exceptionHandlers = exceptionHandlers;
@@ -320,8 +320,10 @@ class WebMvcConfigurationSupport
             foreach (configurer; configurers)
                 configurer.configureMessageConverters(result);
             if (result is null)
-                result = [cast(HttpMessageConverter) new ByteArrayHttpMessageConverter, new StringHttpMessageConverter,
-                    new JacksonJsonHttpMessageConverter];
+                result = [
+                cast(HttpMessageConverter) new ByteArrayHttpMessageConverter,
+                new StringHttpMessageConverter, new JacksonJsonHttpMessageConverter
+            ];
         }
         foreach (configurer; configurers)
             configurer.extendMessageConverters(result);
@@ -365,15 +367,22 @@ class WebMvcConfigurationSupport
         foreach (configurer; configurers)
             configurer.configureHandlerExceptionResolvers(resolvers);
         if (resolvers is null)
-            resolvers = [cast(HandlerExceptionResolver) new ExceptionHandlerExceptionResolver(exceptionHandlers,
-                    beanFactory, adapter, adviceOrder), new ResponseStatusExceptionResolver(descriptors),
-                new DefaultHandlerExceptionResolver];
+            resolvers = [
+            // dfmt off
+            cast(HandlerExceptionResolver) new ExceptionHandlerExceptionResolver(exceptionHandlers, beanFactory,
+                    adapter,
+            // dfmt on
+            adviceOrder), new ResponseStatusExceptionResolver(descriptors),
+            new DefaultHandlerExceptionResolver
+        ];
         foreach (configurer; configurers)
             configurer.extendHandlerExceptionResolvers(resolvers);
 
         DispatcherStrategies strategies;
         strategies.handlerMappings = [cast(HandlerMapping) requestMappings, resources];
-        strategies.handlerAdapters = [cast(imported!"flint.web.servlet".HandlerAdapter) adapter, new HttpRequestHandlerAdapter];
+        strategies.handlerAdapters = [
+            cast(imported!"flint.web.servlet".HandlerAdapter) adapter, new HttpRequestHandlerAdapter
+        ];
         strategies.handlerExceptionResolvers = firstResolvers ~ resolvers;
         strategies.viewResolvers = viewResolvers;
         return strategies;
