@@ -1,6 +1,7 @@
 /++
 `java.text` (clean room, from the Java SE specification): the `MessageFormat` and `NumberFormat` subset that Spring's
-`MessageSource` renders messages with.
+`MessageSource` renders messages with, and the `DateFormat` family (`SimpleDateFormat`, `ParsePosition`,
+`ParseException`, in flint.java.text.simpledateformat) that Jackson's `StdDateFormat` delegates to.
 
 `MessageFormat` supports Java's quoting (`''` for a quote, `'...'` for literal text, braces included) and the
 format elements `{n}`, `{n,number}` and `{n,number,integer}`; other element types format the argument as `{n}`
@@ -13,6 +14,7 @@ module flint.java.text;
 import flint.engine.aot.any : Any;
 import flint.java.lang : IllegalArgumentException;
 import flint.java.util : Locale;
+public import flint.java.text.simpledateformat : DateFormat, ParseException, ParsePosition, SimpleDateFormat;
 
 @safe:
 

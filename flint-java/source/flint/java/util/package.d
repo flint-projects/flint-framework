@@ -24,7 +24,9 @@ import flint.engine.aot.name : typeNameOf;
 import flint.java.lang : ClassCastException, IllegalArgumentException, IndexOutOfBoundsException, Iterable,
     NullPointerException, RuntimeException, UnsupportedOperationException, javaEquals, javaHashCode, valueOf;
 import flint.java.util.stream : Stream;
+public import flint.java.util.calendar : Calendar, GregorianCalendar;
 public import flint.java.util.date : Date;
+public import flint.java.util.timezone : SimpleTimeZone, TimeZone;
 
 @safe:
 
