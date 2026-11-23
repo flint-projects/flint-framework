@@ -141,6 +141,14 @@ package(flint.engine.web) bool validFiberFields(scope const(StreamField)[] field
 
 private bool engineField(scope const(char)[] name) pure nothrow @nogc
 {
+    // Only these lengths can name a reserved field; most application fields are skipped without a comparison.
+    switch (name.length)
+    {
+    case 7, 10, 14, 16, 17:
+        break;
+    default:
+        return false;
+    }
     static immutable string[] reserved = [
         "content-length", "transfer-encoding", "connection", "keep-alive", "proxy-connection",
         "upgrade"
@@ -191,13 +199,22 @@ package(flint.engine.web) bool hasConnectionToken(scope const(char)[] value, sco
 
 private bool tokenCharacter(char value) pure nothrow @nogc
 {
-    if ((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9'))
-        return true;
-    foreach (candidate; "!#$%&'*+-.^`_|~")
-        if (value == candidate)
-            return true;
-    return false;
+    return tokenTable[value];
 }
+
+// RFC 9110 tchar, by byte: one load per character of every response field name.
+private immutable bool[256] tokenTable = () {
+    bool[256] table;
+    foreach (c; 'a' .. 'z' + 1)
+        table[c] = true;
+    foreach (c; 'A' .. 'Z' + 1)
+        table[c] = true;
+    foreach (c; '0' .. '9' + 1)
+        table[c] = true;
+    foreach (c; "!#$%&'*+-.^`_|~")
+        table[c] = true;
+    return table;
+}();
 
 @("fiber fields accept mixed-case tokens and reject framing, hop-by-hop and malformed fields")
 unittest

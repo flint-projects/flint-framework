@@ -299,9 +299,10 @@ final class RequestMappingInfo
                 return Matched!HttpMethod.init; // let the OPTIONS handler answer
             return found!HttpMethod(null);
         }
-        foreach (m; methods)
+        // The matching method's own slice of `methods`, read only: no allocation per request.
+        foreach (index, m; methods)
             if (m.matches(method))
-                return found!HttpMethod([cast(HttpMethod) m]);
+                return found!HttpMethod(methods[index .. index + 1]);
         if (method == "HEAD")
             foreach (m; methods)
                 if (m == HttpMethod.GET)

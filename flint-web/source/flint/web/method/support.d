@@ -171,9 +171,9 @@ class ModelAndViewContainer
     private bool hasStatus;
 
     ///
-    this()
+    this() pure nothrow @nogc
     {
-        defaultModel = new LinkedHashMap!(string, Any);
+        // The model is created on first use: a @ResponseBody handler never touches it.
     }
 
     /// Sets a view name.
@@ -207,15 +207,17 @@ class ModelAndViewContainer
     }
 
     /// The model.
-    LinkedHashMap!(string, Any) getModel() pure nothrow @nogc
+    LinkedHashMap!(string, Any) getModel() pure nothrow
     {
+        if (defaultModel is null)
+            defaultModel = new LinkedHashMap!(string, Any);
         return defaultModel;
     }
 
     /// Adds a model attribute.
     ModelAndViewContainer addAttribute(string name, Any value)
     {
-        defaultModel.put(name, value);
+        getModel().put(name, value);
         return this;
     }
 
