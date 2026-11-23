@@ -75,3 +75,42 @@ unittest
     context.publishEvent("payload");
     context.close();
 }
+
+private interface TwoPathListener : imported!"flint.context".GenericApplicationListener
+{
+}
+
+private final class TwoPathRecorder : imported!"flint.context".GenericApplicationListener, TwoPathListener
+{
+    int seen;
+
+    bool supportsEvent(Object)
+    {
+        return true;
+    }
+
+    void dispatchEvent(Object)
+    {
+        seen++;
+    }
+
+    int getListenerOrder()
+    {
+        return 0;
+    }
+}
+
+unittest
+{
+    // A listener added through one interface path is removed through another: removal compares objects.
+    import flint.context : GenericApplicationListener;
+    import flint.context.event : SimpleApplicationEventMulticaster;
+
+    auto recorder = new TwoPathRecorder;
+    GenericApplicationListener direct = recorder;
+    GenericApplicationListener viaBase = cast(TwoPathListener) recorder;
+    auto multicaster = new SimpleApplicationEventMulticaster;
+    multicaster.addApplicationListener(direct);
+    multicaster.removeApplicationListener(viaBase);
+    assert(multicaster.getApplicationListeners(null).length == 0);
+}

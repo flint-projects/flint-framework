@@ -145,7 +145,7 @@ class SimpleApplicationEventMulticaster : ApplicationEventMulticaster
     {
         GenericApplicationListener[] kept;
         foreach (existing; listeners)
-            if (existing !is listener)
+            if (cast(Object) existing !is cast(Object) listener) // one object may reach the interface by two paths
                 kept ~= existing;
         listeners = kept;
     }
