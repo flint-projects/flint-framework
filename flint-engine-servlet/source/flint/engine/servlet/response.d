@@ -35,8 +35,11 @@ final class ServletEngineResponse : HttpServletResponse
     private FiberResponse transport;
     private int status = SC_OK;
     private string message;
+    // Header fields in the order they were added: inside this object while they fit, then on the GC heap.
     private string[] headerNames;
     private string[] headerValues;
+    private string[8] inlineNames;
+    private string[8] inlineValues;
     private string contentType;
     private string characterEncoding;
     private bool characterEncodingSet;
@@ -398,6 +401,21 @@ final class ServletEngineResponse : HttpServletResponse
             }
             return;
         }
+        appendHeader(name, value);
+    }
+
+    private void appendHeader(string name, string value) pure nothrow
+    {
+        const count = headerNames.length;
+        // Slices of the inline arrays have no capacity, so `~=` would move them at once: fill them by hand.
+        if (count < inlineNames.length && (count == 0 || headerNames.ptr is inlineNames.ptr))
+        {
+            inlineNames[count] = name;
+            inlineValues[count] = value;
+            headerNames = inlineNames[0 .. count + 1];
+            headerValues = inlineValues[0 .. count + 1];
+            return;
+        }
         headerNames ~= name;
         headerValues ~= value;
     }
@@ -411,8 +429,7 @@ final class ServletEngineResponse : HttpServletResponse
             return;
         if (value is null)
             value = "";
-        headerNames ~= name;
-        headerValues ~= value;
+        appendHeader(name, value);
     }
 
     void setIntHeader(string name, int value)

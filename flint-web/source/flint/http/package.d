@@ -1094,11 +1094,42 @@ struct HttpHeaders
     private static final class Store
     {
         Entry[] entries;
+        // The first entries and single values live inside this object, so a usual response's headers cost no
+        // allocation of their own. Each inline slot is used once: after a removal or `clear`, later headers go to
+        // the GC heap, so a values array handed out earlier never changes under its holder.
+        Entry[4] inlineEntries;
+        string[4] inlineValues;
+        size_t entriesUsed;
+        size_t valuesUsed;
         // The text setContentType wrote and the MediaType it came from: getContentType answers from them while
         // the header still holds that same string, instead of parsing it again (Spring parses each time but
         // caches MimeTypeUtils.parseMimeType).
         string contentTypeText;
         MediaType contentTypeParsed;
+
+        void append(Entry entry) pure nothrow
+        {
+            const count = entries.length;
+            // A slice of the inline array has no capacity, so `~=` would move it at once: fill it by hand.
+            const inline = count == 0 || entries.ptr is inlineEntries.ptr;
+            if (inline && count == entriesUsed && count < inlineEntries.length)
+            {
+                inlineEntries[count] = entry;
+                entries = inlineEntries[0 .. ++entriesUsed];
+                return;
+            }
+            entries ~= entry;
+        }
+
+        /// A one-element values array holding `value`.
+        string[] single(string value) pure nothrow
+        {
+            if (valuesUsed == inlineValues.length)
+                return [value];
+            inlineValues[valuesUsed] = value;
+            ++valuesUsed;
+            return inlineValues[valuesUsed - 1 .. valuesUsed];
+        }
     }
 
     private static struct Entry
@@ -1194,7 +1225,7 @@ struct HttpHeaders
         if (i >= 0)
             store.entries[i].values ~= headerValue;
         else
-            store.entries ~= Entry(headerName, [headerValue]);
+            store.append(Entry(headerName, store.single(headerValue)));
     }
 
     /// Adds every value to `headerName`.
@@ -1205,7 +1236,7 @@ struct HttpHeaders
         if (i >= 0)
             store.entries[i].values ~= headerValues;
         else
-            store.entries ~= Entry(headerName, headerValues.dup);
+            store.append(Entry(headerName, headerValues.dup));
     }
 
     /// Adds every header of `headers`.
@@ -1220,7 +1251,8 @@ struct HttpHeaders
     /// Sets `headerName` to the single value `headerValue`.
     void set(string headerName, string headerValue) pure
     {
-        put(headerName, [headerValue]);
+        checkWrite();
+        put(headerName, store.single(headerValue));
     }
 
     /// Sets each name to its single value.
@@ -1298,7 +1330,7 @@ struct HttpHeaders
         const i = find(headerName);
         if (i < 0)
         {
-            store.entries ~= Entry(headerName, headerValues);
+            store.append(Entry(headerName, headerValues));
             return null;
         }
         auto previous = store.entries[i].values;
@@ -1361,7 +1393,8 @@ struct HttpHeaders
     {
         if (store is null)
             return;
-        foreach (entry; store.entries.dup)
+        // The slice as it is now: an append or removal during the walk makes a new one and leaves this as it was.
+        foreach (entry; store.entries)
             action(entry.name, entry.values);
     }
 
@@ -1370,7 +1403,8 @@ struct HttpHeaders
     {
         if (store is null)
             return 0;
-        foreach (entry; store.entries.dup)
+        // The slice as it is now: an append or removal during the walk makes a new one and leaves this as it was.
+        foreach (entry; store.entries)
             if (auto result = dg(entry.name, entry.values))
                 return result;
         return 0;
@@ -1544,6 +1578,16 @@ struct HttpHeaders
         auto result = new MediaType;
         *result = MediaType.parseMediaType(value);
         return result;
+    }
+
+    /// `getContentType` into `target`, without the copy on the GC heap; whether there is one.
+    package(flint) bool readContentType(out MediaType target) const pure
+    {
+        const value = getFirst(CONTENT_TYPE);
+        if (value.length == 0)
+            return false;
+        target = value is store.contentTypeText ? store.contentTypeParsed : MediaType.parseMediaType(value);
+        return true;
     }
 
     /// Sets `Location`, or removes it when `location` is `null`.

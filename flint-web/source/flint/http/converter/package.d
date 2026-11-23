@@ -174,7 +174,8 @@ abstract class AbstractHttpMessageConverter : HttpMessageConverter
         }
         if (headers.getContentLength() < 0 && !headers.containsHeader(HttpHeaders.TRANSFER_ENCODING))
         {
-            const length = getContentLength(value, headers.getContentType());
+            MediaType written;
+            const length = getContentLength(value, headers.readContentType(written) ? &written : null);
             if (length >= 0)
                 headers.setContentLength(length);
         }

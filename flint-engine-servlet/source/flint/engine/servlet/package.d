@@ -339,7 +339,8 @@ final class ServletEngine : RequestHost
         response.getOutputStream().write(cast(const(ubyte)[]) page);
     }
 
-    /// Copy the request out of the arena: two GC allocations however many fields it has.
+    /// Copy the request out of the arena: two GC allocations (the request and one copy of its head and body)
+    /// however many fields it has.
     private ServletEngineRequest capture(ref scope Request request, ref scope RequestContext context)
     {
         import flint.arena : Buffer, Result;
@@ -363,6 +364,7 @@ final class ServletEngine : RequestHost
             });
             total += lengths[index * 2] + lengths[index * 2 + 1];
         }
+        total += sizes[2];
         // The text is gathered on the stack for a usual request head and frozen once for the request to keep.
         char[4096] stackText = void;
         char[] text = total <= stackText.length ? stackText[0 .. total] : new char[total];
@@ -393,6 +395,7 @@ final class ServletEngine : RequestHost
             // dfmt on
             used += name.length + value.length;
         }
+        copy(bodyBuffer, sizes[2]);
         immutable frozen = text.idup;
         const path = frozen[0 .. sizes[0]];
         // A request without '?' has no query string; "?" alone is an empty one.
@@ -410,15 +413,7 @@ final class ServletEngine : RequestHost
             values[index] = frozen[at .. at + lengths[index * 2 + 1]];
             at += lengths[index * 2 + 1];
         }
-        immutable(ubyte)[] content;
-        if (sizes[2] != 0)
-        {
-            auto bytes = new ubyte[sizes[2]];
-            context.arena.read(bodyBuffer.value, (scope const(ubyte)[] source) @safe nothrow @nogc {
-                bytes[] = source;
-            });
-            content = bytes.idup;
-        }
+        immutable(ubyte)[] content = sizes[2] != 0 ? cast(immutable(ubyte)[]) frozen[at .. $] : null;
         captured.setCaptured(names, values, content);
         return captured;
     }

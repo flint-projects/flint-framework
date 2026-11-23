@@ -32,7 +32,8 @@ private final class Probe : HttpServlet
         alias Page = void delegate(HttpServletRequest, HttpServletResponse) @safe;
         const Page[string] pages = [
             "/greeting": &greeting, "/committed": &committed, "/empty": &empty,
-            "/fields": &fields, "/throw": &fail, "/headers": &headers, "/large": &large
+            "/fields": &fields, "/throw": &fail, "/headers": &headers, "/large": &large,
+            "/many": &many
         ];
         if (auto page = request.getServletPath() in pages)
             return (*page)(request, response);
@@ -94,6 +95,31 @@ private final class Probe : HttpServlet
                     ~ "|" ~ request.getProtocol() ~ "|" ~ request.getLocale().toLanguageTag());
     }
 
+    /// More attributes, parameters and fields than the request and response hold inside themselves.
+    private void many(HttpServletRequest request, HttpServletResponse response)
+    {
+        foreach (index; 0 .. 12)
+            request.setAttribute("a" ~ decimal(index), Any.of(cast(int) index));
+        request.setAttribute("a3", Any.of(30));
+        request.removeAttribute("a5");
+        string attributes;
+        foreach (name; request.getAttributeNames())
+            attributes ~= name ~ "=" ~ decimal(request.getAttribute(name).get!int) ~ " ";
+        string parameters;
+        foreach (name; request.getParameterNames())
+        {
+            parameters ~= name ~ "=";
+            foreach (value; request.getParameterValues(name))
+                parameters ~= value ~ ",";
+        }
+        foreach (index; 0 .. 10)
+            response.addHeader("X-" ~ decimal(index), decimal(index));
+        response.setHeader("X-2", "two"); // inside the response's slots, now on the heap
+        response.setHeader("X-9", "nine");
+        response.setContentType("text/plain");
+        response.getWriter().print(attributes ~ "|" ~ parameters);
+    }
+
     private void large(HttpServletRequest, HttpServletResponse response)
     {
         response.setContentType("text/plain");
@@ -106,6 +132,8 @@ private final class Probe : HttpServlet
     {
         if (request.getDispatcherType() == DispatcherType.ERROR)
             return errorPage(request, response);
+        if (request.getServletPath() == "/many")
+            return many(request, response);
         response.setHeader("Allow", "GET");
         response.sendError(405, "Method 'POST' is not supported.");
     }
@@ -447,6 +475,36 @@ unittest
     // A request naming keep-alive gets Tomcat's Keep-Alive field with the 60 s timeout.
     reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n");
     assert(find(reply.head, "\r\nKeep-Alive: timeout=60\r\nConnection: keep-alive\r\n") > 0, reply.head);
+}
+
+@("attributes, parameters, fields and a form body past the inline slots keep their order and values")
+unittest
+{
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    char[] pending;
+
+    // Parameters from the query and from a form body (copied with the request head, in one block).
+    const form = "p4=4&p5=5&p1=1b&p6=%41";
+    const formLength = decimal(form.length);
+    auto reply = exchange(socket, pending, "POST /many?p1=1&p2=2&p3=3 HTTP/1.1\r\nHost: localhost\r\n"
+            ~ "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: " ~ formLength ~ "\r\n\r\n" ~ form);
+    assert(reply.content == "a0=0 a1=1 a2=2 a3=30 a4=4 a6=6 a7=7 a8=8 a9=9 a10=10 a11=11 "
+            ~ "|p1=1,1b,p2=2,p3=3,p4=4,p5=5,p6=A,", reply.content);
+    const contentLength = decimal(reply.content.length);
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nX-0: 0\r\nX-1: 1\r\nX-2: two\r\nX-3: 3\r\n"
+            ~ "X-4: 4\r\nX-5: 5\r\nX-6: 6\r\nX-7: 7\r\nX-8: 8\r\nX-9: nine\r\n"
+            ~ "Content-Type: text/plain;charset=ISO-8859-1\r\nContent-Length: " ~ contentLength ~ "\r\n\r\n",
+            reply.head);
+
+    // The next request on the connection starts from empty slots.
+    reply = exchange(socket, pending, "GET /many?q=1 HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == "a0=0 a1=1 a2=2 a3=30 a4=4 a6=6 a7=7 a8=8 a9=9 a10=10 a11=11 |q=1,", reply.content);
 }
 
 @("a second engine on a bound port fails to start with ServletEngineException")

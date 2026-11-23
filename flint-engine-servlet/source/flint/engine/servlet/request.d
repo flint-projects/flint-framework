@@ -67,14 +67,17 @@ final class ServletEngineRequest : HttpServletRequest
     private immutable(ubyte)[] content;
     private ulong requestNumber;
     private DispatcherType dispatcherType = DispatcherType.REQUEST;
-    // A request holds a handful of attributes: slots in insertion order (getAttributeNames' order) cost one
-    // allocation per request where an AA and a name list cost several.
+    // A request holds a handful of attributes: slots in insertion order (getAttributeNames' order), inside this
+    // object until they outgrow it, then on the GC heap.
     private Attribute[] attributeSlots;
+    private Attribute[8] inlineAttributes;
     private size_t attributeCount;
     private string characterEncoding;
     // Parameters in the order they arrive (Tomcat's LinkedHashMap order), found by a scan while there are few and
-    // through an index once there are many, so a request with thousands of names stays linear.
+    // through an index once there are many, so a request with thousands of names stays linear. The first few
+    // slots are inside this object.
     private Parameter[] parameterSlots;
+    private Parameter[4] inlineParameters;
     private size_t parameterCount;
     private size_t[string] parameterIndex;
     private bool parametersParsed;
@@ -95,6 +98,8 @@ final class ServletEngineRequest : HttpServletRequest
         this.values = values;
         this.content = content;
         this.requestNumber = requestNumber;
+        attributeSlots = inlineAttributes[];
+        parameterSlots = inlineParameters[];
     }
 
     /// Storage for `length` field names and values: inside this object when they fit.
@@ -311,7 +316,7 @@ final class ServletEngineRequest : HttpServletRequest
             return;
         }
         if (attributeCount == attributeSlots.length)
-            attributeSlots.length = attributeCount == 0 ? 8 : attributeCount * 2;
+            attributeSlots.length = attributeCount * 2; // a copy on the GC heap: inline slots cannot grow
         attributeSlots[attributeCount++] = Attribute(name, o);
     }
 
@@ -629,7 +634,7 @@ final class ServletEngineRequest : HttpServletRequest
             return;
         }
         if (parameterCount == parameterSlots.length)
-            parameterSlots.length = parameterCount == 0 ? 8 : parameterCount * 2;
+            parameterSlots.length = parameterCount * 2;
         parameterSlots[parameterCount++] = Parameter(name, value);
         if (parameterIndex !is null)
             parameterIndex[name] = parameterCount - 1;

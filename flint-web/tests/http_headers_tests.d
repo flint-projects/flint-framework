@@ -501,3 +501,29 @@ unittest
     assert(headers.headerNames() == ["X-One", "content-type"]);
     assert(headers.toString() == "[X-One:\"2\", content-type:\"c\"]");
 }
+
+@("HttpHeaders past its inline entries and values keeps order, and values handed out stay as they were")
+unittest
+{
+    auto headers = HttpHeaders.create();
+    foreach (index; 0 .. 6)
+        headers.set("X-" ~ cast(char)('0' + index), "v" ~ cast(char)('0' + index));
+    auto first = headers.get("X-0");
+    assert(headers.headerNames() == ["X-0", "X-1", "X-2", "X-3", "X-4", "X-5"]);
+    headers.add("X-1", "w1"); // a single inline value grows onto the heap
+    assert(headers.get("x-1") == ["v1", "w1"]);
+    headers.clear();
+    headers.set("Y", "y");
+    headers.set("X-0", "again");
+    assert(first == ["v0"]);
+    assert(headers.headerNames() == ["Y", "X-0"] && headers.getFirst("x-0") == "again");
+    // Iteration sees the entries as they were when it started.
+    string seen;
+    foreach (name, values; headers)
+    {
+        headers.remove("X-0");
+        seen ~= name ~ ":" ~ values[0] ~ " ";
+    }
+    assert(seen == "Y:y X-0:again ", seen);
+    assert(headers.headerNames() == ["Y"]);
+}

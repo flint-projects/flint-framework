@@ -104,14 +104,27 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
 
     protected override void writeInternal(Any value, HttpOutputMessage outputMessage)
     {
-        // The mapper's own buffer, written as it is: writeValueAsString would copy it into a string first.
-        const(ubyte)[] json;
+        import flint.java.io : IOException;
+
+        if (value.holds!ProblemDetail)
+        {
+            string json;
+            try
+                json = problemDetailJson(value.get!ProblemDetail);
+            catch (Exception e)
+                throw new HttpMessageNotWritableException("Could not write JSON: " ~ e.msg, e);
+            outputMessage.writeBody(cast(const(ubyte)[]) json);
+            return;
+        }
+        // Streamed into the response as Spring's converter does: the mapper's recycled generator hands each full
+        // buffer to the body, so a write allocates nothing of its own. A failure mid-document can follow a
+        // partial body, as in Spring; the response's own I/O failure passes through unwrapped.
         try
-            json = value.holds!ProblemDetail
-                ? cast(const(ubyte)[]) problemDetailJson(value.get!ProblemDetail) : mapper.writeValueAsBytes(value);
+            mapper.writeValue(&outputMessage.writeBody, value);
+        catch (IOException e)
+            throw e;
         catch (Exception e)
             throw new HttpMessageNotWritableException("Could not write JSON: " ~ e.msg, e);
-        outputMessage.writeBody(json);
     }
 
     /// `ProblemDetailJacksonMixin`: `@JsonInclude(NON_EMPTY)`, Jackson 3's name order for the bean properties
