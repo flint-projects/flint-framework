@@ -19,7 +19,8 @@ import flint.engine.web.stream : StreamEndpoint, StreamField, StreamMode, Stream
 import flint.engine.web.sys.fiber : invokeFiber;
 import flint.engine.web.sys.ownership : launchDriver, releaseBytes, releaseConnectionSlots,
     reserveConnectionSlots, reserveH1;
-import flint.engine.web.transport : TlsTransport, awaitStream, closePlain, readPlain, wakeStream, writePlain;
+import flint.engine.web.transport : TlsTransport, awaitStream, closePlain, readPlain, tlsFactory,
+    wakeStream, writePlain;
 import flint.engine.web.types : ErrorAdvice, Handler, Method, Request, RequestContext, Response,
     RouteRegistration, ServerOptions, sameName;
 import flint.engine.web.worker : WorkerLifecycle;
@@ -130,6 +131,8 @@ struct Server
                 else
                     return Error(Status.unsupported, "pinned nghttp2 provider is unavailable");
             }
+            if (hasTls(options) && tlsFactory() is null)
+                return Error(Status.unsupported, "TLS is not linked: call flint.engine.web.tls.enableTls() first");
             auto state = new Runtime(options);
             const result = state.prepare();
             if (result.code != Status.ok)
@@ -511,7 +514,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         }
         if (hasTls(limits))
         {
-            tls = new TlsTransport(limits, serverContext, &accepted, acceptH2);
+            tls = tlsFactory()(limits, serverContext, &accepted, acceptH2);
             const opened = tls.open();
             if (opened.code != Status.ok)
                 return opened;

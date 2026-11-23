@@ -8,8 +8,9 @@ import flint.arena : Error, Result, Status, Text;
 import flint.conc : Context, Deadline;
 import flint.engine.reactor : Reactor;
 import flint.validate : NotBlank, Valid;
-import flint.engine.web : ControllerAdvice, Get, PathVariable, Post, QueryParam, RequestBody, RequestContext,
-    Response, RestController, Server, ServerOptions, WorkerController, registerAdvice, registerController;
+import flint.engine.web : ControllerAdvice, enableTls, Get, PathVariable, Post, QueryParam, RequestBody,
+    RequestContext, Response, RestController, Server, ServerOptions, WorkerController,
+    registerAdvice, registerController;
 import std.conv : to;
 
 @safe:
@@ -183,6 +184,8 @@ int main(string[] arguments)
         return 2;
     const stress = arguments[2] == "stress";
     const port = to!ushort(arguments[1]);
+    if (tls)
+        enableTls();
     const options = tls ? fixtureOptions(port, arguments[2], arguments[3], arguments[4]) : fixtureOptions(port,
             arguments[2], null, null);
     return serve(options, stress);

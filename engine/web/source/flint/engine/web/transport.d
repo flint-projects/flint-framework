@@ -1,6 +1,7 @@
 /// Owner-local TLS transport. Applications receive only HTTP plaintext completions.
 module flint.engine.web.transport;
 
+import core.atomic : atomicLoad, atomicStore;
 import core.lifetime : move;
 import core.time : MonoTime, ticksToNSecs;
 import flint.arena : Error, Status;
@@ -26,7 +27,7 @@ private enum Phase : ubyte
 
 private struct SecureSocket
 {
-    TlsTransport transport;
+    TlsDriver!() transport;
     TaskDelegate work;
     uint index;
     ConnectionId id;
@@ -54,12 +55,52 @@ private struct SecureSocket
     }
 }
 
-// A template class is absent from ModuleInfo, so only a listener configured for TLS retains the transport
-// and OpenSSL; linking this module for the plaintext helpers does not.
-alias TlsTransport = TlsDriver!();
+/// The TLS transport as the runtime and HTTP/2 see it. Only `flint.engine.web.tls.enableTls` creates one, so
+/// OpenSSL is linked into the programs that call it and into no other.
+interface TlsTransport
+{
+    /// Load the configured certificate and key.
+    Error open() nothrow @nogc;
+    /// Begin the handshake on an accepted connection.
+    void accept(ConnectionId id) nothrow @nogc;
+    /// Read application plaintext.
+    Status read(ConnectionId id, size_t maximum, Context context, ReadDelegate receiver) nothrow @nogc;
+    /// Write application plaintext.
+    // dfmt off
+    Status write(ConnectionId id, scope const(ubyte)[] bytes, Context context, CompletionDelegate sender)
+        nothrow @nogc;
+    // dfmt on
+    /// Close the connection after a TLS shutdown.
+    void close(ConnectionId id) nothrow @nogc;
+    /// Retire every connection and the credentials.
+    void release() nothrow @nogc;
+}
 
+/// Creates the TLS transport for a listener.
+// dfmt off
+alias TlsFactory = TlsTransport function(ServerOptions limits, Context root, AcceptDelegate http1,
+        AcceptDelegate http2) nothrow @safe;
+// dfmt on
+
+private shared TlsFactory installedTls;
+
+/// Install the TLS transport; `flint.engine.web.tls.enableTls` calls it.
+void installTls(TlsFactory factory) nothrow @nogc
+{
+    atomicStore(installedTls, factory);
+}
+
+/// The installed TLS transport factory; null in a program that never enabled TLS.
+TlsFactory tlsFactory() nothrow @nogc
+{
+    return atomicLoad(installedTls);
+}
+
+// A template class is absent from ModuleInfo, and only `flint.engine.web.tls` instantiates this one, so only a
+// program that enables TLS retains the driver and OpenSSL; linking this module for the plaintext helpers or the
+// interface does not.
 /// TLS mode retains raw and application I/O through their final owner-loop callbacks.
-final class TlsDriver()
+final class TlsDriver() : TlsTransport
 {
     private ServerOptions limits;
     private Context root;
