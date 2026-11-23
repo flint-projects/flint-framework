@@ -587,6 +587,14 @@ private auto invokeMember(C, string name, size_t index, Method method, string pa
     }
 }
 
+/// A bean that adds routes or settings to the server before it serves, such as flint:actuator's endpoints;
+/// flint:starter-web applies every registered one (ADR-028 section 6).
+interface ServerCustomizer
+{
+    /// Register on the started server; a failure stops start-up.
+    Error customize(ref Server server);
+}
+
 /// The handler return types responseFor accepts.
 private enum handlerReturn(T) = is(T == void) || is(T == Response) || is(T == Error) || is(T == Result!V, V);
 
@@ -666,7 +674,8 @@ Error registerAdvice(A)(ref Server server, ref A advice)
 }
 
 /// Register the application's explicit controller fields and run until cancellation or a terminal error.
-int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init)
+int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init,
+        scope Error delegate(ref Server) @safe configure = null)
 {
     static assert(applicationRouteCount!App() != 0, "HTTP application requires explicit controller fields");
     static assert(adviceCount!App() <= 1, "HTTP application has more than one @ControllerAdvice");
@@ -699,6 +708,12 @@ int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init)
         }
     }
 
+    if (configure !is null)
+    {
+        const configured = configure(server);
+        if (configured.code != Status.ok)
+            return 1;
+    }
     Context cancellation;
     for (;;)
     {
