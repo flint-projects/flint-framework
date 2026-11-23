@@ -145,17 +145,42 @@ final class Stream(T)
     Stream!T distinct()
     {
         auto source = take();
-        bool[T] seen;
-        return new Stream!T((out T next) {
-            while (source(next))
-            {
-                if (next in seen)
-                    continue;
-                seen[next] = true;
-                return true;
-            }
-            return false;
-        });
+        static if (!__traits(compiles, { bool[T] probe; probe[T.init] = true; }))
+        {
+            // A mutable array cannot key an associative array (Java's List<Object[]>): compare by value.
+            T[] seen;
+            return new Stream!T((out T next) {
+                while (source(next))
+                {
+                    bool duplicate;
+                    foreach (previous; seen)
+                        if (previous == next)
+                        {
+                            duplicate = true;
+                            break;
+                        }
+                    if (duplicate)
+                        continue;
+                    seen ~= next;
+                    return true;
+                }
+                return false;
+            });
+        }
+        else
+        {
+            bool[T] seen;
+            return new Stream!T((out T next) {
+                while (source(next))
+                {
+                    if (next in seen)
+                        continue;
+                    seen[next] = true;
+                    return true;
+                }
+                return false;
+            });
+        }
     }
 
     /// The elements in natural order (stable).

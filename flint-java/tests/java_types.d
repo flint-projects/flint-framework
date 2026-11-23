@@ -525,3 +525,20 @@ unittest
     new PrintWriter(bytes).print("hi");
     assert(bytes.toString() == "hi" && bytes.size() == 2);
 }
+
+unittest
+{
+    // List!T of a mutable array type (Java's List<Object[]>) instantiates; distinct compares by value.
+    import flint.engine.aot.any : Any;
+    import flint.java.util : ArrayList, List;
+
+    List!(Any[]) rows = new ArrayList!(Any[]);
+    rows.add([Any.of(1), Any.of("a")]);
+    rows.add([Any.of(1), Any.of("a")]);
+    rows.add([Any.of(2)]);
+    assert(rows.size() == 3 && rows.get(2)[0] == Any.of(2));
+    assert(rows.stream().distinct().count() == 2);
+    List!(int[]) ints = new ArrayList!(int[]);
+    ints.add([1, 2]);
+    assert(ints.contains([1, 2]) && ints.indexOf([1, 2]) == 0);
+}
