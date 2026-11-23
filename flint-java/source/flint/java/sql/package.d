@@ -649,7 +649,7 @@ interface ResultSet : Wrapper, AutoCloseable
             if (value.isNull)
                 return T.init;
             if (!value.holds!T && value.holds!string)
-                return T.parse(value.get!string);
+                return T.parse(temporalText!T(value.get!string));
         }
         return value.get!T;
     }
@@ -938,4 +938,26 @@ struct DriverManager
         }
         return result;
     }
+}
+
+/// The part of a driver's ISO text that `T.parse` reads: a TIMESTAMP column's date for a `LocalDate`, and a DATE
+/// column at the start of its day for a `LocalDateTime`, as JDBC 4.2 drivers convert (pgjdbc's `getObject(int,
+/// Class)`).
+private string temporalText(T)(string text)
+{
+    import flint.engine.aot.name : typeNameOf;
+
+    static if (typeNameOf!T == "flint.java.time.LocalDate")
+    {
+        if (text.length > 10 && (text[10] == 'T' || text[10] == ' '))
+            return text[0 .. 10];
+    }
+    else static if (typeNameOf!T == "flint.java.time.LocalDateTime")
+    {
+        if (text.length == 10)
+            return text ~ "T00:00";
+        if (text.length > 10 && text[10] == ' ')
+            return text[0 .. 10] ~ "T" ~ text[11 .. $];
+    }
+    return text;
 }

@@ -856,6 +856,19 @@ class Employee : Person
     }
 }
 
+@("BeanPropertyRowMapper: a TIMESTAMP column's ISO text maps to a LocalDate property, as pgjdbc converts")
+unittest
+{
+    import flint.java.time : LocalDate;
+    import flint.jdbc.core : BeanPropertyRowMapper;
+
+    auto f = Fixture.create();
+    auto template_ = f.namedParameterTemplate.getJdbcTemplate();
+    f.connection.results = new Rows(["birth_date"], [[Any.of("2010-09-07T13:45:00")]]);
+    auto rows = template_.query("select birth_date from pets", new BeanPropertyRowMapper!Dated);
+    assert(rows.get(0).getBirthDate() == LocalDate.of(2010, 9, 7));
+}
+
 @("BeanPropertyRowMapper: setters declared by a base class map too")
 unittest
 {
