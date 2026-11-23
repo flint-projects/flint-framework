@@ -124,14 +124,9 @@ unittest
     assert(violation.getMessage() == "Message is [bar, baz, qux]", violation.getMessage());
 }
 
-// LIKELY BUG: the parameter pass skips a `{value}` right after `$` (here an escaped one), which Hibernate replaces;
-// the message stays "Message is ${value}" instead of "Message is $10".
-version (FlintParameterAfterDollar)
+@("MessageInterpolationTest.testDollarSignEscapingShouldBeRespected")
+unittest
 {
-    @("MessageInterpolationTest.testDollarSignEscapingShouldBeRespected")
-    unittest
-    {
-        auto violation = createValidator().validate(new FooZap())[0];
-        assert(violation.getMessage() == "Message is $10", violation.getMessage());
-    }
+    auto violation = createValidator().validate(new FooZap())[0];
+    assert(violation.getMessage() == "Message is $10", violation.getMessage());
 }

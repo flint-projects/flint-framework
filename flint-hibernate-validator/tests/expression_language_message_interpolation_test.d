@@ -151,18 +151,13 @@ unittest
     assert(actual == expected, "Wrong substitution");
 }
 
-// LIKELY BUG: the parameter pass skips a `{min}` right after `$`, which Hibernate replaces first; Flint then
-// evaluates `${min}` to "0" instead of leaving "$0".
-version (FlintParameterAfterDollar)
+@("ExpressionLanguageMessageInterpolationTest.testPrecedenceOfParameterInterpolation")
+unittest
 {
-    @("ExpressionLanguageMessageInterpolationTest.testPrecedenceOfParameterInterpolation")
-    unittest
-    {
-        auto context = contextFor(Size());
-        const expected = "$0";
-        const actual = interpolatorUnderTest().interpolate("${min}", context);
-        assert(actual == expected, "Wrong substitution");
-    }
+    auto context = contextFor(Size());
+    const expected = "$0";
+    const actual = interpolatorUnderTest().interpolate("${min}", context);
+    assert(actual == expected, "Wrong substitution");
 }
 
 // Gap: `interpolate` takes no locale (and expressions call no methods).

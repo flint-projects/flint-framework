@@ -66,26 +66,20 @@ unittest
             "{escapedParameterKey}"));
 }
 
-// LIKELY BUG: unbalanced braces are not detected. Hibernate keeps a bundle key whose value has unbalanced braces
-// ("{key-2}", "{key-3}") and leaves a template with an unclosed "{" unchanged ("{key-4} {"); Flint substitutes the
-// value ("{escapedParameterKey}", "foo {").
-version (FlintUnbalancedBraces)
+@("EscapedInterpolationVariableTest.testEscapedClosingBrace")
+unittest
 {
-    @("EscapedInterpolationVariableTest.testEscapedClosingBrace")
-    unittest
-    {
-        assertOnlyViolationMessages(newValidator().validate(new B()), violationOf(typeNameOf!Max, "{key-2}"));
-    }
+    assertOnlyViolationMessages(newValidator().validate(new B()), violationOf(typeNameOf!Max, "{key-2}"));
+}
 
-    @("EscapedInterpolationVariableTest.testEscapedOpenBrace")
-    unittest
-    {
-        assertOnlyViolationMessages(newValidator().validate(new C()), violationOf(typeNameOf!Max, "{key-3}"));
-    }
+@("EscapedInterpolationVariableTest.testEscapedOpenBrace")
+unittest
+{
+    assertOnlyViolationMessages(newValidator().validate(new C()), violationOf(typeNameOf!Max, "{key-3}"));
+}
 
-    @("EscapedInterpolationVariableTest.testMessageStaysUnchangedDueToSingleCurlyBrace")
-    unittest
-    {
-        assertOnlyViolationMessages(newValidator().validate(new D()), violationOf(typeNameOf!Max, "{key-4} {"));
-    }
+@("EscapedInterpolationVariableTest.testMessageStaysUnchangedDueToSingleCurlyBrace")
+unittest
+{
+    assertOnlyViolationMessages(newValidator().validate(new D()), violationOf(typeNameOf!Max, "{key-4} {"));
 }
