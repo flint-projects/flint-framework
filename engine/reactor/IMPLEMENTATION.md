@@ -4,6 +4,8 @@ The reactor reserves connection slots, operation buffers, timers and a task fibe
 
 A task fiber that waits for progress registers a `TaskWaker` from `currentWaker()`. The completion, timer or task that makes progress calls `wake` on the same loop, and the loop resumes the fiber on its next pass instead of at the yield deadline. Generations reject handles from finished tasks. `yieldUntil(deadline, watched)` adds a caller context to the per-pass cancellation check (`tests/wake.d`).
 
+`shared FiberLocal!T` gives each task fiber its own value, the fiber counterpart of a Java `ThreadLocal`. Cells are stamped with the task generation, so a reused slot starts at `T.init`; off a fiber the value is thread-local (`tests/fiber_local.d`). Task fibers reserve 256 KiB stacks above 16 KiB of guard pages, and only touched pages are resident (`tests/fiber_stack.d`, which also overflows a stack in a child process and checks the fault lands in the guard). `Reactor.offload` runs blocking work on a bounded thread pool while other fibers keep running; cancellation and shutdown wait for started work to return, because it may borrow the caller's frame (`tests/offload.d`). ADR-030 section 4 records these decisions.
+
 Linux automatic mode probes the pinned liburing provider and selects epoll if io_uring is unavailable or denied. Explicit io_uring selection reports the failed capability. Each loop processes bounded callback batches, records its preferred CPU and reports allocator and OS counters after shutdown.
 
 Run the Linux package checks with the pinned toolchains.
