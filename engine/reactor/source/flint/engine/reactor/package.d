@@ -648,6 +648,19 @@ struct Reactor
         return runtime is null ? Backend.automatic : runtime.backend;
     }
 
+    static if (resumptionCounter)
+    {
+        /// Task fiber resumptions on every loop so far, starts included (debug and test builds).
+        package(flint) ulong taskResumptions() const nothrow @nogc
+        {
+            ulong total;
+            if (runtime !is null)
+                foreach (ref worker; runtime.workers)
+                    total += atomicLoad(worker.resumptions);
+            return total;
+        }
+    }
+
     /// Retrieve GC and affinity observations once all workers have joined.
     Result!WorkerStats workerStats(uint core) const nothrow @nogc
     {
@@ -900,6 +913,15 @@ private void enterTask() @safe nothrow @nogc
     currentRuntime.workers[currentWorkerIndex].executeTask();
 }
 
+// Test-visible counters (unittest and debug builds only; release builds carry none).
+version (unittest)
+    private enum resumptionCounter = true;
+else
+{
+    debug private enum resumptionCounter = true;
+else private enum resumptionCounter = false;
+}
+
 private struct Worker
 {
     Runtime* runtime;
@@ -907,6 +929,12 @@ private struct Worker
     uint cpu;
     Error failure;
     WorkerStats stats;
+    static if (resumptionCounter)
+    {
+        /// Fiber resumptions on this loop (debug and test builds): a test proves that a waiting task is woken by
+        /// its completion rather than by a poll, independent of how fast the build is.
+        shared ulong resumptions;
+    }
     Connection[] connections;
     uint nextFree;
     OperationTable operations;
@@ -1146,6 +1174,8 @@ private struct Worker
 
     private void resumeTask(uint slot) nothrow @nogc
     {
+        static if (resumptionCounter)
+            atomicOp!"+="(resumptions, 1);
         auto task = &fibers[slot];
         activeFiber = slot;
         const failure = resumeFiber(task.fiber);

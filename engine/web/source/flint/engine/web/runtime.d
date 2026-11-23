@@ -107,10 +107,29 @@ private struct Connection
     }
 }
 
+// Test-visible counters (unittest and debug builds only; release builds carry none).
+version (unittest)
+    private enum resumptionCounter = true;
+else
+{
+    debug private enum resumptionCounter = true;
+else private enum resumptionCounter = false;
+}
+
 /// TCP server with startup routing and per-core request storage.
 struct Server
 {
     private Runtime driver;
+
+    static if (resumptionCounter)
+    {
+        /// Task fiber resumptions on the server's loops so far (debug and test builds): a test bounds them per
+        /// exchange to prove waiting handlers are woken by completions, not polled.
+        package(flint) ulong taskResumptions() const nothrow @nogc
+        {
+            return driver is null ? 0 : driver.reactor.taskResumptions();
+        }
+    }
 
     /// Bind the listener and prepare its owner loops. Poll begins admission after routes are registered.
     Error start(ServerOptions options)

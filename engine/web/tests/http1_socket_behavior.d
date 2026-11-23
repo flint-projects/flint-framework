@@ -443,6 +443,7 @@ unittest
     enum rounds = 200;
     Duration[rounds] replies;
     char[16] reply;
+    const resumedBefore = fixture.server.taskResumptions();
     const cpuBefore = processCpu();
     const started = MonoTime.currTime;
     foreach (round; 0 .. rounds)
@@ -464,6 +465,7 @@ unittest
     }
     const elapsed = MonoTime.currTime - started;
     const cpu = processCpu() - cpuBefore;
+    const resumed = fixture.server.taskResumptions() - resumedBefore;
     foreach (index; 1 .. rounds)
         for (size_t at = index; at > 0 && replies[at] < replies[at - 1]; --at)
         {
@@ -474,6 +476,11 @@ unittest
     const median = replies[rounds / 2];
     // A 1 ms poll answers each message at the next poll, roughly 0.8 ms after it arrives.
     assertWallClock(median < dur!"usecs"(250), "median delayed echo took " ~ median.toString() ~ " against 250 µs");
+    // The handler fiber is woken by its completions only: once for each message and once for its echo's write, plus
+    // at most two at the edges (the 101 head's write may complete after the first count). A 1 ms poll would add one
+    // for every tick the handler waited, dozens over these rounds. This holds whatever the build's speed.
+    assert(resumed <= 2 * rounds + 2, "delayed echoes resumed handler fibers " ~ decimalText(
+            resumed) ~ " times in " ~ decimalText(rounds) ~ " rounds against 2 per echo");
     // Spinning for 200 µs of every wait costs at least 40 ms of CPU over these rounds.
     const cpuText = "delayed echoes used " ~ cpu.toString() ~ " of CPU in " ~ elapsed.toString() ~ " against 30 ms";
     static if (unoptimizedCpuLane)
@@ -493,6 +500,19 @@ version (Windows)
 }
 else
     private enum unoptimizedCpuLane = false;
+
+private string decimalText(ulong value) @safe pure nothrow
+{
+    char[20] digits;
+    size_t first = digits.length;
+    do
+    {
+        digits[--first] = cast(char)('0' + value % 10);
+        value /= 10;
+    }
+    while (value != 0);
+    return digits[first .. $].idup;
+}
 
 /// Report a CPU bound that this lane does not enforce, as FLINT_EMULATED reports wall-clock bounds.
 private void reportUnoptimizedCpu(bool within, string measurement)
