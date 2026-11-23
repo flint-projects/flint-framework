@@ -15,7 +15,7 @@ framework packages (`flint:beans`, `flint:context`, web-mvc, data) meet here. Ev
 | `flint.engine.aot.registry` | `AotRegistry`, `installRegistry`, `installedRegistry` and the contract-version check |
 | `flint.engine.aot.sys.allocate` | druntime's `_d_newclass`, which allocates a class without running a constructor (Spring's Objenesis) |
 | `flint.engine.aot.host` | `package(flint)`, `@safe`: environment variables (`environmentVariable`, `environmentEntries`), one `stat` (`fileFacts`, `modifiedMillis`), `readFile`, `currentDirectory` and `absolutePath`, with std.process's, std.file's and std.path's results, for flint:java's `File`, `FileInputStream` and `Locale.getDefault` and flint:core's environment and class path |
-| `flint.engine.aot.sys.environment`, `sys.files` | the `@trusted` calls behind `host`: `getenv` and `environ` (`GetEnvironmentVariableW`, `GetEnvironmentStringsW`), `stat`, `open`/`read`/`close` and `getcwd` (their Windows counterparts), each copying into GC memory before it returns |
+| `flint.engine.aot.sys.environment`, `sys.files` | the `@trusted` calls behind `host`: `getenv` and `environ` (`GetEnvironmentVariableW`, `GetEnvironmentStringsW`), `stat`, `open`/`read`/`close` and `getcwd` (their Windows counterparts), each copying into GC memory before it returns. Like std.process, `getenv` and `environ` are not safe against a concurrent `setenv` or `putenv` from another thread |
 
 Runtime extensions beyond section 4: `Descriptor.elementType` and `keyType` for collection element types,
 `Any.holds!T`, `Any.ofObject`, `Any.box!T`, `Advisor` and `DetachedExecutor`, and `propertyMatches`, the single
