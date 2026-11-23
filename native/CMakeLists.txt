@@ -65,7 +65,7 @@ endif()
 foreach(PAIR IN ITEMS "llhttp.h|LLHTTP" "nghttp2/nghttp2.h|NGHTTP2" "curl/curl.h|CURL" "openssl/ssl.h|OPENSSL"
     "sqlite3.h|SQLITE" "libpq-fe.h|LIBPQ" "hiredis/hiredis_ssl.h|HIREDIS" "sodium.h|LIBSODIUM"
     "librdkafka/rdkafka.h|LIBRDKAFKA" "protobuf-c/protobuf-c.h|PROTOBUF_C" "yaml.h|LIBYAML" "utf8proc.h|UTF8PROC"
-    "zlib.h|ZLIB" "zstd.h|ZSTD" "brotli/decode.h|BROTLI" "archive.h|LIBARCHIVE")
+    "zlib.h|ZLIB" "zstd.h|ZSTD" "brotli/decode.h|BROTLI" "archive.h|LIBARCHIVE" "crypt_blowfish.h|CRYPT_BLOWFISH")
   string(REPLACE "|" ";" FIELDS "${PAIR}")
   list(GET FIELDS 0 HEADER)
   list(GET FIELDS 1 SYMBOL)
@@ -85,6 +85,7 @@ foreach(PAIR IN ITEMS
     "flint_sql.h|sqlite3.h;libpq-fe.h"
     "flint_cache.h|hiredis/hiredis_ssl.h"
     "flint_security.h|openssl/evp.h;sodium.h"
+    "flint_bcrypt.h|crypt_blowfish.h"
     "flint_mq.h|librdkafka/rdkafka.h"
     "flint_mq_socket.h|librdkafka/rdkafka.h"
     "flint_rpc.h|openssl/evp.h;protobuf-c/protobuf-c.h")
