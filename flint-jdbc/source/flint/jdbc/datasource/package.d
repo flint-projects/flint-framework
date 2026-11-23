@@ -23,6 +23,7 @@ import core.atomic : atomicLoad, atomicStore;
 import flint.beans.factory : InitializingBean;
 import flint.core : causeOf;
 import flint.engine.aot.objects : objectEquals, objectToString;
+import flint.engine.aot.text : decimal;
 import flint.java.lang : IllegalArgumentException, IllegalStateException, RuntimeException,
     UnsupportedOperationException;
 import flint.java.sql : Connection, Driver, DriverManager, SQLException,
@@ -189,10 +190,8 @@ class ConnectionHolder : ResourceHolderSupport
     /// for the `Connection`.
     Savepoint createSavepoint()
     {
-        import std.conv : to;
-
         ++savepointCounter;
-        return getConnection().setSavepoint(SAVEPOINT_NAME_PREFIX ~ savepointCounter.to!string);
+        return getConnection().setSavepoint(SAVEPOINT_NAME_PREFIX ~ decimal(long(savepointCounter)));
     }
 
     /// Release the current `Connection` held by this `ConnectionHolder`, for `ConnectionHandle`s that expect
@@ -479,8 +478,6 @@ abstract class DataSourceUtils
 
     package static Nullable!int prepareConnectionForTransaction(Connection con, int isolationLevel, bool setReadOnly)
     {
-        import std.conv : to;
-
         if (con is null)
             throw new IllegalArgumentException("No Connection specified");
         const debugEnabled = logger().isDebugEnabled();
@@ -497,7 +494,7 @@ abstract class DataSourceUtils
         {
             if (debugEnabled)
                 logger().debug_("Changing isolation level of JDBC Connection [" ~ describe(
-                        con) ~ "] to " ~ isolationLevel.to!string);
+                        con) ~ "] to " ~ decimal(long(isolationLevel)));
             const currentIsolation = con.getTransactionIsolation();
             if (currentIsolation != isolationLevel)
             {
@@ -528,8 +525,6 @@ abstract class DataSourceUtils
     /// Reset the given `Connection` after a transaction, regarding read-only flag and isolation level.
     static void resetConnectionAfterTransaction(Connection con, Nullable!int previousIsolationLevel, bool resetReadOnly)
     {
-        import std.conv : to;
-
         if (con is null)
             throw new IllegalArgumentException("No Connection specified");
         const debugEnabled = logger().isDebugEnabled();
@@ -540,7 +535,7 @@ abstract class DataSourceUtils
             {
                 if (debugEnabled)
                     logger().debug_("Resetting isolation level of JDBC Connection [" ~ describe(
-                            con) ~ "] to " ~ previousIsolationLevel.get.to!string);
+                            con) ~ "] to " ~ decimal(long(previousIsolationLevel.get)));
                 con.setTransactionIsolation(previousIsolationLevel.get);
             }
             // Reset read-only flag if we originally switched it to true on transaction begin.

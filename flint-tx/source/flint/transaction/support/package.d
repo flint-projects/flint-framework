@@ -39,6 +39,7 @@ import flint.transaction : ConfigurableTransactionManager, IllegalTransactionSta
     TransactionStatus,
     TransactionSuspensionNotSupportedException,
     TransactionSystemException, TransactionTimedOutException, TransactionUsageException, UnexpectedRollbackException;
+import core.time : MonoTime;
 import std.typecons : Nullable;
 
 @safe:
@@ -771,20 +772,31 @@ abstract class ResourceHolderSupport : ResourceHolder
     }
 }
 
-/// `System.currentTimeMillis()`.
-private long currentTimeMillis()
-{
-    import std.datetime.systime : Clock;
+// The wall clock at startup, in epoch milliseconds, and the monotonic time it was read at. Deadlines are epoch
+// milliseconds advanced by the monotonic clock: exact for timeouts, which use differences, and correct to the second
+// for the absolute value, with no std.datetime (a template-heavy dependency) in the module.
+private immutable long startEpochMillis;
+private immutable MonoTime startMonotonic;
 
-    // Standard time counts hectonanoseconds from year 1; the Unix epoch is 621,355,968,000,000,000 of them later.
-    return (Clock.currStdTime - 621_355_968_000_000_000L) / 10_000;
+shared static this()
+{
+    import core.stdc.time : time;
+
+    startEpochMillis = time(null) * 1000L;
+    startMonotonic = MonoTime.currTime;
+}
+
+/// `System.currentTimeMillis()`.
+private long currentTimeMillis() nothrow @nogc
+{
+    return startEpochMillis + (MonoTime.currTime - startMonotonic).total!"msecs";
 }
 
 private string decimalText(long value)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
-    return value.to!string;
+    return decimal(value);
 }
 
 /++

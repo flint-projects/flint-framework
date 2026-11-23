@@ -433,10 +433,16 @@ private T convertNumber(T, S)(S number)
 
 private string toText(S)(S value)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal, doubleText;
 
     static if (is(S == string))
         return value;
+    else static if (is(S == bool))
+        return value ? "true" : "false";
+    else static if (__traits(isFloating, S))
+        return doubleText(value);
+    else static if (__traits(isUnsigned, S))
+        return decimal(cast(ulong) value);
     else
-        return value.to!string;
+        return decimal(cast(long) value);
 }

@@ -1817,7 +1817,7 @@ private final class ArgsBatchSetter : BatchPreparedStatementSetter
 
 private string decimal(long value)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
-    return value.to!string;
+    return decimal(value);
 }

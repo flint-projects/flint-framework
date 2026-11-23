@@ -2300,27 +2300,27 @@ private string decimal(long value) pure nothrow
 
 private string floatText(double value)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : doubleText;
 
-    return value.to!string;
+    return doubleText(value);
 }
 
 private long parseLong(string text)
 {
-    import std.conv : ConvException, to;
+    import flint.engine.aot.text : parse = parseLong;
 
-    try
-        return text.to!long;
-    catch (ConvException)
+    long[1] value;
+    if (!parse(text, value[0]))
         throw new SQLDataException("Cannot convert '" ~ text ~ "' to a number", "22018");
+    return value[0];
 }
 
 private double parseDouble(string text)
 {
-    import std.conv : ConvException, to;
+    import flint.engine.aot.text : parse = parseDouble;
 
-    try
-        return text.to!double;
-    catch (ConvException)
+    double[1] value;
+    if (!parse(text, value[0]))
         throw new SQLDataException("Cannot convert '" ~ text ~ "' to a number", "22018");
+    return value[0];
 }
