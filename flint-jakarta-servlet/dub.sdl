@@ -1,0 +1,17 @@
+name "jakarta-servlet"
+description "flint.jakarta.servlet: a minimal port of the Jakarta Servlet 6.1 API, with no servlet container (EPL-2.0 module, ADR-030 section 7)"
+license "EPL-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "framework-interim" path="../framework-interim"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

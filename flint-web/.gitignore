@@ -1,0 +1,4 @@
+*-test-unittest
+*-test-library
+dub.selections.json
+lib*.a
