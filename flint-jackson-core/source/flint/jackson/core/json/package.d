@@ -210,6 +210,13 @@ final class JsonFactory
         return new UTF8JsonGenerator(writeCtxt is null ? ObjectWriteContext.empty() : writeCtxt, this, sink);
     }
 
+    /// A generator that keeps the whole document in its own buffer, for `ObjectMapper.writeValueAsBytes` and
+    /// `writeValueAsString`: no sink, no intermediate builder.
+    package(flint.jackson) UTF8JsonGenerator createBufferedGenerator(ObjectWriteContext writeCtxt)
+    {
+        return new UTF8JsonGenerator(writeCtxt is null ? ObjectWriteContext.empty() : writeCtxt, this, null);
+    }
+
     /// Create a generator that appends UTF-8 to `target`.
     JsonGenerator createGenerator(ObjectWriteContext writeCtxt, ByteArrayBuilder target)
     {
@@ -491,6 +498,9 @@ class UTF8JsonGenerator : JsonGenerator
     alias writeStartArray = JsonGenerator.writeStartArray;
 
     private enum size_t BYTE_BUFFER_SIZE = 8000;
+    // Most documents are small: the buffer starts here and doubles up to BYTE_BUFFER_SIZE before it flushes
+    // (Jackson recycles one 8000-byte buffer per thread instead; Flint keeps no thread-local state).
+    private enum size_t FIRST_BUFFER_SIZE = 256;
 
     private ObjectWriteContext _objectWriteContext;
     private JsonFactory _factory;
@@ -516,7 +526,7 @@ class UTF8JsonGenerator : JsonGenerator
         _sink = sink;
         _cfgPrettyPrinter = writeCtxt.getPrettyPrinter();
         _streamWriteContext = JsonWriteContext.createRootContext();
-        _outputBuffer = new ubyte[BYTE_BUFFER_SIZE];
+        _outputBuffer = new ubyte[FIRST_BUFFER_SIZE];
         _quoteNames = factory.isEnabled(JsonWriteFeature.QUOTE_PROPERTY_NAMES);
         _nanAsStrings = factory.isEnabled(JsonWriteFeature.WRITE_NAN_AS_STRINGS);
         _escapeSlash = factory.isEnabled(JsonWriteFeature.ESCAPE_FORWARD_SLASHES);
@@ -546,10 +556,43 @@ class UTF8JsonGenerator : JsonGenerator
         return _objectWriteContext;
     }
 
+    /// The whole document of a generator created without a sink (`JsonFactory.createBufferedGenerator`), after
+    /// `close()`; the generator gives up the buffer.
+    package(flint.jackson) ubyte[] collected() pure nothrow @nogc
+    {
+        auto document = _outputBuffer[0 .. _outputTail];
+        _outputBuffer = null;
+        _outputTail = 0;
+        return document;
+    }
+
+    // Room for `needed` more bytes: grow the buffer up to BYTE_BUFFER_SIZE (without bound when collecting the
+    // whole document), else flush to the sink.
+    private void makeRoom(size_t needed)
+    {
+        const limit = _sink is null ? size_t.max : BYTE_BUFFER_SIZE;
+        if (_outputBuffer.length < limit)
+        {
+            size_t capacity = _outputBuffer.length * 2;
+            while (capacity < _outputTail + needed)
+                capacity *= 2;
+            if (capacity > limit)
+                capacity = limit;
+            if (capacity >= _outputTail + needed)
+            {
+                auto grown = new ubyte[capacity];
+                grown[0 .. _outputTail] = _outputBuffer[0 .. _outputTail];
+                _outputBuffer = grown;
+                return;
+            }
+        }
+        flushBuffer();
+    }
+
     private void put(ubyte b)
     {
         if (_outputTail == _outputBuffer.length)
-            flushBuffer();
+            makeRoom(1);
         _outputBuffer[_outputTail++] = b;
     }
 
@@ -562,8 +605,8 @@ class UTF8JsonGenerator : JsonGenerator
     {
         if (bytes.length > _outputBuffer.length - _outputTail)
         {
-            flushBuffer();
-            if (bytes.length > _outputBuffer.length)
+            makeRoom(bytes.length);
+            if (bytes.length > _outputBuffer.length - _outputTail)
             {
                 _sink(bytes);
                 return;
@@ -575,7 +618,7 @@ class UTF8JsonGenerator : JsonGenerator
 
     private void flushBuffer()
     {
-        if (_outputTail > 0)
+        if (_sink !is null && _outputTail > 0)
         {
             immutable length = _outputTail;
             _outputTail = 0;

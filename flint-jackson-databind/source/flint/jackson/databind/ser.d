@@ -101,7 +101,7 @@ private bool writeShaped(MapperConfig config, const Descriptor d, ref Any value,
         foreach (i; 0 .. count)
         {
             auto e = d.element(value, i);
-            withPath(Reference(null, cast(int) i, d.simpleName()), () {
+            withPath(Reference(null, cast(int) i, null, d.name), () {
                 serializeValue(config, e, d.elementType, g);
             });
         }
@@ -337,7 +337,7 @@ void writeBean(MapperConfig config, BeanDescription bean, ref Any value, JsonGen
         if (!include(config, bean, p, v))
             continue;
         g.writeName(p.name);
-        withPath(Reference(p.name, -1, bean.descriptor.simpleName()), () {
+        withPath(Reference(p.name, -1, null, bean.descriptor.name), () {
             writeProperty(config, p, v, g);
         });
     }
@@ -373,7 +373,7 @@ private void writeAnyGetter(MapperConfig config, BeanDescription bean, ref Any v
             continue;
         const name = keyText(config, key);
         g.writeName(name);
-        withPath(Reference(name, -1, bean.descriptor.simpleName()), () {
+        withPath(Reference(name, -1, null, bean.descriptor.name), () {
             serializeValue(config, values[i], null, g);
         });
     }

@@ -27,16 +27,20 @@ struct Reference
     string propertyName;
     /// The index, or -1 for a property.
     int index = -1;
-    /// The Flint type name of the value holding the property.
+    /// The name printed for the value holding the property.
     string from;
+    /// The holder's Flint type name, printed as its simple name when `from` is empty. Kept whole so the hot path
+    /// never computes a name it only needs for a message.
+    string fromType;
 
     /// `Type["name"]` or `Type[3]`, as Jackson prints a reference.
     string description() const pure
     {
+        import flint.engine.aot.name : simpleTypeName;
         import flint.engine.aot.text : decimal;
 
-        return (from.length ? from : "UNKNOWN") ~ (propertyName !is null
-                ? "[\"" ~ propertyName ~ "\"]" : "[" ~ decimal(cast(long) index) ~ "]");
+        const holder = from.length ? from : fromType.length ? simpleTypeName(fromType) : "UNKNOWN";
+        return holder ~ (propertyName !is null ? "[\"" ~ propertyName ~ "\"]" : "[" ~ decimal(cast(long) index) ~ "]");
     }
 }
 

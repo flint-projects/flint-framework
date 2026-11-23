@@ -491,7 +491,7 @@ private Any readCollection(MapperConfig config, JsonParser p, RawCollection targ
     for (auto t = p.nextToken(); t != JsonToken.END_ARRAY; t = p.nextToken())
     {
         Any element;
-        withPath(Reference(null, index++, d.simpleName()), () {
+        withPath(Reference(null, index++, null, d.name), () {
             element = deserializeValue(config, p, d.elementType);
         });
         target.addAny(element);
@@ -508,7 +508,7 @@ private Any readMap(MapperConfig config, JsonParser p, RawMap target, const Desc
         const name = p.currentName();
         p.nextToken();
         Any value;
-        withPath(Reference(name, -1, d.simpleName()), () {
+        withPath(Reference(name, -1, null, d.name), () {
             value = deserializeValue(config, p, d.elementType);
         });
         target.putAny(Any.of(name), value);
@@ -556,7 +556,7 @@ private Any readElements(MapperConfig config, JsonParser p, const Descriptor d, 
     Any[] elements;
     int index;
     for (auto e = p.nextToken(); e != JsonToken.END_ARRAY; e = p.nextToken())
-        withPath(Reference(null, index++, d.simpleName()), () {
+        withPath(Reference(null, index++, null, d.name), () {
             elements ~= deserializeValue(config, p, d.elementType);
         });
     return d.fromElements(elements);
@@ -573,7 +573,7 @@ private Any readEntries(MapperConfig config, JsonParser p, const Descriptor d, J
         const name = p.currentName();
         p.nextToken();
         keys ~= keyFrom(config, name, d.keyType, p);
-        withPath(Reference(name, -1, d.simpleName()), () {
+        withPath(Reference(name, -1, null, d.name), () {
             values ~= deserializeValue(config, p, d.elementType);
         });
     }
@@ -730,7 +730,7 @@ private Any readProperty(MapperConfig config, JsonParser p, BeanDescription bean
         BeanPropertyDefinition property, Any current)
 {
     Any value;
-    withPath(Reference(property.name, -1, bean.descriptor.simpleName()), () {
+    withPath(Reference(property.name, -1, null, bean.descriptor.name), () {
         value = deserializeValue(config, p, property.type, current, property.hasFormat
             ? JavaTimeFormat.of(property.format) : JavaTimeFormat.init);
     });

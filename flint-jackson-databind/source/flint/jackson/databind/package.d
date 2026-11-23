@@ -324,7 +324,12 @@ class ObjectMapper
     protected this(MapperConfig config)
     {
         _config = config;
+        _compactContext = new MapperWriteContext(false);
+        _indentedContext = new MapperWriteContext(true);
     }
+
+    private ObjectWriteContext _compactContext;
+    private ObjectWriteContext _indentedContext;
 
     /// The defaults: Jackson 3.1.8's features, the default JSON factory and node factory.
     static MapperConfig defaultConfig()
@@ -402,9 +407,7 @@ class ObjectMapper
     /// ditto, erased.
     string writeValueAsString(Any value)
     {
-        auto output = new ByteArrayBuilder();
-        writeValue(output, value);
-        return output.toUtf8String();
+        return (cast(const(char)[]) writeValueAsBytes(value)).idup;
     }
 
     /// Method that can be used to serialize any Java value as a byte array, UTF-8 encoded.
@@ -413,12 +416,25 @@ class ObjectMapper
         return writeValueAsBytes(Any.of(value));
     }
 
-    /// ditto, erased.
+    /// ditto, erased. The generator keeps the document in one buffer, which it hands over.
     ubyte[] writeValueAsBytes(Any value)
     {
-        auto output = new ByteArrayBuilder();
-        writeValue(output, value);
-        return output.toByteArray();
+        return writeCollected(writeContext(_config.isEnabled(SerializationFeature.INDENT_OUTPUT)), value);
+    }
+
+    // Serialize into a buffered generator and take its buffer: no builder, no sink closure, no copy.
+    private ubyte[] writeCollected(ObjectWriteContext context, Any value)
+    {
+        auto g = _config.factory.createBufferedGenerator(context);
+        writeValue(g, value);
+        g.close();
+        return g.collected();
+    }
+
+    // The write contexts carry only the INDENT_OUTPUT choice, so one of each serves every call.
+    private ObjectWriteContext writeContext(bool indent)
+    {
+        return indent ? _indentedContext : _compactContext;
     }
 
     /// Serialize `value` as UTF-8 JSON into `target`.
@@ -431,7 +447,7 @@ class ObjectMapper
     void writeValue(OutputSink sink, Any value)
     {
         auto g = _config.factory.createGenerator(
-                new MapperWriteContext(_config.isEnabled(SerializationFeature.INDENT_OUTPUT)), sink);
+                writeContext(_config.isEnabled(SerializationFeature.INDENT_OUTPUT)), sink);
         writeValue(g, value);
         g.close();
     }
@@ -608,11 +624,7 @@ class ObjectWriter
     /// ditto, erased.
     string writeValueAsString(Any value)
     {
-        auto output = new ByteArrayBuilder();
-        auto g = mapper._config.factory.createGenerator(new MapperWriteContext(indent), output);
-        mapper.writeValue(g, value);
-        g.close();
-        return output.toUtf8String();
+        return (cast(const(char)[]) mapper.writeCollected(mapper.writeContext(indent), value)).idup;
     }
 }
 
