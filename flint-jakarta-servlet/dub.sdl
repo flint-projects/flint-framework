@@ -5,7 +5,7 @@ targetType "library"
 sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
-dependency "framework-interim" path="../framework-interim"
+dependency "p1-interim" path="../p1-interim"
 
 configuration "library" {
     targetType "library"
