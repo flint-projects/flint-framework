@@ -1,7 +1,7 @@
 module template_escape_fuzz;
 
 import flint.arena : RequestArena, Status;
-import flint.templates : escapeHtml, validateUrl;
+import flint.engine.templates : escapeHtml, validateUrl;
 
 @safe:
 

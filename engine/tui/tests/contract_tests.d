@@ -1,17 +1,17 @@
-module flint.tui.contract_tests;
+module flint.engine.tui.contract_tests;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Error, Status;
 import flint.conc : Deadline;
-import flint.style : Color, Style;
+import flint.engine.style : Color, Style;
 import flint.term : ColorProfile;
-import flint.tui : CommandId, Effects, Event, EventKind, Frame, Size, run;
-import flint.tui.commands : Commands;
-import flint.tui.effects : Control, now;
-import flint.tui.grid : Grid;
-import flint.tui.internal : Loop;
+import flint.engine.tui : CommandId, Effects, Event, EventKind, Frame, Size, run;
+import flint.engine.tui.commands : Commands;
+import flint.engine.tui.effects : Control, now;
+import flint.engine.tui.grid : Grid;
+import flint.engine.tui.internal : Loop;
 import std.string : indexOf;
 
 @safe:

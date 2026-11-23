@@ -1,4 +1,4 @@
-module flint.desktop.sdl_runtime_tests;
+module flint.engine.desktop.sdl_runtime_tests;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.thread.osthread : Thread;
@@ -6,7 +6,7 @@ import core.time : dur;
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : Context, Deadline;
 import flint.conc.wait : replaceWaitHook;
-import flint.desktop : Asset, DesktopBackend, DesktopEvent, EventKind, Window, WindowOptions;
+import flint.engine.desktop : Asset, DesktopBackend, DesktopEvent, EventKind, Window, WindowOptions;
 
 @safe:
 

@@ -4,8 +4,8 @@ module realtime_fixture;
 import core.lifetime : move;
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : Context, Deadline;
-import flint.http : ClientOptions, HttpClient;
-import flint.rpc : SseClientOptions, SseNotice, WebSocketClientOptions, connectWebSocket, subscribeSse;
+import flint.engine.http : ClientOptions, HttpClient;
+import flint.engine.rpc : SseClientOptions, SseNotice, WebSocketClientOptions, connectWebSocket, subscribeSse;
 import std.stdio : writeln;
 
 @safe:

@@ -3,7 +3,7 @@ module app;
 
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
-import flint.mq : QueueClient, QueueOptions;
+import flint.engine.mq : QueueClient, QueueOptions;
 import workload : measure;
 
 @safe:

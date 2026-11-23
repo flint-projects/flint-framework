@@ -2,7 +2,7 @@ module sql_contract_tests;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.sql : Connection, Driver, Isolation, Pool, PoolOptions, Row, SqlValue, ValueKind, withTransaction;
+import flint.engine.sql : Connection, Driver, Isolation, Pool, PoolOptions, Row, SqlValue, ValueKind, withTransaction;
 import std.process : environment;
 
 @safe:

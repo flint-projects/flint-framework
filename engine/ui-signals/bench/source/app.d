@@ -1,8 +1,8 @@
 module app;
 
 import flint.arena : Error, Status;
-import flint.ui_signals : ObserverSlot, SignalGraph, SignalId, SignalSlot;
-import flint.wasm_bridge : CommandBuffer, NodeHandle;
+import flint.engine.ui_signals : ObserverSlot, SignalGraph, SignalId, SignalSlot;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
 import signals_probe : measure;
 
 @safe:

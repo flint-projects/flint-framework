@@ -1,11 +1,11 @@
 module trace_fibers;
 
 import core.lifetime : move;
-import flint.actuator : ActuatorOptions, Registry, Span, TraceContext;
+import flint.engine.actuator : ActuatorOptions, Registry, Span, TraceContext;
 import flint.arena : Error, Status;
 import flint.conc : Context, Deadline, WorkerOptions, WorkerPool;
 import flint.log : LogContext, LogOptions, Logger;
-import flint.reactor : Reactor, ReactorOptions, TaskContext;
+import flint.engine.reactor : Reactor, ReactorOptions, TaskContext;
 import std.format : format;
 import std.json : parseJSON;
 import std.stdio : writeln;

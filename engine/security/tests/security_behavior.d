@@ -1,9 +1,9 @@
-module flint.security.security_behavior_test;
+module flint.engine.security.security_behavior_test;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : Context;
-import flint.security : CorsPolicy, JwtAlgorithm, JwtPolicy, JwtVerifier, PreAuthorize, Principal,
-    RegisteredPolicy, authorize, hasRole, originAllowed, preflight, rolesAllowed;
+import flint.engine.security : CorsPolicy, JwtAlgorithm, JwtPolicy, JwtVerifier, PreAuthorize,
+    Principal, RegisteredPolicy, authorize, hasRole, originAllowed, preflight, rolesAllowed;
 
 @safe:
 
@@ -68,8 +68,8 @@ version (FlintNativeOpenssl)
     import core.time : msecs;
     import flint.arena : Text;
     import flint.conc : CancelSource, Deadline;
-    import flint.security : RolesAllowed, hmacSha256, sha256;
-    import flint.security.jwt : setJwksTestClockShift;
+    import flint.engine.security : RolesAllowed, hmacSha256, sha256;
+    import flint.engine.security.jwt : setJwksTestClockShift;
     import std.file : readText;
     import std.process : environment;
 
@@ -270,7 +270,7 @@ version (FlintNativeOpenssl)
     @("a verified snapshot renews in the background before its lifetime ends")
     @system unittest
     {
-        import flint.security.jwt : completedJwksRefreshes;
+        import flint.engine.security.jwt : completedJwksRefreshes;
 
         const origin = fixture("ORIGIN");
         if (!origin.length)
@@ -318,7 +318,7 @@ version (FlintNativeLibsodium)
 {
     import flint.conc : CancelSource, Deadline;
     import flint.conc.wait : replaceWaitHook;
-    import flint.security : hashPassword, verifyPassword;
+    import flint.engine.security : hashPassword, verifyPassword;
 
     private Error cancelWait(Deadline) nothrow @nogc
     {

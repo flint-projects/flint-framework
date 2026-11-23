@@ -3,7 +3,7 @@ module app;
 import core.time : MonoTime;
 import flint.arena : Buffer, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.mail : Attachment, MailAddress, MailMessage, MailOptions, MailSender;
+import flint.engine.mail : Attachment, MailAddress, MailMessage, MailOptions, MailSender;
 import probe_workload : exercise;
 
 @safe:

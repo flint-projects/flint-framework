@@ -1,12 +1,12 @@
-module flint.reactor.cooperative_wait_test;
+module flint.engine.reactor.cooperative_wait_test;
 
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.lifetime : move;
 import flint.arena : Status;
 import flint.conc : Deadline;
 import flint.conc.wait : waitUntil;
-import flint.reactor : Backend, Reactor, ReactorOptions;
+import flint.engine.reactor : Backend, Reactor, ReactorOptions;
 
 @safe:
 
@@ -156,7 +156,7 @@ private final class Sleepers
 unittest
 {
     import flint.conc : CancelSource, Context;
-    import flint.reactor : TaskContext;
+    import flint.engine.reactor : TaskContext;
 
     ReactorOptions options;
     options.cores = 1;

@@ -4,7 +4,7 @@ module jetstream_fixture;
 import core.lifetime : move;
 import flint.arena : Error, RequestArena, Status, Text;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.mq : AckAction, Broker, Message, QueueClient, QueueOptions, StreamListener, registerListeners;
+import flint.engine.mq : AckAction, Broker, Message, QueueClient, QueueOptions, StreamListener, registerListeners;
 import std.stdio : writeln;
 
 version (FlintMqFixtureSqlite) import sqlite_effect : Effects;

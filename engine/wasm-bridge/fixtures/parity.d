@@ -1,7 +1,7 @@
-module flint.wasm_bridge.parity;
+module flint.engine.wasm_bridge.parity;
 
 import flint.arena : Status;
-import flint.wasm_bridge : CommandBuffer, NodeHandle, TagName;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle, TagName;
 
 @safe:
 

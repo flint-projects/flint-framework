@@ -2,7 +2,7 @@
 module throwing_cleanup;
 
 import flint.arena : Error;
-import flint.di : AppContext, PreDestroy;
+import flint.engine.di : AppContext, PreDestroy;
 
 @safe:
 

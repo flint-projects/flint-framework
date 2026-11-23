@@ -2,9 +2,9 @@ module feature_widget_probe;
 
 import core.time : MonoTime;
 import flint.arena : Status;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
-import flint.tui.widget_display_probe : Screen, require;
-import flint.widgets : Column, List, ListItem, Table, TextArea;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode;
+import flint.engine.tui.widget_display_probe : Screen, require;
+import flint.engine.widgets : Column, List, ListItem, Table, TextArea;
 import widget_replay : Renderer, matchLabel, maximumText, ordinaryLabel, query, replay, tableOnly;
 
 @safe:

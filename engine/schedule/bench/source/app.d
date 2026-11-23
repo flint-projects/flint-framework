@@ -3,7 +3,7 @@ module app;
 import core.memory : GC;
 import flint.arena : Error, Status;
 import flint.conc : Context;
-import flint.schedule : Scheduled, ScheduledTask, Scheduler;
+import flint.engine.schedule : Scheduled, ScheduledTask, Scheduler;
 import schedule_probe : Outcome, batchSize, cancelled, jobsPerTrial, nextBatch, show;
 
 @safe:

@@ -1,8 +1,8 @@
-module flint.tui.corpus;
+module flint.engine.tui.corpus;
 
 import flint.arena : Error, Status;
 import flint.term : ColorProfile, Size;
-import flint.tui.grid : Frame, Grid;
+import flint.engine.tui.grid : Frame, Grid;
 
 @safe:
 

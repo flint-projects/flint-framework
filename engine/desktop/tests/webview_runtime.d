@@ -1,22 +1,22 @@
-module flint.desktop.webview_runtime_tests;
+module flint.engine.desktop.webview_runtime_tests;
 
 import core.stdc.stdlib : getenv;
 import core.thread.osthread : Thread;
 import flint.arena : Buffer, Error, RequestArena, Result, Status, Text;
 import flint.conc : Context, Deadline;
-import flint.desktop : Asset, Capability, Command, DesktopBackend, DesktopCommands, DesktopEvent,
-    EventKind, InvokeContext, Listen, Window, WindowOptions;
-import flint.desktop.runtime : nativeAddress, nativeRequestClose, nativeResize;
+import flint.engine.desktop : Asset, Capability, Command, DesktopBackend, DesktopCommands,
+    DesktopEvent, EventKind, InvokeContext, Listen, Window, WindowOptions;
+import flint.engine.desktop.runtime : nativeAddress, nativeRequestClose, nativeResize;
 
 version (FlintNativeWebkitgtk)
 {
     version = FlintSystemWebView;
-    import flint.desktop.ffi.webkit : displayBackend;
+    import flint.engine.desktop.ffi.webkit : displayBackend;
 }
 else version (FlintNativeWkwebview)
 {
     version = FlintSystemWebView;
-    import flint.desktop.ffi.wkwebview : displayBackend;
+    import flint.engine.desktop.ffi.wkwebview : displayBackend;
 }
 
 @safe:

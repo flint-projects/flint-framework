@@ -1,7 +1,7 @@
 module app;
 
 import bridge_probe : measure, observe;
-import flint.wasm_bridge : CommandBuffer, NodeHandle;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
 
 @safe:
 

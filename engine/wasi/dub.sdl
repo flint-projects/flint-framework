@@ -1,4 +1,4 @@
-name "wasi"
+name "engine-wasi"
 description "Flint wasi subpackage"
 license "Apache-2.0"
 targetType "library"

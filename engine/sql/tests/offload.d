@@ -3,8 +3,8 @@ module sql_offload_tests;
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import flint.arena : RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Backend, Reactor, ReactorOptions;
-import flint.sql : Driver, Pool, PoolOptions;
+import flint.engine.reactor : Backend, Reactor, ReactorOptions;
+import flint.engine.sql : Driver, Pool, PoolOptions;
 
 @safe:
 

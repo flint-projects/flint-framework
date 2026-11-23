@@ -2,7 +2,7 @@ module unsafe_listener;
 
 import flint.arena : Error, RequestArena;
 import flint.conc : Context;
-import flint.mq : AckAction, KafkaListener, Message, QueueClient, registerListeners;
+import flint.engine.mq : AckAction, KafkaListener, Message, QueueClient, registerListeners;
 
 /// A component with a deliberately incompatible annotated method.
 class Service

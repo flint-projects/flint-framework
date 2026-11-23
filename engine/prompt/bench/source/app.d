@@ -1,11 +1,11 @@
-module flint.prompt.budget_probe;
+module flint.engine.prompt.budget_probe;
 
 import flint.arena : Status;
-import flint.prompt : Answer, Choice, Field, FormOptions, clear;
-import flint.prompt.group : Group, requiredValue, validateFields;
-import flint.prompt.picker : Picker, validateChoices;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
-import flint.tui.widget_display_probe : Screen, require;
+import flint.engine.prompt : Answer, Choice, Field, FormOptions, clear;
+import flint.engine.prompt.group : Group, requiredValue, validateFields;
+import flint.engine.prompt.picker : Picker, validateChoices;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode;
+import flint.engine.tui.widget_display_probe : Screen, require;
 import prompt_replay : capacity, choices, decimal, fields, filter, parseDecimal, replay, sample, secrets, title;
 
 @safe:

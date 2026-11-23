@@ -1,11 +1,11 @@
-module flint.schedule.lifecycle_test;
+module flint.engine.schedule.lifecycle_test;
 
 import core.memory : GC;
 import core.thread.fiber : Fiber;
 import core.thread.osthread : Thread;
 import flint.arena : Error, Status;
 import flint.conc : Context;
-import flint.schedule : Retryable, Scheduled, ScheduledTask, Scheduler, registerScheduled;
+import flint.engine.schedule : Retryable, Scheduled, ScheduledTask, Scheduler, registerScheduled;
 
 @safe:
 

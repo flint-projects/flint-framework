@@ -1,14 +1,14 @@
-module flint.storage.storage_behavior;
+module flint.engine.storage.storage_behavior;
 
 import core.atomic : atomicOp;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : Context, Deadline;
 import flint.conc.wait : waitUntil;
-import flint.http : ClientOptions, HttpClient, HttpMethod, HttpRequestView, HttpStreamField;
-import flint.storage : CredentialProvider, Credentials, DownloadOptions, ObjectStorage, StorageOptions;
-import flint.storage.credentials : CredentialStore, unixSeconds;
-import flint.storage.sigv4 : CredentialView, Message, SigningScratch, formatDate, payloadHash, sign;
-import flint.storage.xml : Envelope, EnvelopeKind, copyXmlText, readEnvelope;
+import flint.engine.http : ClientOptions, HttpClient, HttpMethod, HttpRequestView, HttpStreamField;
+import flint.engine.storage : CredentialProvider, Credentials, DownloadOptions, ObjectStorage, StorageOptions;
+import flint.engine.storage.credentials : CredentialStore, unixSeconds;
+import flint.engine.storage.sigv4 : CredentialView, Message, SigningScratch, formatDate, payloadHash, sign;
+import flint.engine.storage.xml : Envelope, EnvelopeKind, copyXmlText, readEnvelope;
 import std.process : environment;
 
 @safe:
@@ -446,8 +446,8 @@ unittest
 @("multipart_limits: part numbers outside 1..10000 and empty upload IDs are rejected before transfer")
 unittest
 {
-    import flint.storage.endpoint : Endpoint;
-    import flint.storage.parts : Part, PartPhase, maximumParts;
+    import flint.engine.storage.endpoint : Endpoint;
+    import flint.engine.storage.parts : Part, PartPhase, maximumParts;
 
     StorageOptions options;
     options.partBytes = 5 * 1024 * 1024;

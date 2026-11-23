@@ -1,7 +1,7 @@
 /// Reject competing parameter bindings at compilation.
 module ambiguous_binding;
 
-import flint.web : Get, PathVariable, QueryParam, RestController, Server, registerController;
+import flint.engine.web : Get, PathVariable, QueryParam, RestController, Server, registerController;
 
 @safe:
 

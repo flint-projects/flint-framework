@@ -11,7 +11,7 @@ PACKAGES = ("arena", "conc", "style", "term", "tui", "validate", "widgets", "pro
 CASES = (
     ("borrow_escape.d", "assigning scope variable `bytes` to `stored`", (("stored = bytes;", "stored = bytes.dup;"),)),
     ("copy_secret.d", "is not copyable because it has a disabled postblit",
-     (("import flint.prompt : Secret;", "import core.lifetime : move;\nimport flint.prompt : Secret;"),
+     (("import flint.engine.prompt : Secret;", "import core.lifetime : move;\nimport flint.engine.prompt : Secret;"),
       ("Secret other = owner;", "Secret other = move(owner);"))),
 )
 

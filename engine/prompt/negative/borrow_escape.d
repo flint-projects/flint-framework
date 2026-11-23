@@ -1,6 +1,6 @@
 module borrow_escape;
 
-import flint.prompt : Secret;
+import flint.engine.prompt : Secret;
 
 @safe:
 

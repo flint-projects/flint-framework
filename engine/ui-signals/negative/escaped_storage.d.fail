@@ -1,7 +1,7 @@
 module escaped_storage;
 
 import flint.arena : Result;
-import flint.ui_signals : ObserverSlot, SignalGraph, SignalSlot;
+import flint.engine.ui_signals : ObserverSlot, SignalGraph, SignalSlot;
 
 @safe:
 

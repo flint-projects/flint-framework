@@ -2,7 +2,7 @@
 module escaped_request;
 
 import flint.arena : Result;
-import flint.web : Request, RequestContext, Response;
+import flint.engine.web : Request, RequestContext, Response;
 
 @safe:
 

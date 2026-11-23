@@ -1,7 +1,7 @@
-module flint.cache.redis_reply_escape;
+module flint.engine.cache.redis_reply_escape;
 
 import flint.arena : RequestArena;
-import flint.cache : Cache;
+import flint.engine.cache : Cache;
 import flint.conc : Context;
 
 private const(ubyte)[] leaked;

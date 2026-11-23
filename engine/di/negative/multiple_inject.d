@@ -2,7 +2,7 @@
 module multiple_inject;
 
 import flint.arena : Error;
-import flint.di : AppContext, Inject;
+import flint.engine.di : AppContext, Inject;
 
 @safe:
 

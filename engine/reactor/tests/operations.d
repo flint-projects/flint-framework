@@ -1,8 +1,8 @@
-module flint.reactor.operations_test;
+module flint.engine.reactor.operations_test;
 
 import flint.arena : Status;
-import flint.reactor.internal.operations : OperationId, OperationTable;
-import flint.reactor.types : ConnectionId;
+import flint.engine.reactor.internal.operations : OperationId, OperationTable;
+import flint.engine.reactor.types : ConnectionId;
 
 @safe:
 

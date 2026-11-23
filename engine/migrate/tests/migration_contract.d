@@ -2,8 +2,8 @@ module migration_contract;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.migrate : Migration, MigrationOptions, migrate, validateHistory;
-import flint.sql : Driver, Pool, PoolOptions, Row, ValueKind;
+import flint.engine.migrate : Migration, MigrationOptions, migrate, validateHistory;
+import flint.engine.sql : Driver, Pool, PoolOptions, Row, ValueKind;
 import std.digest.sha : sha256Of;
 import std.process : environment;
 import std.string : indexOf, replace;

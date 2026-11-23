@@ -2,7 +2,7 @@ module invalid_cron;
 
 import flint.arena : Error;
 import flint.conc : Context;
-import flint.schedule : Scheduled, Scheduler, registerScheduled;
+import flint.engine.schedule : Scheduled, Scheduler, registerScheduled;
 
 @safe:
 

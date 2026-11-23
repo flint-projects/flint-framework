@@ -1,10 +1,10 @@
-module flint.schedule.close_join_test;
+module flint.engine.schedule.close_join_test;
 
 import core.atomic : atomicLoad, atomicStore;
 import flint.arena : Error, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Backend, Reactor, ReactorOptions;
-import flint.schedule : Scheduled, Scheduler;
+import flint.engine.reactor : Backend, Reactor, ReactorOptions;
+import flint.engine.schedule : Scheduled, Scheduler;
 
 @safe:
 

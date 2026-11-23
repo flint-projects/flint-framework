@@ -4,9 +4,9 @@ module grpc_fixture;
 import core.lifetime : move;
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.http : ClientOptions, HttpClient, HttpStreamField;
-import flint.reactor : Backend, Reactor, ReactorOptions;
-import flint.rpc : GrpcCall, GrpcCallOptions, GrpcService, RpcCode, beginGrpc;
+import flint.engine.http : ClientOptions, HttpClient, HttpStreamField;
+import flint.engine.reactor : Backend, Reactor, ReactorOptions;
+import flint.engine.rpc : GrpcCall, GrpcCallOptions, GrpcService, RpcCode, beginGrpc;
 import std.stdio : writeln;
 import std.string : indexOf;
 

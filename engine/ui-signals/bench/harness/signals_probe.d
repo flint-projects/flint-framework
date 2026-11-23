@@ -4,7 +4,7 @@ import core.memory : GC;
 import core.stdc.stdio : printf;
 import core.time : MonoTime;
 import flint.arena : Error, Status;
-import flint.wasm_bridge : CommandBuffer;
+import flint.engine.wasm_bridge : CommandBuffer;
 
 @safe:
 

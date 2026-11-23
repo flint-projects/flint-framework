@@ -1,9 +1,9 @@
-module flint.web.http1_behavior;
+module flint.engine.web.http1_behavior;
 
 import flint.arena : RequestArena, Status;
-import flint.web.http1 : Http1Reader, ReadOutcome;
-import flint.web.sys.ownership : releaseBytes, reserveH1;
-import flint.web.types : HeaderRecord, Method, Request, maximumFields;
+import flint.engine.web.http1 : Http1Reader, ReadOutcome;
+import flint.engine.web.sys.ownership : releaseBytes, reserveH1;
+import flint.engine.web.types : HeaderRecord, Method, Request, maximumFields;
 
 @safe:
 

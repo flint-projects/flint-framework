@@ -1,6 +1,6 @@
 module application.redis_private_bridge;
 
-import flint.cache.ffi.hiredis : Bridge;
+import flint.engine.cache.ffi.hiredis : Bridge;
 
 private Bridge attempt() @safe
 {

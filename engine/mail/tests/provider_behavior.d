@@ -1,11 +1,11 @@
-module flint.mail.provider_behavior;
+module flint.engine.mail.provider_behavior;
 
 version (FlintNativeCurl)
 {
     import flint.arena : RequestArena, Status;
     import flint.conc : CancelSource, Context, Deadline;
-    import flint.http : ClientOptions, HttpAwsV4, HttpClient, HttpMethod, HttpRequestView, HttpStreamField;
-    import flint.mail : Attachment, MailAddress, MailBackend, MailMessage, MailOptions, MailSender;
+    import flint.engine.http : ClientOptions, HttpAwsV4, HttpClient, HttpMethod, HttpRequestView, HttpStreamField;
+    import flint.engine.mail : Attachment, MailAddress, MailBackend, MailMessage, MailOptions, MailSender;
     import std.conv : to;
     import std.file : readText;
     import std.process : environment;

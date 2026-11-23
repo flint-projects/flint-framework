@@ -1,13 +1,13 @@
-module flint.reactor.owner_test;
+module flint.engine.reactor.owner_test;
 
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
-import flint.reactor : Backend, Completion, ConnectionId, ListenOptions, Reactor, ReactorOptions;
-import flint.reactor.sys.workers : availableCpus;
+import flint.engine.reactor : Backend, Completion, ConnectionId, ListenOptions, Reactor, ReactorOptions;
+import flint.engine.reactor.sys.workers : availableCpus;
 import std.socket : InternetAddress, SocketOption, SocketOptionLevel, TcpSocket;
 
 private shared uint publishedOwner;

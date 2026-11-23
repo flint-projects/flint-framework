@@ -2,7 +2,7 @@ module app;
 
 import cache_probe : inspect, measure, payload;
 import flint.arena : RequestArena, Status;
-import flint.cache : Cache, CacheOptions;
+import flint.engine.cache : Cache, CacheOptions;
 import flint.conc : Context;
 
 @safe:

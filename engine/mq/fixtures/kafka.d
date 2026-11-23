@@ -3,7 +3,7 @@ module kafka_fixture;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : Context, Deadline;
-import flint.mq : AckAction, Broker, Message, QueueClient, QueueOptions;
+import flint.engine.mq : AckAction, Broker, Message, QueueClient, QueueOptions;
 import std.stdio : writeln;
 
 @safe:

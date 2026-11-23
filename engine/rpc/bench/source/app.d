@@ -3,8 +3,8 @@ module app;
 
 import codec_probe : runProbe;
 import flint.arena : RequestArena, Status;
-import flint.rpc : decodeProto, encodeProto;
-import flint.rpc.fixture_proto : Envelope;
+import flint.engine.rpc : decodeProto, encodeProto;
+import flint.engine.rpc.fixture_proto : Envelope;
 
 @safe:
 

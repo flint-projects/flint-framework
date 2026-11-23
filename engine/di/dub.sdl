@@ -1,4 +1,4 @@
-name "di"
+name "engine-di"
 description "Flint di subpackage"
 license "Apache-2.0"
 targetType "library"

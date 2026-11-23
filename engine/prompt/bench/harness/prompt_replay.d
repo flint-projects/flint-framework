@@ -2,7 +2,7 @@ module prompt_replay;
 
 import core.stdc.stdio : printf;
 import core.time : MonoTime;
-import flint.tui.widget_display_probe : Screen, require;
+import flint.engine.tui.widget_display_probe : Screen, require;
 
 @safe:
 

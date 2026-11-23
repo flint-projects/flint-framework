@@ -1,7 +1,7 @@
-module flint.desktop.draw_list_tests;
+module flint.engine.desktop.draw_list_tests;
 
 import flint.arena : Status;
-import flint.desktop.commands : validateDrawList;
+import flint.engine.desktop.commands : validateDrawList;
 
 @safe:
 

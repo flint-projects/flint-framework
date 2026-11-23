@@ -1,11 +1,11 @@
-module flint.security.security_acceptance_test;
+module flint.engine.security.security_acceptance_test;
 
 import flint.arena : RequestArena, Status;
 import flint.conc : Context;
-import flint.security : CorsPolicy, JwtVerifier, preflight;
-import flint.security.jwks : KeySet;
-import flint.security.jwt_parse : parseClaims;
-import flint.security.types : JwtAlgorithm;
+import flint.engine.security : CorsPolicy, JwtVerifier, preflight;
+import flint.engine.security.jwks : KeySet;
+import flint.engine.security.jwt_parse : parseClaims;
+import flint.engine.security.types : JwtAlgorithm;
 
 @safe:
 
@@ -172,9 +172,9 @@ unittest
 
 version (FlintNativeOpenssl)
 {
-    import flint.security : hmacSha256, sha256;
-    import flint.security.base64url : decodeUrl64;
-    import flint.security.ffi.crypto : Key;
+    import flint.engine.security : hmacSha256, sha256;
+    import flint.engine.security.base64url : decodeUrl64;
+    import flint.engine.security.ffi.crypto : Key;
 
     private void sha(scope const(ubyte)[] input, scope const(ubyte)[] expected)
     {

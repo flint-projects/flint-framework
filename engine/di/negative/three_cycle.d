@@ -2,7 +2,7 @@
 module three_cycle;
 
 import flint.arena : Error;
-import flint.di : AppContext;
+import flint.engine.di : AppContext;
 
 @safe:
 

@@ -1,5 +1,5 @@
 /// JetStream owner behavior against a scripted loopback NATS peer.
-module flint.mq.jetstream_handler;
+module flint.engine.mq.jetstream_handler;
 
 version (linux) version (FlintNativeLibrdkafka) version = FlintMqJetStreamPeer;
 version (OSX) version (FlintNativeLibrdkafka) version = FlintMqJetStreamPeer; // ADR-024
@@ -9,7 +9,7 @@ version (FlintMqJetStreamPeer)
     import core.thread.osthread : Thread;
     import flint.arena : Error, RequestArena, Result, Status;
     import flint.conc : Context, Deadline;
-    import flint.mq : AckAction, Broker, Message, PublishReceipt, QueueClient, QueueOptions;
+    import flint.engine.mq : AckAction, Broker, Message, PublishReceipt, QueueClient, QueueOptions;
     import std.algorithm.searching : countUntil, startsWith;
     import std.array : split;
     import std.conv : to;

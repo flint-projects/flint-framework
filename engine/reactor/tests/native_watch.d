@@ -1,4 +1,4 @@
-module flint.reactor.native_watch_test;
+module flint.engine.reactor.native_watch_test;
 
 // Linux epoll and io_uring, and macOS kqueue (ADR-024).
 version (Posix)
@@ -8,8 +8,8 @@ version (Posix)
     import core.sys.posix.unistd : close;
     import flint.arena : Status;
     import flint.conc : Deadline;
-    import flint.reactor : Backend, NativeInterest, NativeReadyFn, Reactor, ReactorOptions;
-    import flint.reactor.test_support : readinessBackend;
+    import flint.engine.reactor : Backend, NativeInterest, NativeReadyFn, Reactor, ReactorOptions;
+    import flint.engine.reactor.test_support : readinessBackend;
 
     private shared int watched;
     private shared int quietFd;

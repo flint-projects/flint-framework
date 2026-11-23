@@ -1,6 +1,6 @@
 module native_watch_escape;
 
-import flint.reactor : NativeInterest, Reactor;
+import flint.engine.reactor : NativeInterest, Reactor;
 
 @safe:
 

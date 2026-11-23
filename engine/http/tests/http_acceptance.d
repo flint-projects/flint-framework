@@ -1,8 +1,8 @@
-module flint.http.http_acceptance_test;
+module flint.engine.http.http_acceptance_test;
 
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.http : ChunkConsumer, ClientOptions, Header, HttpClient, HttpMethod, HttpRequest, HttpResponse;
+import flint.engine.http : ChunkConsumer, ClientOptions, Header, HttpClient, HttpMethod, HttpRequest, HttpResponse;
 
 @safe:
 
@@ -11,7 +11,7 @@ import flint.http : ChunkConsumer, ClientOptions, Header, HttpClient, HttpMethod
 version (FlintNativeCurl)
 {
     import core.lifetime : move;
-    import flint.reactor : Backend, Reactor, ReactorOptions;
+    import flint.engine.reactor : Backend, Reactor, ReactorOptions;
     import std.conv : to;
     import std.process : environment;
 

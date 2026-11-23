@@ -2,7 +2,7 @@
 module app;
 
 import flint.arena : RequestArena, Status;
-import flint.cache : Cache, CacheBackend, CacheOptions;
+import flint.engine.cache : Cache, CacheBackend, CacheOptions;
 import flint.conc : Context;
 import redis_workload : Observation, fixture, run;
 import std.exception : enforce;

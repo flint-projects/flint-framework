@@ -2,7 +2,7 @@ module http_negative.two_bodies;
 
 import flint.arena : RequestArena, Result;
 import flint.conc : Context;
-import flint.http : HttpClient, HttpExchange, HttpResponse, PostExchange, bindHttpClient;
+import flint.engine.http : HttpClient, HttpExchange, HttpResponse, PostExchange, bindHttpClient;
 
 private struct Payload
 {

@@ -1,6 +1,6 @@
 module migration_embed;
 
-import flint.migrate : embeddedMigration;
+import flint.engine.migrate : embeddedMigration;
 import std.digest : LetterCase, toHexString;
 import std.stdio : write, writeln;
 

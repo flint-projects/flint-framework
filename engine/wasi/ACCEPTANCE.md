@@ -1,4 +1,4 @@
-# flint:wasi acceptance traceability
+# flint:engine-wasi acceptance traceability
 
 Source: `handoff/specs/tier-5/wasi.md` section 6. Unit tests live in `tests/contract_tests.d` and run against the linked Wasmtime 51.0.0 provider (`FlintNativeWasmtime`, `linux-x86_64-glibc`). Guests come from `tests/fixture_bytes.d` and hand-assembled byte arrays. All seeds are fixed.
 

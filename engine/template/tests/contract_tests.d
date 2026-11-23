@@ -1,7 +1,7 @@
 module template_contract_tests;
 
 import flint.arena : Buffer, RequestArena, Status;
-import flint.templates : escapeHtml, render, validateUrl;
+import flint.engine.templates : escapeHtml, render, validateUrl;
 
 @safe:
 

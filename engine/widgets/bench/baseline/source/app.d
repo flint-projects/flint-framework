@@ -2,9 +2,9 @@ module flint.benchmarks.reference_widget_probe;
 
 import core.time : MonoTime;
 import flint.arena : Status;
-import flint.style : Style, foldGraphemes, measure, truncateCells;
-import flint.tui : Frame;
-import flint.tui.widget_display_probe : Screen, require;
+import flint.engine.style : Style, foldGraphemes, measure, truncateCells;
+import flint.engine.tui : Frame;
+import flint.engine.tui.widget_display_probe : Screen, require;
 import std.string : indexOf;
 import widget_replay : Renderer, matchLabel, maximumText, ordinaryLabel, query, replay, tableOnly;
 

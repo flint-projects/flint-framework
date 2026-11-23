@@ -1,10 +1,11 @@
-module flint.prompt.contract_tests;
+module flint.engine.prompt.contract_tests;
 
 import flint.arena : Status;
-import flint.prompt : Answer, Choice, Field, FormOptions, Secret, clear, form, input, multiSelect, password, select;
-import flint.prompt.group : Group, requiredValue, wipeAnswers;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode, Size;
-import flint.tui.prompt_test_display : capture;
+import flint.engine.prompt : Answer, Choice, Field, FormOptions, Secret, clear, form, input,
+    multiSelect, password, select;
+import flint.engine.prompt.group : Group, requiredValue, wipeAnswers;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode, Size;
+import flint.engine.tui.prompt_test_display : capture;
 import std.string : indexOf;
 
 @safe:

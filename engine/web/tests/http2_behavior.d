@@ -1,11 +1,11 @@
-module flint.web.http2_behavior;
+module flint.engine.web.http2_behavior;
 
 import flint.arena : Buffer, Error, Result, Status;
 import flint.conc : Context, Deadline;
-import flint.web.http1_socket_behavior : assertCurrentDate, fieldValue;
-import flint.web.runtime : Server;
-import flint.web.stream : StreamField, StreamMode, StreamRoute, StreamToken;
-import flint.web.types : Method, Request, RequestContext, Response, ServerOptions;
+import flint.engine.web.http1_socket_behavior : assertCurrentDate, fieldValue;
+import flint.engine.web.runtime : Server;
+import flint.engine.web.stream : StreamField, StreamMode, StreamRoute, StreamToken;
+import flint.engine.web.types : Method, Request, RequestContext, Response, ServerOptions;
 
 @safe:
 

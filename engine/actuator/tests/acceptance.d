@@ -1,17 +1,17 @@
-module flint.actuator.acceptance_test;
+module flint.engine.actuator.acceptance_test;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.sync.mutex : Mutex;
 import core.thread.osthread : Thread;
 import core.time : msecs;
-import flint.actuator : ActuatorOptions, ExportStats, Health, HealthStatus, Registry, TraceContext;
-import flint.actuator.metrics : Metrics;
-import flint.actuator.otlp : measurements, traces;
-import flint.actuator.spans : SpanRecord;
+import flint.engine.actuator : ActuatorOptions, ExportStats, Health, HealthStatus, Registry, TraceContext;
+import flint.engine.actuator.metrics : Metrics;
+import flint.engine.actuator.otlp : measurements, traces;
+import flint.engine.actuator.spans : SpanRecord;
 import flint.arena : Buffer, RequestArena, Status;
 import flint.conc : Context, Deadline;
-import flint.http : ClientOptions, HttpClient, HttpRequest;
-import flint.web : Request, Server, ServerOptions;
+import flint.engine.http : ClientOptions, HttpClient, HttpRequest;
+import flint.engine.web : Request, Server, ServerOptions;
 import std.algorithm.searching : canFind, count, countUntil;
 import std.conv : to;
 import std.json : parseJSON;
@@ -350,7 +350,7 @@ private shared bool allowManagement = true;
     const traceBody = traces([row, child], "svc", 1_700_000_000_000_000_000, arena);
     assert(traceBody.ok);
     enum expectedTraces = `{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":`
-        ~ `{"stringValue":"svc"}}]},"scopeSpans":[{"scope":{"name":"flint.actuator"},"spans":[`
+        ~ `{"stringValue":"svc"}}]},"scopeSpans":[{"scope":{"name":"flint.engine.actuator"},"spans":[`
         ~ `{"traceId":"a0a1a2a3a4a5a6a7a8a9aaabacadaeaf","spanId":"1011121314151617","name":"GET \"/x\"\n",`
         ~ `"kind":1,"startTimeUnixNano":"1700000000000000005","endTimeUnixNano":"1700000000000000025",`
         ~ `"flags":1,"status":{"code":1}},`
@@ -370,7 +370,7 @@ private shared bool allowManagement = true;
     const metricBody = measurements(table, 1, 2, "svc", 100, 200, arena);
     assert(metricBody.ok);
     enum expectedMetrics = `{"resourceMetrics":[{"resource":{"attributes":[{"key":"service.name","value":`
-        ~ `{"stringValue":"svc"}}]},"scopeMetrics":[{"scope":{"name":"flint.actuator"},"metrics":[`
+        ~ `{"stringValue":"svc"}}]},"scopeMetrics":[{"scope":{"name":"flint.engine.actuator"},"metrics":[`
         ~ `{"name":"jobs_total","description":"Jobs \"run\"","sum":{"aggregationTemporality":2,`
         ~ `"isMonotonic":true,"dataPoints":[{"startTimeUnixNano":"100","timeUnixNano":"200","asInt":"7"}]}},`
         ~ `{"name":"latency","histogram":{"aggregationTemporality":2,"dataPoints":[{"startTimeUnixNano":"100",`

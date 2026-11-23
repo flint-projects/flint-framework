@@ -31,7 +31,7 @@ Error invalid(scope const(ubyte)[] bytes) @safe nothrow @nogc {
     ),
     (
         "opaque identity",
-        """import flint.codec : Encoder;
+        """import flint.engine.codec : Encoder;
 void invalid(ref Encoder encoder) @safe { encoder.owner = typeof(encoder.owner).init; }
 """,
         "no property",

@@ -1,7 +1,7 @@
 module widget_edit_fuzz;
 
-import flint.tui : Effects, Event, EventKind, KeyCode;
-import flint.widgets : TextArea, TextInput;
+import flint.engine.tui : Effects, Event, EventKind, KeyCode;
+import flint.engine.widgets : TextArea, TextInput;
 
 @safe:
 

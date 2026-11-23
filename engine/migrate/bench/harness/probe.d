@@ -5,7 +5,7 @@ import core.stdc.stdio : printf;
 import core.time : MonoTime;
 import flint.arena : Status;
 import flint.conc : Context;
-import flint.sql : Driver, Pool, PoolOptions;
+import flint.engine.sql : Driver, Pool, PoolOptions;
 import std.digest.sha : sha256Of;
 
 @safe:

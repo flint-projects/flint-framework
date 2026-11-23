@@ -1,6 +1,6 @@
 module copy_compiled;
 
-import flint.wasi : CompiledPlugin;
+import flint.engine.wasi : CompiledPlugin;
 
 @safe:
 

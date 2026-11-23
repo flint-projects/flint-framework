@@ -1,6 +1,6 @@
-# flint:style acceptance traceability
+# flint:engine-style acceptance traceability
 
-Source: `handoff/specs/tier-4/style.md` section 6 ("Acceptance, edge cases and required tests"). Unit tests run with `dub test :style` on DMD and LDC against the pinned utf8proc (Unicode 18.0.0) native provider. Compile-negative fixtures run with `python3 packages/style/negative/check.py <dmd|ldc2>`; each case must be rejected as not visible/accessible from the application module, and a positive control must compile.
+Source: `handoff/specs/tier-4/style.md` section 6 ("Acceptance, edge cases and required tests"). Unit tests run with `dub test :style` on DMD and LDC against the pinned utf8proc (Unicode 18.0.0) native provider. Compile-negative fixtures run with `python3 packages/engine-style/negative/check.py <dmd|ldc2>`; each case must be rejected as not visible/accessible from the application module, and a positive control must compile.
 
 | # | Section 6 item (abridged) | Covering test(s) | Status |
 | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ Source: `handoff/specs/tier-4/style.md` section 6 ("Acceptance, edge cases and r
 
 | File | Failure scenario | Test |
 | --- | --- | --- |
-| `source/flint/style/internal/layout.d` | `render(text, style, w, h)` for text with more than 16,384 lines (or rows over the 16 MiB output cap) drew an empty box of the requested size (`"   \n   "`). It should fail like every other over-limit input. `rows` returned null on overflow and `renderBlock` treated that as empty text. | `tests/style_behavior.d:STYLE-06 oversized counts and widths fail before allocating output` |
+| `source/flint/engine/style/internal/layout.d` | `render(text, style, w, h)` for text with more than 16,384 lines (or rows over the 16 MiB output cap) drew an empty box of the requested size (`"   \n   "`). It should fail like every other over-limit input. `rows` returned null on overflow and `renderBlock` treated that as empty text. | `tests/style_behavior.d:STYLE-06 oversized counts and widths fail before allocating output` |
 
 ## Stub and always-success review
 

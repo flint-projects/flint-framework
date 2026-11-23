@@ -41,8 +41,8 @@ python3 tools/native_build.py --profile wasm-host \
   --target linux-x86_64-glibc --phase build --emit-dub
 dub test :wasi --compiler=dmd
 dub test :wasi --compiler=ldc2
-python3 packages/wasi/tests/fixtures/negative.py dmd
-python3 packages/wasi/tests/fixtures/negative.py ldc2
+python3 packages/engine-wasi/tests/fixtures/negative.py dmd
+python3 packages/engine-wasi/tests/fixtures/negative.py ldc2
 python3 tools/gates.py --package wasi --gate structural
 ~~~
 

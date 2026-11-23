@@ -1,8 +1,8 @@
 module widgets_snapshot;
 
 import flint.arena : Status;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode, run;
-import flint.widgets : Column, Paginator, Progress, Spinner, Table, TextInput;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode, run;
+import flint.engine.widgets : Column, Paginator, Progress, Spinner, Table, TextInput;
 
 @safe:
 

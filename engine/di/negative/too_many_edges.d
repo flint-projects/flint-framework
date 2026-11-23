@@ -1,7 +1,7 @@
 /// Reject a context with 513 explicit constructor arguments.
 module too_many_edges;
 
-import flint.di : AppContext;
+import flint.engine.di : AppContext;
 
 @safe:
 

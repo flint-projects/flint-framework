@@ -30,14 +30,14 @@ Build the pinned transport and crypto closure before exercising HTTPS JWKS. The 
 python3 tools/native_build.py --library curl --library openssl --library libsodium \
   --target linux-x86_64-glibc --phase build --emit-dub
 mkdir -p artifacts/security
-CGO_ENABLED=0 go build -trimpath -o artifacts/security/fixture packages/security/tests/security_fixture/server.go
-python3 packages/security/tests/security_fixture/run.py --server artifacts/security/fixture -- dub test :security --compiler=dmd
-python3 packages/security/tests/security_fixture/run.py --server artifacts/security/fixture -- dub test :security --compiler=ldc2
-python3 packages/security/tests/security_fixture/negative.py dmd
-python3 packages/security/tests/security_fixture/negative.py ldc2
+CGO_ENABLED=0 go build -trimpath -o artifacts/security/fixture packages/engine-security/tests/security_fixture/server.go
+python3 packages/engine-security/tests/security_fixture/run.py --server artifacts/security/fixture -- dub test :security --compiler=dmd
+python3 packages/engine-security/tests/security_fixture/run.py --server artifacts/security/fixture -- dub test :security --compiler=ldc2
+python3 packages/engine-security/tests/security_fixture/negative.py dmd
+python3 packages/engine-security/tests/security_fixture/negative.py ldc2
 python3 tools/gates.py --package security --gate structural
 ~~~
 
-Run `packages/security/tests/security_fixture/native.py` with the pinned install prefix, fixture server and an output binary path to exercise the C ABI under ASan and UBSan. The corpus verifies native signatures, bounds, output erasure, cancellation, generation reuse and the outstanding password-work limit. The D fixture covers issuer and time boundaries, cache refresh races, rejection of token-controlled destinations, CORS, authorization and Argon2id.
+Run `packages/engine-security/tests/security_fixture/native.py` with the pinned install prefix, fixture server and an output binary path to exercise the C ABI under ASan and UBSan. The corpus verifies native signatures, bounds, output erasure, cancellation, generation reuse and the outstanding password-work limit. The D fixture covers issuer and time boundaries, cache refresh races, rejection of token-controlled destinations, CORS, authorization and Argon2id.
 
 The two benchmark programs each exercise 10,000 cached-key verifications for RS256 and ES256. The direct baseline uses the same TLS fixture and exact signing input and calls OpenSSL EVP directly. Both report observed median, p99, D GC bytes and native heap allocation calls. Compare the stripped feature and baseline binaries with `bench/check.py` inside the same TLS fixture.

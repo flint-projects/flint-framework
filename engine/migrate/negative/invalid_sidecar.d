@@ -1,6 +1,6 @@
 module migrate_invalid_sidecar;
 
-import flint.migrate : embeddedMigration;
+import flint.engine.migrate : embeddedMigration;
 
 @safe:
 

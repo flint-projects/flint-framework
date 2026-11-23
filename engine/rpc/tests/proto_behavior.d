@@ -1,9 +1,9 @@
 /// Typed round-trip evidence against pinned generated C descriptors.
-module flint.rpc.proto_behavior;
+module flint.engine.rpc.proto_behavior;
 
 import flint.arena : Buffer, RequestArena, Status, Text;
-import flint.rpc.fixture_proto : Detail, Envelope, EnvelopeDetailsEntry, Switch;
-import flint.rpc.proto : decodeProto, encodeProto;
+import flint.engine.rpc.fixture_proto : Detail, Envelope, EnvelopeDetailsEntry, Switch;
+import flint.engine.rpc.proto : decodeProto, encodeProto;
 
 @safe:
 

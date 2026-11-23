@@ -1,6 +1,6 @@
 module mutable_view;
 
-import flint.tui : Effects, Event, Frame, run;
+import flint.engine.tui : Effects, Event, Frame, run;
 
 @safe:
 

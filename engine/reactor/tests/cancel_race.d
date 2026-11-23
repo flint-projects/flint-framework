@@ -1,12 +1,12 @@
-module flint.reactor.cancel_race_test;
+module flint.engine.reactor.cancel_race_test;
 
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
-import flint.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
+import flint.engine.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
 import std.socket : InternetAddress, TcpSocket;
 
 // ADR-017 decision 7: a read the kernel completed with data before its cancellation took effect is a

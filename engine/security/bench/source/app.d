@@ -3,7 +3,7 @@ module app;
 
 import flint.arena : RequestArena, Status;
 import flint.conc : Context;
-import flint.security : JwtAlgorithm, JwtPolicy, JwtVerifier;
+import flint.engine.security : JwtAlgorithm, JwtPolicy, JwtVerifier;
 import security_workload : claimsChecksum, finish, fixture, measure;
 import std.exception : enforce;
 

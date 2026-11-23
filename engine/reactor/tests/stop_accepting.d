@@ -1,12 +1,12 @@
-module flint.reactor.stop_accepting_test;
+module flint.engine.reactor.stop_accepting_test;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : Context;
-import flint.reactor : Backend, Completion, ConnectionId, ListenOptions, Reactor, ReactorOptions;
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor : Backend, Completion, ConnectionId, ListenOptions, Reactor, ReactorOptions;
+import flint.engine.reactor.test_support : readinessBackend;
 import std.socket : InternetAddress, SocketOSException, TcpSocket;
 
 private shared uint accepted;

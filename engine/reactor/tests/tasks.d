@@ -1,8 +1,8 @@
-module flint.reactor.task_test;
+module flint.engine.reactor.task_test;
 
 import flint.arena : Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Reactor, ReactorOptions, TaskContext;
+import flint.engine.reactor : Reactor, ReactorOptions, TaskContext;
 
 private uint stage;
 

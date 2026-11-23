@@ -1,4 +1,4 @@
-name "template"
+name "engine-template"
 description "Flint template subpackage"
 license "Apache-2.0"
 targetType "library"

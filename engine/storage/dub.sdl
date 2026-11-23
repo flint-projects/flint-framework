@@ -1,4 +1,4 @@
-name "storage"
+name "engine-storage"
 description "Flint storage subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -6,8 +6,8 @@ sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
-dependency "flint:http" version="*"
-dependency "flint:security" version="*"
+dependency "flint:engine-http" version="*"
+dependency "flint:engine-security" version="*"
 dependency "flint:conc" version="*"
 
 configuration "library" {

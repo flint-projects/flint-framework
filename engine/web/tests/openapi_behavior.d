@@ -1,8 +1,8 @@
-module flint.web.openapi_behavior;
+module flint.engine.web.openapi_behavior;
 
 import flint.arena : Result;
 import flint.serde : JsonIgnore, JsonName;
-import flint.web : Delete, Get, PathVariable, Post, QueryParam, RequestBody, RestController, openApiDocument;
+import flint.engine.web : Delete, Get, PathVariable, Post, QueryParam, RequestBody, RestController, openApiDocument;
 
 @safe:
 

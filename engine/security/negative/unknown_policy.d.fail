@@ -1,7 +1,7 @@
 module unknown_policy;
 
 import flint.conc : Context;
-import flint.security : PreAuthorize, Principal, authorize;
+import flint.engine.security : PreAuthorize, Principal, authorize;
 
 @safe:
 

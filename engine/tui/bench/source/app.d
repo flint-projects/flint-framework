@@ -1,9 +1,9 @@
-module flint.tui.render_probe;
+module flint.engine.tui.render_probe;
 
 import flint.arena : Status;
 import flint.term : ColorProfile;
-import flint.tui : Effects, Event, EventKind, Frame, Size, run;
-import flint.tui.grid : Grid;
+import flint.engine.tui : Effects, Event, EventKind, Frame, Size, run;
+import flint.engine.tui.grid : Grid;
 import tui_probe : Emit, Model, Paint, benchmark, header, require;
 
 @safe:

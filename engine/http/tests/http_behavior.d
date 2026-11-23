@@ -1,11 +1,10 @@
-module flint.http.http_behavior_test;
+module flint.engine.http.http_behavior_test;
 
 import flint.arena : Buffer, Error, RequestArena, Result, Status, Text;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.http : ChunkConsumer, ClientOptions, GetExchange, Header, HeaderParam, HttpClient,
-    HttpExchange, HttpMethod,
-    HttpRequest, HttpRequestView, HttpResponse, HttpStream, HttpStreamField, HttpStreamMode,
-    HttpStreamOptions, HttpVersion, PostExchange, bindHttpClient;
+import flint.engine.http : ChunkConsumer, ClientOptions, GetExchange, Header, HeaderParam, HttpClient, HttpExchange,
+    HttpMethod, HttpRequest, HttpRequestView, HttpResponse, HttpStream, HttpStreamField,
+    HttpStreamMode, HttpStreamOptions, HttpVersion, PostExchange, bindHttpClient;
 
 @safe:
 
@@ -63,7 +62,7 @@ private interface Echo
 version (FlintNativeCurl)
 {
     import core.lifetime : move;
-    import flint.reactor : Backend, Reactor, ReactorOptions, TaskContext;
+    import flint.engine.reactor : Backend, Reactor, ReactorOptions, TaskContext;
     import std.conv : to;
     import std.process : environment;
 

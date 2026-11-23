@@ -2,7 +2,7 @@ module http_negative.unannotated;
 
 import flint.arena : RequestArena, Result;
 import flint.conc : Context;
-import flint.http : HttpClient, HttpExchange, HttpResponse, bindHttpClient;
+import flint.engine.http : HttpClient, HttpExchange, HttpResponse, bindHttpClient;
 
 @HttpExchange("https://example.com")
 private interface Malformed

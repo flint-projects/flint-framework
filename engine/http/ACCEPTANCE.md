@@ -63,4 +63,4 @@ Finding outside this package: the rpc review reported that a duplex `HttpStream.
 - `tests/fixture/native.py --prefix <native install>` (ASan and UBSan): passed.
 - `bench/build/probe-http` (LDC release) under the peers: 1 KiB 2,048 transfers in 312 ms, 64 KiB 2,048 transfers in 1,171 ms, `d_gc_bytes 0` for both, checksum `http-stream 33293017088`.
 - `tools/gates.py --package http --gate structural`: passed.
-- `tools/quality.py --path packages/http`: 0 issues.
+- `tools/quality.py --path packages/engine-http`: 0 issues.

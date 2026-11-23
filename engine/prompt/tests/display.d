@@ -1,10 +1,10 @@
 /// In-memory terminal capture for prompt redaction tests.
-module flint.tui.prompt_test_display;
+module flint.engine.tui.prompt_test_display;
 
 import flint.arena : Error, Status;
 import flint.term : ColorProfile;
-import flint.tui : Frame, Size;
-import flint.tui.grid : Grid;
+import flint.engine.tui : Frame, Size;
+import flint.engine.tui.grid : Grid;
 
 @safe:
 

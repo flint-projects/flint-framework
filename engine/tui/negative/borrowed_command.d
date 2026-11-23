@@ -1,6 +1,6 @@
 module borrowed_command;
 
-import flint.tui : Effects, Event;
+import flint.engine.tui : Effects, Event;
 
 @safe:
 

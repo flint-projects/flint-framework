@@ -2,7 +2,7 @@
 module context_behavior;
 
 import flint.arena : Error, Status;
-import flint.di : AppContext, AutoConfiguration, BeanRegistrar, Bind, ConditionalOnConfig,
+import flint.engine.di : AppContext, AutoConfiguration, BeanRegistrar, Bind, ConditionalOnConfig,
     ConditionalOnMissingBean, ConfiguredSections, Inject, Launcher, PostConstruct, PreDestroy, Service;
 
 @safe:
@@ -445,7 +445,7 @@ unittest
 @("explicitly provided concrete values may have private constructors")
 unittest
 {
-    import flint.di : Provided;
+    import flint.engine.di : Provided;
 
     static struct OwnedPool
     {
@@ -594,7 +594,7 @@ unittest
 @("TOML sections: tables, arrays of tables, nested tables and dotted or inline top-level keys")
 unittest
 {
-    import flint.di.internal.conditions : sectionPresent, tomlSections;
+    import flint.engine.di.internal.conditions : sectionPresent, tomlSections;
 
     const sections = tomlSections("title = \"x\"\nmail.host = \"h\"\nauth = { realm = \"r\" }\n# [ignored]\n"
             ~ "[database.pool]\nsize = 4\n[[queues]]\nname = \"q\"\n[web]\nport = 8080\n");

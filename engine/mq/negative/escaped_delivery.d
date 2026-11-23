@@ -2,7 +2,7 @@ module escaped_delivery;
 
 import flint.arena : RequestArena, Status;
 import flint.conc : Context;
-import flint.mq : AckAction, Message;
+import flint.engine.mq : AckAction, Message;
 
 @safe:
 

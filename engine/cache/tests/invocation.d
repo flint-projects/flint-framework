@@ -1,7 +1,7 @@
-module flint.cache.invocation_test;
+module flint.engine.cache.invocation_test;
 
 import flint.arena : Error, RequestArena, Status;
-import flint.cache : Cache, Cacheable, CacheEvict, CacheOptions, evictCommitted, registerCachedCall;
+import flint.engine.cache : Cache, Cacheable, CacheEvict, CacheOptions, evictCommitted, registerCachedCall;
 import flint.conc : Context;
 
 @safe:

@@ -5,7 +5,7 @@ import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : dur;
 import flint.arena : Status;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode, TimerId, run;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode, TimerId, run;
 import std.conv : to;
 import std.stdio : stdout, writeln;
 

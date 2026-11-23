@@ -1,6 +1,6 @@
 module migrate_path_escape;
 
-import flint.migrate : embeddedMigration;
+import flint.engine.migrate : embeddedMigration;
 
 @safe:
 

@@ -1,8 +1,8 @@
-module flint.wasm_bridge.contract_tests;
+module flint.engine.wasm_bridge.contract_tests;
 
 import flint.arena : Status;
-import flint.wasm_bridge : CommandBuffer, NodeHandle, TagName;
-import flint.wasm_bridge.internal : read32, write32;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle, TagName;
+import flint.engine.wasm_bridge.internal : read32, write32;
 
 @safe:
 
@@ -131,8 +131,8 @@ unittest
 @("BRIDGE-02 seeded UTF-8 corpus matches an independent validator and every length 0..256 encodes exactly")
 unittest
 {
-    import flint.wasm_bridge : textCommandBytes;
-    import flint.wasm_bridge.internal : validUtf8;
+    import flint.engine.wasm_bridge : textCommandBytes;
+    import flint.engine.wasm_bridge.internal : validUtf8;
 
     uint state = 0x5eed_0001;
     ubyte[8] sample;

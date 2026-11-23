@@ -22,10 +22,10 @@ Prepare the Linux SMTP-enabled native profile and start a disposable fixture. Th
 
 ```sh
 python3 tools/native_build.py --profile mail --target linux-x86_64-glibc --phase build --emit-dub
-CGO_ENABLED=0 go build -trimpath -o /tmp/flint-mail-fixture packages/mail/tests/fixture/server.go packages/mail/tests/fixture/provider.go
-python3 packages/mail/tests/fixture/run.py --server /tmp/flint-mail-fixture -- dub test :mail --compiler=dmd
-python3 packages/mail/tests/fixture/run.py --server /tmp/flint-mail-fixture -- dub test :mail --compiler=ldc2
-python3 packages/mail/tests/fixture/negative.py dmd ldc2
+CGO_ENABLED=0 go build -trimpath -o /tmp/flint-mail-fixture packages/engine-mail/tests/fixture/server.go packages/engine-mail/tests/fixture/provider.go
+python3 packages/engine-mail/tests/fixture/run.py --server /tmp/flint-mail-fixture -- dub test :mail --compiler=dmd
+python3 packages/engine-mail/tests/fixture/run.py --server /tmp/flint-mail-fixture -- dub test :mail --compiler=ldc2
+python3 packages/engine-mail/tests/fixture/negative.py dmd ldc2
 ```
 
 The paired release probes send 1 MiB and 8 MiB attachments through the same verified TLS fixture. The control calls the pinned upstream libcurl MIME and SMTP APIs through a separate benchmark archive. Both programs check the fixture's independently decoded attachment length and SHA-256. Run either stripped probe using `run.py` and pass `1` or `8` as its argument.

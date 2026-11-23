@@ -1,10 +1,10 @@
-module flint.reactor.wake_test;
+module flint.engine.reactor.wake_test;
 
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicStore;
 import flint.arena : Status;
 import flint.conc : Deadline;
-import flint.reactor : Backend, Reactor, ReactorOptions, TaskContext, TaskWaker;
+import flint.engine.reactor : Backend, Reactor, ReactorOptions, TaskContext, TaskWaker;
 
 @safe:
 

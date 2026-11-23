@@ -1,6 +1,6 @@
 module betterc_bridge;
 import flint.arena : Status;
-import flint.wasm_bridge : CommandBuffer, NodeHandle, TagName;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle, TagName;
 
 @safe:
 

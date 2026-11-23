@@ -10,7 +10,7 @@ import {fileURLToPath} from "node:url";
 const [fixtureWasm, appWasm, chromium = "chromium"] = process.argv.slice(2);
 const base = fileURLToPath(new URL("../../../", import.meta.url));
 const routes = new Map([
-    ["/packages/wasm-bridge/fixtures/browser.html", ["text/html", join(base, "packages/wasm-bridge/fixtures/browser.html")]],
+    ["/packages/engine-wasm-bridge/fixtures/browser.html", ["text/html", join(base, "packages/engine-wasm-bridge/fixtures/browser.html")]],
     ["/benchmarks/bench-wasm/index.html", ["text/html", join(base, "benchmarks/bench-wasm/index.html")]],
     ["/benchmarks/bench-wasm/driver.mjs", ["text/javascript", join(base, "benchmarks/bench-wasm/driver.mjs")]],
     ["/fixture.wasm", ["application/wasm", fixtureWasm]],
@@ -94,7 +94,7 @@ try {
         const answer = await command("Runtime.evaluate", {expression, returnByValue:true});
         return answer.result.value;
     };
-    await command("Page.navigate", {url:`${origin}/packages/wasm-bridge/fixtures/browser.html?wasm=/fixture.wasm`});
+    await command("Page.navigate", {url:`${origin}/packages/engine-wasm-bridge/fixtures/browser.html?wasm=/fixture.wasm`});
     const text = await until(() => evaluate("document.querySelector('#result')?.textContent"),
         value => value?.startsWith("PASS:") || value?.startsWith("FAIL:"));
     assert.equal(text, "PASS: FLNT DOM, canvas, memory growth, and reset");

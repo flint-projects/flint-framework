@@ -1,4 +1,4 @@
-name "widgets"
+name "engine-widgets"
 description "Flint widgets subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -6,8 +6,8 @@ sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
-dependency "flint:tui" version="*"
-dependency "flint:style" version="*"
+dependency "flint:engine-tui" version="*"
+dependency "flint:engine-style" version="*"
 
 configuration "library" {
     targetType "library"

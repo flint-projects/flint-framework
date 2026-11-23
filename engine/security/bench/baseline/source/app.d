@@ -4,7 +4,7 @@ module app;
 import direct_provider : CachedKey, directVerify;
 import flint.arena : RequestArena, Status, Text;
 import flint.conc : Context;
-import flint.http : ClientOptions, HttpClient, HttpRequest;
+import flint.engine.http : ClientOptions, HttpClient, HttpRequest;
 import flint.serde : DecodeOptions, UnknownFields, decodeInto;
 import security_workload : claimsChecksum, finish, fixture, measure;
 import std.base64 : Base64URLNoPadding;

@@ -1,6 +1,6 @@
 # Web
 
-`flint.web` registers explicit controllers and compiles the typed route adapters. The listener uses pinned llhttp for HTTP/1 and pinned nghttp2 for HTTP/2. Requests, captures, headers and response bodies use generation-checked arena handles. The server holds response storage until the final transport completion, and a scoped request cannot be retained by a handler.
+`flint.engine.web` registers explicit controllers and compiles the typed route adapters. The listener uses pinned llhttp for HTTP/1 and pinned nghttp2 for HTTP/2. Requests, captures, headers and response bodies use generation-checked arena handles. The server holds response storage until the final transport completion, and a scoped request cannot be retained by a handler.
 
 HTTP/1 is the default. Set `ServerOptions.http2PriorKnowledge` for cleartext HTTP/2. Set both `tlsCertificateFile` and `tlsPrivateKeyFile` for a TLS listener. The TLS listener negotiates `h2` or `http/1.1` through the pinned OpenSSL provider, refuses incompatible ALPN offers and rejects an invalid PEM keypair at startup.
 

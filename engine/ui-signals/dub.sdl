@@ -1,4 +1,4 @@
-name "ui-signals"
+name "engine-ui-signals"
 description "Flint ui-signals subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -6,7 +6,7 @@ sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
-dependency "flint:wasm-bridge" version="*"
+dependency "flint:engine-wasm-bridge" version="*"
 
 configuration "library" {
     targetType "library"

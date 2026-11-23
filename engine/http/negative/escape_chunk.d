@@ -2,7 +2,7 @@ module http_negative.escape_chunk;
 
 import flint.arena : Error, RequestArena;
 import flint.conc : Context;
-import flint.http : HttpClient, HttpRequest;
+import flint.engine.http : HttpClient, HttpRequest;
 
 private const(ubyte)[] leaked;
 

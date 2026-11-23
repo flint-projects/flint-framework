@@ -1,12 +1,12 @@
-module flint.reactor.offload_test;
+module flint.engine.reactor.offload_test;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore, cas;
 import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Backend, Reactor, ReactorOptions, TaskContext;
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor : Backend, Reactor, ReactorOptions, TaskContext;
+import flint.engine.reactor.test_support : readinessBackend;
 
 @safe:
 

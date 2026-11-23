@@ -3,10 +3,10 @@ module reference_prompt_probe;
 import core.stdc.stdlib : calloc, free;
 import core.stdc.string : memcpy, memcmp;
 import flint.arena : Status;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
-import flint.tui.widget_display_probe : Screen, require;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode;
+import flint.engine.tui.widget_display_probe : Screen, require;
 import flint.validate : NotBlank, Violation, validate;
-import flint.widgets : List, ListItem, TextInput;
+import flint.engine.widgets : List, ListItem, TextInput;
 import prompt_replay : capacity, choices, decimal, fields, filter, parseDecimal, replay, sample, secrets, title;
 
 @safe:

@@ -1,6 +1,6 @@
-module flint.reactor.test_support;
+module flint.engine.reactor.test_support;
 
-import flint.reactor : Backend;
+import flint.engine.reactor : Backend;
 
 @safe:
 

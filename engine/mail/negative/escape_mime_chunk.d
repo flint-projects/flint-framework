@@ -1,7 +1,7 @@
-module flint.mail.negative.escape_mime_chunk;
+module flint.engine.mail.negative.escape_mime_chunk;
 
 import flint.arena : Error;
-import flint.mail.mime : MailSink;
+import flint.engine.mail.mime : MailSink;
 
 @safe nothrow @nogc:
 private const(ubyte)[] escaped;

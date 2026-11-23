@@ -1,8 +1,8 @@
 /// Split-point and limit tests for NATS framing.
-module flint.mq.nats_parser;
+module flint.engine.mq.nats_parser;
 
 import flint.arena : Status;
-import flint.mq.nats : Frame, FrameKind, NatsDecoder, maxControlLine;
+import flint.engine.mq.nats : Frame, FrameKind, NatsDecoder, maxControlLine;
 
 @safe:
 

@@ -6,7 +6,7 @@ The implementation task creates `source/app.d` and `baseline/source/app.d` in th
 
 ## Equivalent provider baseline
 
-The baseline contains the same D harness, input construction, output checksum consumption, setup/cleanup and direct Flint dependencies (none). It has no DUB dependency on `flint:style` and imports none of that package's implementation modules. With no selected native provider, this is the direct-dependency-only control with this package's operation omitted or replaced by the specified reference operation.
+The baseline contains the same D harness, input construction, output checksum consumption, setup/cleanup and direct Flint dependencies (none). It has no DUB dependency on `flint:engine-style` and imports none of that package's implementation modules. With no selected native provider, this is the direct-dependency-only control with this package's operation omitted or replaced by the specified reference operation.
 
 With a selected native provider, the baseline instead performs the **same native operation** directly through the pinned upstream C ABI. Keep the same provider feature set, payloads, iteration counts, resource limits, cache state and observable result. A minimal adapter used only to expose an upstream ABI may be common; an adapter containing Flint validation, ownership, scheduling or business logic is framework code and cannot be subtracted as provider overhead. Both programs must execute, terminate with exit code 0 and produce their documented equivalent output. Calls must contribute to the consumed result so optimization cannot remove the workload.
 

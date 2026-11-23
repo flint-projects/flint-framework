@@ -2,7 +2,7 @@
 module duplicate_binding;
 
 import flint.arena : Error;
-import flint.di : AppContext, Bind;
+import flint.engine.di : AppContext, Bind;
 
 @safe:
 

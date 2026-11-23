@@ -1,16 +1,16 @@
 /// In-process gRPC over the pinned HTTP/2 server and client: call shapes, wire errors, deadlines and teardown.
-module flint.rpc.grpc_transport_behavior;
+module flint.engine.rpc.grpc_transport_behavior;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.lifetime : move;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Reactor;
-import flint.http : ClientOptions, HttpClient, HttpStream, HttpStreamField, HttpStreamMode, HttpStreamOptions;
-import flint.rpc : GrpcCall, GrpcCallOptions, GrpcService, RpcCode, RpcStatus, RpcStream,
+import flint.engine.reactor : Reactor;
+import flint.engine.http : ClientOptions, HttpClient, HttpStream, HttpStreamField, HttpStreamMode, HttpStreamOptions;
+import flint.engine.rpc : GrpcCall, GrpcCallOptions, GrpcService, RpcCode, RpcStatus, RpcStream,
     StreamLimits, beginGrpc, registerGrpc;
-import flint.web : Method, Request, RequestContext, Server, ServerOptions, StreamField, StreamMode,
-    StreamRoute, StreamToken;
+import flint.engine.web : Method, Request, RequestContext, Server, ServerOptions, StreamField,
+    StreamMode, StreamRoute, StreamToken;
 
 @safe:
 

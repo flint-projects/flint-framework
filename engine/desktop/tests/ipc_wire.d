@@ -1,9 +1,9 @@
-module flint.desktop.ipc_wire_tests;
+module flint.engine.desktop.ipc_wire_tests;
 
 import flint.arena : Error, Status;
-import flint.desktop.ipc : IpcKind, appOrigin, assetPath, mediaType, dispatchScript, originOf,
-    parseFrame, permitted, rejectScript, resolveScript, validName;
-import flint.desktop.types : Capability;
+import flint.engine.desktop.ipc : IpcKind, appOrigin, assetPath, mediaType, dispatchScript,
+    originOf, parseFrame, permitted, rejectScript, resolveScript, validName;
+import flint.engine.desktop.types : Capability;
 
 @safe:
 

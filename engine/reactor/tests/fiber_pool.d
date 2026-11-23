@@ -1,9 +1,9 @@
-module flint.reactor.fiber_pool_test;
+module flint.engine.reactor.fiber_pool_test;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import flint.arena : Status;
 import flint.conc : Deadline;
-import flint.reactor : Reactor, ReactorOptions;
+import flint.engine.reactor : Reactor, ReactorOptions;
 
 private enum uint poolSize = 1024;
 private enum uint tasks = 300;

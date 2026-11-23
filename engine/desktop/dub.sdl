@@ -1,4 +1,4 @@
-name "desktop"
+name "engine-desktop"
 description "Flint desktop subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -9,7 +9,7 @@ dependency "flint:arena" version="*"
 dependency "flint:conc" version="*"
 dependency "flint:os" version="*"
 dependency "flint:serde" version="*"
-dependency "flint:wasm-bridge" version="*"
+dependency "flint:engine-wasm-bridge" version="*"
 
 configuration "library" {
     targetType "library"

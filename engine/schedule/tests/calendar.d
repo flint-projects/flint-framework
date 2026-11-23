@@ -1,7 +1,7 @@
-module flint.schedule.calendar_test;
+module flint.engine.schedule.calendar_test;
 
 import flint.arena : Status;
-import flint.schedule.cron : firstSecond, lastSecond, parseCron;
+import flint.engine.schedule.cron : firstSecond, lastSecond, parseCron;
 
 @safe:
 

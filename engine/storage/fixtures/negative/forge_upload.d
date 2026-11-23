@@ -1,6 +1,6 @@
 module forge_upload;
 
-import flint.storage : Upload;
+import flint.engine.storage : Upload;
 
 @safe:
 

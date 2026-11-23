@@ -1,6 +1,6 @@
 module private_worker;
 
-import flint.tui.sys.worker : launch, park, wake;
+import flint.engine.tui.sys.worker : launch, park, wake;
 
 @safe:
 

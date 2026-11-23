@@ -2,7 +2,7 @@
 module hot_allocation;
 
 import flint.arena : Result;
-import flint.web : Get, RestController, Server, registerController;
+import flint.engine.web : Get, RestController, Server, registerController;
 
 @safe:
 

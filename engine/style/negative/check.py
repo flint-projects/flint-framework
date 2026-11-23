@@ -9,20 +9,20 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 CASES = (
     ("package grapheme walker",
-     "import flint.style : visitGraphemes;\n"
+     "import flint.engine.style : visitGraphemes;\n"
      "void f() @safe { visitGraphemes(\"a\", (scope const(char)[] t, uint c, bool b) @safe => true); }",
      "visitGraphemes"),
     ("package case folding",
-     "import flint.style : foldGraphemes;\nvoid f() @safe { string s; cast(void) foldGraphemes(\"a\", s); }",
+     "import flint.engine.style : foldGraphemes;\nvoid f() @safe { string s; cast(void) foldGraphemes(\"a\", s); }",
      "foldGraphemes"),
     ("private Unicode provider",
-     "import flint.style.ffi.unicode : properties;\nvoid f() @safe { cast(void) properties('a'); }",
+     "import flint.engine.style.ffi.unicode : properties;\nvoid f() @safe { cast(void) properties('a'); }",
      "properties"),
     ("trusted fold outside the boundary",
-     "import flint.style.ffi.unicode : caseFold;\nvoid f() @safe { string s; cast(void) caseFold(\"a\", s); }",
+     "import flint.engine.style.ffi.unicode : caseFold;\nvoid f() @safe { string s; cast(void) caseFold(\"a\", s); }",
      "caseFold"),
     ("internal output buffer",
-     "import flint.style.internal.text : Output;\nvoid f() @safe { Output o; o.add(\"x\"); }",
+     "import flint.engine.style.internal.text : Output;\nvoid f() @safe { Output o; o.add(\"x\"); }",
      "Output"),
 )
 REJECTION = re.compile(r"is not (visible|accessible) from module `fixture`")
@@ -44,7 +44,7 @@ def main():
             assert symbol in output and REJECTION.search(output), (name, output)
             assert not re.search(r"(?i)internal compiler error|segmentation fault", output), (name, output)
             print(name + " rejected")
-        fixture.write_text("module fixture;\nimport flint.style : Style, render, truncateCells;\n"
+        fixture.write_text("module fixture;\nimport flint.engine.style : Style, render, truncateCells;\n"
                            "string f() @safe { return render(truncateCells(\"abc\", 2), Style.init, 2); }\n")
         result = subprocess.run([args.compiler, "-c", "-o-", "-preview=dip1000", include, str(fixture)],
                                 text=True, capture_output=True, timeout=60)

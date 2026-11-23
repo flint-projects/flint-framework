@@ -1,8 +1,8 @@
-# flint:template acceptance traceability
+# flint:engine-template acceptance traceability
 
 Source: `handoff/specs/tier-8/template.md` section 7 (required acceptance; the brief's "section 6"
 is numbered 7 in this spec). Test names are unittest names in `tests/*.d` or case names in
-`negative/check.py` (run as `python3 packages/template/negative/check.py <dmd|ldc2>`).
+`negative/check.py` (run as `python3 packages/engine-template/negative/check.py <dmd|ldc2>`).
 
 | # | Section 7 item | Covering test or fixture | Status |
 | --- | --- | --- | --- |
@@ -37,4 +37,4 @@ by contract. `TrustedHtml` has no public constructor from `Buffer` (compile-nega
 - `rtest acc-cloud template both`: DMD rc=0, LDC rc=0 (2 modules passed).
 - `negative/check.py dmd` and `ldc2`: all 28 rejection cases and 2 boundary acceptances pass.
 - `tools/gates.py --package template --gate structural`: rc=0.
-- `tools/quality.py --path packages/template`: 0 issues.
+- `tools/quality.py --path packages/engine-template`: 0 issues.

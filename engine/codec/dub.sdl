@@ -1,4 +1,4 @@
-name "codec"
+name "engine-codec"
 description "Flint codec subpackage"
 license "Apache-2.0"
 targetType "library"

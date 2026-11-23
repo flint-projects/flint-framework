@@ -3,8 +3,8 @@ module migration_startup;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : Context;
-import flint.migrate : Migration, MigrationOptions, migrate;
-import flint.sql : Driver, Pool, PoolOptions, Row, ValueKind;
+import flint.engine.migrate : Migration, MigrationOptions, migrate;
+import flint.engine.sql : Driver, Pool, PoolOptions, Row, ValueKind;
 import generated_plan : migrations;
 import std.digest.sha : sha256Of;
 import std.stdio : stdin, stdout, writeln;

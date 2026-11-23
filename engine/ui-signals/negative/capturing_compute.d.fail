@@ -1,6 +1,6 @@
 module capturing_compute;
 
-import flint.ui_signals : SignalGraph, SignalId;
+import flint.engine.ui_signals : SignalGraph, SignalId;
 
 @safe:
 

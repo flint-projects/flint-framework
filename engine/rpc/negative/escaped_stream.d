@@ -1,7 +1,7 @@
 /// A borrowed RPC stream cannot be retained past the call.
 module escaped_stream;
 
-import flint.rpc : RpcStream;
+import flint.engine.rpc : RpcStream;
 
 @safe:
 

@@ -1,7 +1,7 @@
 /// A borrowed WebSocket peer cannot be retained after its route.
 module escaped_peer;
 
-import flint.rpc : WebSocketPeer;
+import flint.engine.rpc : WebSocketPeer;
 
 @safe:
 

@@ -1,11 +1,11 @@
-module flint.reactor.loopback_test;
+module flint.engine.reactor.loopback_test;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
+import flint.engine.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
 import std.socket : InternetAddress, SocketShutdown, TcpSocket;
 
 private enum ubyte[] payload = [11, 42, 127, 14, 2, 8, 255, 0, 34, 7, 5, 19, 13, 9, 17, 1];

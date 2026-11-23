@@ -1,7 +1,7 @@
 module app;
 
 import flint.arena : Error, Status;
-import flint.wasm_bridge : CommandBuffer, NodeHandle;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
 import signals_probe : measure;
 
 @safe:

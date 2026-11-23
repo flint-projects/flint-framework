@@ -1,4 +1,4 @@
-# flint:cache
+# flint:engine-cache
 
 Open one cache with a byte limit, entry limit and finite default TTL. Keys and values
 are binary slices, and a hit is copied to the caller's request arena. Explicit TTL

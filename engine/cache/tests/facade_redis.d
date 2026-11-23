@@ -1,9 +1,9 @@
-module flint.cache.facade_redis_test;
+module flint.engine.cache.facade_redis_test;
 
 version (FlintNativeHiredis)
 {
     import flint.arena : RequestArena, Status;
-    import flint.cache : Cache, CacheBackend, CacheLoader, CacheOptions, getOrLoad;
+    import flint.engine.cache : Cache, CacheBackend, CacheLoader, CacheOptions, getOrLoad;
     import flint.conc : Context, Deadline;
     import std.process : environment;
 

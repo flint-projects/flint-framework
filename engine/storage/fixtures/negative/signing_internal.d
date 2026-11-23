@@ -1,6 +1,6 @@
 module signing_internal;
 
-import flint.storage.credentials : CredentialStore;
+import flint.engine.storage.credentials : CredentialStore;
 
 @safe:
 

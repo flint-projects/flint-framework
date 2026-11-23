@@ -1,6 +1,6 @@
 # Flint HTML templates
 
-Import `flint.templates` and add the resource directory to DUB's `stringImportPaths`. Call
+Import `flint.engine.templates` and add the resource directory to DUB's `stringImportPaths`. Call
 `render!"invoice.html"(model, arena)` with a typed model and a request arena. The compiler checks the
 resource and emits direct field reads and writes. The result is an arena `Buffer` whose lifetime
 follows that arena's generation.
@@ -19,6 +19,6 @@ digests to invalidate the owning leaf after a resource-only edit and compiles a 
 per compiler invocation.
 
 - Run the DUB unit suite with both DMD and LDC.
-- Run `python3 packages/template/negative/check.py dmd` and repeat with `ldc2` for compiler rejection cases.
-- Run `packages/template/bench/scaling.py` with the pinned compiler paths and an output directory.
+- Run `python3 packages/engine-template/negative/check.py dmd` and repeat with `ldc2` for compiler rejection cases.
+- Run `packages/engine-template/bench/scaling.py` with the pinned compiler paths and an output directory.
 - Build the feature and equivalent baseline under `bench` to replay the 1 KiB and 64 KiB fixtures.

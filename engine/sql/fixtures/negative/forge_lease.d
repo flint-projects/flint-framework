@@ -1,6 +1,6 @@
 module forge_lease;
 
-import flint.sql : Connection;
+import flint.engine.sql : Connection;
 
 @safe:
 

@@ -3,7 +3,7 @@ module app;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : Context;
-import flint.http : ClientOptions, HttpClient, HttpRequest;
+import flint.engine.http : ClientOptions, HttpClient, HttpRequest;
 import http_workload : ObserveBytes, configure, run;
 import std.exception : enforce;
 

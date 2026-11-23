@@ -1,7 +1,7 @@
-module flint.wasi.contract_tests;
+module flint.engine.wasi.contract_tests;
 
 import flint.arena : Status;
-import flint.wasi : Engine, GuestAbi, Plugin, PluginOptions;
+import flint.engine.wasi : Engine, GuestAbi, Plugin, PluginOptions;
 
 @safe:
 
@@ -34,8 +34,8 @@ import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : MonoTime, msecs;
 import flint.arena : RequestArena;
-import flint.wasi : CompiledPlugin, GuestEnvironment, Preopen;
-import flint.wasi.fixture_bytes : coreGuest = core, preview1Guest = preview1,
+import flint.engine.wasi : CompiledPlugin, GuestEnvironment, Preopen;
+import flint.engine.wasi.fixture_bytes : coreGuest = core, preview1Guest = preview1,
     unexpectedGuest = unexpected, component02 = wasi02, component03 = wasi03;
 import std.conv : to;
 import std.file : exists, mkdirRecurse, rmdirRecurse, tempDir, write;

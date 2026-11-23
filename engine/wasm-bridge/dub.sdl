@@ -1,4 +1,4 @@
-name "wasm-bridge"
+name "engine-wasm-bridge"
 description "Flint wasm-bridge subpackage"
 license "Apache-2.0"
 targetType "library"

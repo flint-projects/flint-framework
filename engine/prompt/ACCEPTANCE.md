@@ -1,9 +1,9 @@
-# flint:prompt acceptance traceability
+# flint:engine-prompt acceptance traceability
 
 Source: `handoff/specs/tier-4/prompt.md` section 6. Unit tests run with `dub test :prompt` on DMD and LDC.
 PTY rows run `fixtures/test_prompt.py fixtures/build/test-prompt-pty` (build with
-`dub build --root=packages/prompt/fixtures`). Compile-negative fixtures run with
-`python3 packages/prompt/negative/check.py <dmd|ldc2>`, which also compiles a repaired positive control.
+`dub build --root=packages/engine-prompt/fixtures`). Compile-negative fixtures run with
+`python3 packages/engine-prompt/negative/check.py <dmd|ldc2>`, which also compiles a repaired positive control.
 The native wipe boundary is checked by `fixtures/wipe_test.c` (`cc -Wl,--wrap=free fixtures/wipe_test.c`,
 also with `-fsanitize=address,undefined`).
 

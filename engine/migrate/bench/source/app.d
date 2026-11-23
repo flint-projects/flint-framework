@@ -1,8 +1,8 @@
 module app;
 
 import flint.conc : Context;
-import flint.migrate : Migration, MigrationOptions, migrate;
-import flint.sql : Pool;
+import flint.engine.migrate : Migration, MigrationOptions, migrate;
+import flint.engine.sql : Pool;
 import probe : Entry, benchmark, require, rows;
 
 @safe:

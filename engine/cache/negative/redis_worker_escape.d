@@ -1,6 +1,6 @@
-module flint.cache.redis_worker_escape;
+module flint.engine.cache.redis_worker_escape;
 
-import flint.cache.ffi.hiredis : startDriver;
+import flint.engine.cache.ffi.hiredis : startDriver;
 
 private void attempt(scope const(ubyte)[] borrowed) @safe
 {

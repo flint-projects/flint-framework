@@ -65,4 +65,4 @@ No stub or always-success path was found.
 - `tests/security_fixture/native.py` (ASan and UBSan): passed.
 - `bench/build/probe-security` (LDC release) under the fixture: RS256 median 20.1 µs, p99 29.3 µs; ES256 median 54.5 µs, p99 80.6 µs. D GC bytes were 0 for both, and the checksum was `cached-jws 30660000`.
 - `tools/gates.py --package security --gate structural`: passed.
-- `tools/quality.py --path packages/security`: 0 issues.
+- `tools/quality.py --path packages/engine-security`: 0 issues.

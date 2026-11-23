@@ -1,4 +1,4 @@
-name "tui"
+name "engine-tui"
 description "Flint tui subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -8,7 +8,7 @@ dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
 dependency "flint:conc" version="*"
 dependency "flint:term" version="*"
-dependency "flint:style" version="*"
+dependency "flint:engine-style" version="*"
 
 configuration "library" {
     targetType "library"

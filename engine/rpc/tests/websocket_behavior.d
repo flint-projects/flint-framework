@@ -1,9 +1,9 @@
 /// Exercises fragmented text, control interleaving, framing and the pinned handshake primitive.
-module flint.rpc.websocket_behavior;
+module flint.engine.rpc.websocket_behavior;
 
 import flint.arena : RequestArena, Status;
-import flint.rpc.ffi.websocket : websocketAccept;
-import flint.rpc.websocket : WsDecoder, WsOpcode, serverHeader;
+import flint.engine.rpc.ffi.websocket : websocketAccept;
+import flint.engine.rpc.websocket : WsDecoder, WsOpcode, serverHeader;
 
 @safe:
 
@@ -202,7 +202,7 @@ unittest
 @("websocket_autobahn: client frames carry a mask and a client decoder rejects masked server frames")
 unittest
 {
-    import flint.rpc.websocket : clientHeader;
+    import flint.engine.rpc.websocket : clientHeader;
 
     const header = clientHeader(WsOpcode.text, 300, [1, 2, 3, 4]);
     assert(header.ok() && header.value.length == 8);

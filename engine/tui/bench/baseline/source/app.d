@@ -1,7 +1,7 @@
-module flint.tui.reference_probe;
+module flint.engine.tui.reference_probe;
 
 import flint.arena : Status;
-import flint.style : visitGraphemes;
+import flint.engine.style : visitGraphemes;
 import flint.term : Session, Size;
 import std.conv : to;
 import tui_probe : Emit, Model, Paint, benchmark, header, headerCells, require;

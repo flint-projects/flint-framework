@@ -1,4 +1,4 @@
-# flint:storage acceptance traceability
+# flint:engine-storage acceptance traceability
 
 Source: `handoff/specs/tier-6/storage.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance").
 Network rows run under `tests/local_peer.py`, an independent Python S3 peer that re-verifies every SigV4 signature
@@ -45,9 +45,9 @@ was resident. Both buffers are read only after being written, so `Session.this()
 ## Commands
 
 ```sh
-python3 packages/storage/tests/local_peer.py dub test :storage --compiler=dmd
-python3 packages/storage/tests/local_peer.py dub test :storage --compiler=ldc2
-python3 packages/storage/fixtures/negative/verify.py <log-dir>
-python3 packages/storage/bench/loopback.py packages/storage/bench/build/probe-storage
-python3 packages/storage/bench/loopback.py packages/storage/bench/baseline/build/probe-storage-baseline
+python3 packages/engine-storage/tests/local_peer.py dub test :storage --compiler=dmd
+python3 packages/engine-storage/tests/local_peer.py dub test :storage --compiler=ldc2
+python3 packages/engine-storage/fixtures/negative/verify.py <log-dir>
+python3 packages/engine-storage/bench/loopback.py packages/engine-storage/bench/build/probe-storage
+python3 packages/engine-storage/bench/loopback.py packages/engine-storage/bench/baseline/build/probe-storage-baseline
 ```

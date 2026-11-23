@@ -1,8 +1,8 @@
-module flint.ui_signals.contract_tests;
+module flint.engine.ui_signals.contract_tests;
 
 import flint.arena : Status;
-import flint.ui_signals : ComputedSlot, ObserverSlot, SignalGraph, SignalId, SignalSlot;
-import flint.wasm_bridge : CommandBuffer, NodeHandle;
+import flint.engine.ui_signals : ComputedSlot, ObserverSlot, SignalGraph, SignalId, SignalSlot;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
 
 @safe:
 

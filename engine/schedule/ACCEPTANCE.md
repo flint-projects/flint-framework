@@ -1,4 +1,4 @@
-# flint:schedule acceptance traceability
+# flint:engine-schedule acceptance traceability
 
 Source: `handoff/specs/tier-2/schedule.md`. The required acceptance table is in section 7 of this spec, which plays the role of section 6 in the other specs. Rows marked §4 are edge cases that section 4 specifies as observable behaviour. Test references use `file:test name`. Compile-negative fixtures run through `fixtures/negative/run.py <dmd|ldc2>`. The runner first compiles a valid annotated positive control, then requires each fixture to fail with a nonzero exit below 128, a stable `static assert` message and no compiler crash.
 
@@ -37,7 +37,7 @@ Status: `covered` means an existing test already passed. `added` means a new tes
 | 29 | rate_limits: "Refill fractional intervals without losing long-term rate" | `tests/resilience.d:token bucket keeps fractional intervals and saturates checked arithmetic`; `tests/resilience.d:rate_limits: integer refill preserves the long-term rate and rejects invalid requests` (exactly burst + rate × 10 s at 1 ms polling) | covered + added |
 | 30 | rate_limits: "huge nanosecond gaps saturate capacity without overflow" | `tests/resilience.d:token bucket keeps fractional intervals ...` (`long.max` gap, `uint.max` burst and rate) | covered |
 | 31 | scheduler_bench: schedule/cancel 100k jobs through repeated slots; bounded memory; zero D allocations in poll | `tests/lifecycle.d:scheduler_bench: 100k jobs through repeated slots allocate nothing after open and poll stays GC-free` (no GC bytes allocated after `open` across the whole run; 66,602 callbacks); `bench/source/app.d` (feature probe, GC counter around every poll) | added (unittest) + covered (probe) |
-| 32 | scheduler_bench: heap depth ≤ ceil(log2(capacity)) | `source/flint/schedule/package.d:scheduler_bench: deadline heap stays ordered with depth <= ceil(log2(capacity)) through slot reuse` (also checks heap order and back-pointers after random removal and reuse) | added |
+| 32 | scheduler_bench: heap depth ≤ ceil(log2(capacity)) | `source/flint/engine/schedule/package.d:scheduler_bench: deadline heap stays ordered with depth <= ceil(log2(capacity)) through slot reuse` (also checks heap order and back-pointers after random removal and reuse) | added |
 | 33 | §4 / IMPLEMENTATION: `registerScheduled` keeps class identity; direct calls use the original method body | `tests/lifecycle.d:registered class methods preserve caller identity and direct invocation stays unwrapped` | covered |
 | 34 | IMPLEMENTATION: struct values passed by reference are copied into owned storage; a managed struct pointer registers on that instance | `tests/lifecycle.d:registration copies struct values, shares struct pointers, wraps @Retryable and rolls back partial failure` | fixed |
 | 35 | IMPLEMENTATION: `@Retryable` applies to the registered invoker only; a failed multi-method registration rolls back | same test as row 34 | added |

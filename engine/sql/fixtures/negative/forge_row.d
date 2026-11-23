@@ -1,6 +1,6 @@
 module forge_row;
 
-import flint.sql : Row;
+import flint.engine.sql : Row;
 
 @safe:
 

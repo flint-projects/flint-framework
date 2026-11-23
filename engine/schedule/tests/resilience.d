@@ -1,8 +1,9 @@
-module flint.schedule.resilience_test;
+module flint.engine.schedule.resilience_test;
 
 import flint.arena : Error, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.schedule : CircuitBreaker, CircuitState, RateLimiter, RetryClock, RetryPolicy, ScheduledTask, withRetry;
+import flint.engine.schedule : CircuitBreaker, CircuitState, RateLimiter, RetryClock, RetryPolicy,
+    ScheduledTask, withRetry;
 
 @safe:
 

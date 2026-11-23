@@ -1,6 +1,6 @@
 module app;
 
-import flint.style : Style, measure, render;
+import flint.engine.style : Style, measure, render;
 import style_workload : Shape, runWorkload;
 
 @safe:

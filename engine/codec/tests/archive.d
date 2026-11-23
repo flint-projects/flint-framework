@@ -1,8 +1,8 @@
-module flint.codec.archive_tests;
+module flint.engine.codec.archive_tests;
 
 import core.memory : GC;
 import flint.arena : Error, RequestArena, Result, Status;
-import flint.codec : ArchiveFormat, ArchiveOptions, ArchiveReader, ArchiveSource, ArchiveWriter;
+import flint.engine.codec : ArchiveFormat, ArchiveOptions, ArchiveReader, ArchiveSource, ArchiveWriter;
 
 @safe:
 

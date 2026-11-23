@@ -1,7 +1,7 @@
 /// Reject structurally identical paths with different capture names at compilation.
 module duplicate_routes;
 
-import flint.web : Get, RestController, Server, registerController;
+import flint.engine.web : Get, RestController, Server, registerController;
 
 @safe:
 

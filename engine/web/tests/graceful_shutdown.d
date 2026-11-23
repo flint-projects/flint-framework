@@ -1,18 +1,18 @@
 /// Graceful shutdown over real sockets (ADR-028 section 10): the drain closes the listener, closes idle
 /// keep-alive connections, lets an admitted request finish, and cancels it once the grace period expires.
 /// The tests that start threads are `@system`, as druntime's `Thread` is.
-module flint.web.graceful_shutdown_behavior;
+module flint.engine.web.graceful_shutdown_behavior;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : MonoTime, dur;
 import flint.arena : Error, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.reactor : Reactor;
-import flint.web.internal.controllers : runApplication, serve;
-import flint.web.runtime : Server;
-import flint.web.types : Get, Method, QueryParam, Request, RequestContext, Response, RestController,
-    ServerOptions, ShutdownExit, ShutdownMode;
+import flint.engine.reactor : Reactor;
+import flint.engine.web.internal.controllers : runApplication, serve;
+import flint.engine.web.runtime : Server;
+import flint.engine.web.types : Get, Method, QueryParam, Request, RequestContext, Response,
+    RestController, ServerOptions, ShutdownExit, ShutdownMode;
 import std.socket : InternetAddress, Socket, SocketOSException, SocketOption, SocketOptionLevel, TcpSocket;
 
 @safe:

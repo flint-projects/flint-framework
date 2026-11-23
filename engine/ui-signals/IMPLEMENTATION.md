@@ -1,4 +1,4 @@
-# flint:ui-signals
+# flint:engine-ui-signals
 
 Provide zeroed slabs for signals, observers, the dirty queue, and optional
 computed slots and edges. The graph owns their use for its lifetime. A

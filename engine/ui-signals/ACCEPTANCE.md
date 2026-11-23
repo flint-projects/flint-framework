@@ -1,4 +1,4 @@
-# flint:ui-signals acceptance traceability
+# flint:engine-ui-signals acceptance traceability
 
 Source: `handoff/specs/tier-5/ui-signals.md` section 6. Unit tests live in `tests/contract_tests.d`, cited as `file:test name`. All seeds and traces are fixed.
 

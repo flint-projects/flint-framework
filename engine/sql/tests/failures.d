@@ -2,7 +2,7 @@ module sql_failure_tests;
 
 import flint.arena : Buffer, Error, RequestArena, Status;
 import flint.conc : Context;
-import flint.sql : Connection, Driver, Pool, PoolOptions, Row, SqlFailure, SqlValue, ValueKind;
+import flint.engine.sql : Connection, Driver, Pool, PoolOptions, Row, SqlFailure, SqlValue, ValueKind;
 import std.process : environment;
 
 @safe:

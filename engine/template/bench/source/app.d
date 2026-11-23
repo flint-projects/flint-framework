@@ -1,7 +1,7 @@
 module template_probe;
 
 import flint.arena : Buffer, RequestArena, Result;
-import flint.templates : render;
+import flint.engine.templates : render;
 import template_replay : benchmark;
 
 @safe:

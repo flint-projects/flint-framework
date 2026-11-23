@@ -1,7 +1,7 @@
 module invalid_roles;
 
 import flint.arena : RequestArena;
-import flint.security : Principal, RolesAllowed, rolesAllowed;
+import flint.engine.security : Principal, RolesAllowed, rolesAllowed;
 
 @safe:
 

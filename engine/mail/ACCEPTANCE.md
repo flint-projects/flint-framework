@@ -1,4 +1,4 @@
-# flint:mail acceptance traceability
+# flint:engine-mail acceptance traceability
 
 Source: `handoff/specs/tier-6/mail.md` section 7. Fixture-backed tests run only under
 `tests/fixture/run.py` (disposable loopback SMTP/HTTPS peers with a throwaway CA); without the
@@ -34,7 +34,7 @@ contacted.
 
 ## Bugs fixed
 
-- `source/flint/mail/smtp.d`: an SMTP `send` with `MailMessage.idempotencyKey` set silently ignored
+- `source/flint/engine/mail/smtp.d`: an SMTP `send` with `MailMessage.idempotencyKey` set silently ignored
   the key (the HTTP providers already refuse unsupported keys), so an application relying on it for
   safe retry got no protection. It now returns `Status.unsupported` before any connection.
   Regression: `tests/mail_behavior.d:sender_state: closed and stale senders refuse work and
@@ -48,4 +48,4 @@ No other always-success or ignored-input paths found.
 
 - `rtest acc-cloud mail both` plain: DMD rc=0, LDC rc=0. Under `tests/fixture/run.py --server <go fixture>`: DMD rc=0, LDC rc=0.
 - `tests/fixture/negative.py dmd ldc2`: both rejected.
-- `tools/gates.py --package mail --gate structural`: rc=0. `tools/quality.py --path packages/mail`: 0 issues.
+- `tools/gates.py --package mail --gate structural`: rc=0. `tools/quality.py --path packages/engine-mail`: 0 issues.

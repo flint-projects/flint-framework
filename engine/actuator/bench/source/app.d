@@ -1,6 +1,6 @@
 module app;
 
-import flint.actuator : ActuatorOptions, Counter, Histogram, Registry;
+import flint.engine.actuator : ActuatorOptions, Counter, Histogram, Registry;
 import flint.arena : RequestArena, Status;
 import flint.conc : Context;
 import observe_probe : contains, decimal, measure;

@@ -1,4 +1,4 @@
-# flint:actuator
+# flint:engine-actuator
 
 Open a registry at startup and register its counters, histogram boundaries and
 readiness probes before serving requests. The registry uses bounded per-core

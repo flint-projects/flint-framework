@@ -1,4 +1,4 @@
-name "style"
+name "engine-style"
 description "Flint style subpackage"
 license "Apache-2.0"
 targetType "library"

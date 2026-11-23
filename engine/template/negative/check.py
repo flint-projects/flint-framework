@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 DRIVER = """module negative_template;
 import flint.arena : RequestArena;
-import flint.templates : TrustedHtml, render;
+import flint.engine.templates : TrustedHtml, render;
 struct Child { string present; }
 struct Model {
     string text;
@@ -86,7 +86,7 @@ def main():
             print(f"{name} accepted")
         driver.write_text("""module negative_trust;
 import flint.arena : Buffer;
-import flint.templates : TrustedHtml;
+import flint.engine.templates : TrustedHtml;
 TrustedHtml invalid(Buffer normal) @safe { return TrustedHtml(normal); }
 """)
         refused = subprocess.run(command, capture_output=True, text=True, timeout=15)

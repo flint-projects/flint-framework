@@ -3,7 +3,7 @@ module app;
 
 import di_probe_harness : Counter, Reader, Settings, Worker, checkArena, failed, invoke, measure;
 import flint.arena : Status;
-import flint.di : AppContext;
+import flint.engine.di : AppContext;
 
 @safe:
 

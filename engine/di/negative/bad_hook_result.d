@@ -2,7 +2,7 @@
 module bad_hook_result;
 
 import flint.arena : Error;
-import flint.di : AppContext, PostConstruct;
+import flint.engine.di : AppContext, PostConstruct;
 
 @safe:
 

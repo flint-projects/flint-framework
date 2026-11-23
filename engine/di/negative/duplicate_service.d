@@ -2,7 +2,7 @@
 module duplicate_service;
 
 import flint.arena : Error;
-import flint.di : AppContext, BeanRegistrar;
+import flint.engine.di : AppContext, BeanRegistrar;
 
 @safe:
 

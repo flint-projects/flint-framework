@@ -1,6 +1,6 @@
 module copy_graph;
 
-import flint.ui_signals : SignalGraph;
+import flint.engine.ui_signals : SignalGraph;
 
 @safe:
 

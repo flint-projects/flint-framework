@@ -23,8 +23,8 @@ the caller’s row snapshot, and rows with fewer cells receive blank padding.
 dub test :widgets --compiler=dmd
 dub test :widgets --compiler=ldc2
 python3 tools/gates.py --package widgets --gate structural
-dub build --root=packages/widgets/fixtures --compiler=ldc2
-python3 packages/widgets/fixtures/test_snapshot.py packages/widgets/fixtures/build/test-widgets-pty
-dub build --root=packages/widgets/bench --compiler=ldc2
-packages/widgets/bench/build/probe-widgets --measure
+dub build --root=packages/engine-widgets/fixtures --compiler=ldc2
+python3 packages/engine-widgets/fixtures/test_snapshot.py packages/engine-widgets/fixtures/build/test-widgets-pty
+dub build --root=packages/engine-widgets/bench --compiler=ldc2
+packages/engine-widgets/bench/build/probe-widgets --measure
 ```

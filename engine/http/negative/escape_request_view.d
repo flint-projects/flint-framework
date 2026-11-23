@@ -1,6 +1,6 @@
 module escape_request_view;
 
-import flint.http : HttpRequestView;
+import flint.engine.http : HttpRequestView;
 
 @safe:
 

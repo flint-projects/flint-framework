@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CASES = [
     (
         "opaque identity",
-        """import flint.desktop : Window;
+        """import flint.engine.desktop : Window;
 void misuse(ref Window window) @safe { window.identity = typeof(window.identity).init; }
 """,
         "no property",
@@ -17,7 +17,7 @@ void misuse(ref Window window) @safe { window.identity = typeof(window.identity)
     (
         "event arena escape",
         """import flint.arena : Error, RequestArena;
-import flint.desktop : DesktopEvent;
+import flint.engine.desktop : DesktopEvent;
 RequestArena escaped;
 Error misuse(ref DesktopEvent event, ref scope RequestArena arena) @safe nothrow @nogc {
     escaped = arena;

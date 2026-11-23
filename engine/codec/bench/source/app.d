@@ -2,7 +2,7 @@ module app;
 
 import codec_replay : ArchiveMemory, archiveReplay, benchmark, require;
 import flint.arena : RequestArena, Result, Status;
-import flint.codec : ArchiveFormat, ArchiveOptions, ArchiveReader, ArchiveWriter, Codec,
+import flint.engine.codec : ArchiveFormat, ArchiveOptions, ArchiveReader, ArchiveWriter, Codec,
     CodecOptions, Decoder, Encoder, Finish;
 
 @safe:

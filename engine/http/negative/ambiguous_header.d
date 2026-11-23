@@ -2,7 +2,7 @@ module http_negative.ambiguous_header;
 
 import flint.arena : RequestArena, Result;
 import flint.conc : Context;
-import flint.http : GetExchange, HeaderParam, HttpClient, HttpExchange, HttpResponse, bindHttpClient;
+import flint.engine.http : GetExchange, HeaderParam, HttpClient, HttpExchange, HttpResponse, bindHttpClient;
 
 @HttpExchange("https://example.com")
 private interface Malformed

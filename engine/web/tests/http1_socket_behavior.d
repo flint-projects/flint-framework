@@ -1,11 +1,11 @@
-module flint.web.http1_socket_behavior;
+module flint.engine.web.http1_socket_behavior;
 
 import core.time : Duration, MonoTime, dur;
 import flint.arena : Buffer, Error, Result, Status;
 import flint.conc : Context, Deadline;
-import flint.web.runtime : Server;
-import flint.web.stream : StreamField, StreamMode, StreamRoute, StreamToken;
-import flint.web.types : Method, Request, RequestContext, Response, ServerOptions;
+import flint.engine.web.runtime : Server;
+import flint.engine.web.stream : StreamField, StreamMode, StreamRoute, StreamToken;
+import flint.engine.web.types : Method, Request, RequestContext, Response, ServerOptions;
 import std.socket : InternetAddress, Socket, SocketOptionLevel, SocketOption, SocketShutdown, TcpSocket;
 
 @safe:

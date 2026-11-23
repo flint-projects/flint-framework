@@ -1,4 +1,4 @@
-# flint:migrate acceptance traceability
+# flint:engine-migrate acceptance traceability
 
 Source: `handoff/specs/tier-3/migrate.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance").
 PostgreSQL rows run when `FLINT_MIGRATE_PG_TEST_DSN` names a disposable PostgreSQL 18.6 database (D suite) or when
@@ -22,7 +22,7 @@ PostgreSQL rows run when `FLINT_MIGRATE_PG_TEST_DSN` names a disposable PostgreS
 | nontransactional_recovery — explicit nontransactional success path; SQLite nontransactional rejected | PostgreSQL `CREATE INDEX CONCURRENTLY` row and SQLite `unsupported` row in the two driver tests | covered |
 | migration_bench — load/validate 1000 embedded migrations; bounded startup query count | `bench/trace/run.py <compiler> <dir> [--postgres dsn]` (links `bench/trace/provider.c` with `--wrap`; one validateOnly run over 1000 entries issues 6 SQLite / 7 PostgreSQL provider statements; cap 12), DMD and LDC | added (runner) |
 | migration_bench — compiler template counts | canonical fixture measured by `tools/measure_builds.py`: 1580 instances ≤ 2000 (`artifacts/tasks/m6-integration/complete-run/builds.json`); not re-measured in this pass | covered (existing evidence) |
-| Native boundary corpora under ASan / LDC sanitizer configuration | whole D suite (both drivers) under LDC `-fsanitize=address` (`--build=plain`, `ASAN_OPTIONS=detect_leaks=0`); no migrate-owned C code (SQL shim corpus: `packages/sql/tests/native_asan.py`) | covered (run) |
+| Native boundary corpora under ASan / LDC sanitizer configuration | whole D suite (both drivers) under LDC `-fsanitize=address` (`--build=plain`, `ASAN_OPTIONS=detect_leaks=0`); no migrate-owned C code (SQL shim corpus: `packages/engine-sql/tests/native_asan.py`) | covered (run) |
 | Fuzz seeds: truncated input, maximum lengths, empty values, cancellation | preflight test (empty/whitespace, truncated UTF-8, 1 MiB boundary); `executeScript` deadline → `timedOut` then reuse in the PostgreSQL test; lock_timeout rows | covered |
 | Compile-fail tests assert nonzero exit and stable diagnostic | `negative/*.d` via `fixtures/embedding.py` | covered |
 
@@ -36,9 +36,9 @@ contains no production implementation") although the package is implemented; it 
 ```sh
 FLINT_MIGRATE_PG_TEST_DSN=... dub test :migrate --compiler=dmd
 FLINT_MIGRATE_PG_TEST_DSN=... dub test :migrate --compiler=ldc2
-python3 packages/migrate/fixtures/embedding.py dmd    # and ldc2
-python3 packages/migrate/fixtures/run_startup.py dmd <dir> --postgres <empty-db-dsn>    # and ldc2
-python3 packages/migrate/bench/trace/run.py dmd <dir> --postgres <dsn>    # and ldc2
-python3 tools/migration_manifest.py --input packages/migrate/tests/migrations \
-  --output packages/migrate/fixtures/generated_plan.d --module generated_plan --check
+python3 packages/engine-migrate/fixtures/embedding.py dmd    # and ldc2
+python3 packages/engine-migrate/fixtures/run_startup.py dmd <dir> --postgres <empty-db-dsn>    # and ldc2
+python3 packages/engine-migrate/bench/trace/run.py dmd <dir> --postgres <dsn>    # and ldc2
+python3 tools/migration_manifest.py --input packages/engine-migrate/tests/migrations \
+  --output packages/engine-migrate/fixtures/generated_plan.d --module generated_plan --check
 ```

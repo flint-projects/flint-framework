@@ -1,9 +1,9 @@
 /// Exercises gRPC framing across arbitrary transport chunk boundaries.
-module flint.rpc.grpc_behavior;
+module flint.engine.rpc.grpc_behavior;
 
 import flint.arena : RequestArena, Status;
 import flint.conc : Context, Deadline;
-import flint.rpc.grpc : GrpcDecoder, RpcCode, grpcDeadline, grpcPrefix, grpcStatus, maximumMessageBytes;
+import flint.engine.rpc.grpc : GrpcDecoder, RpcCode, grpcDeadline, grpcPrefix, grpcStatus, maximumMessageBytes;
 
 @safe:
 
@@ -77,7 +77,7 @@ unittest
 @("client terminal status keeps the code when grpc-message is not valid percent-encoded UTF-8")
 unittest
 {
-    import flint.rpc.grpc_client : Terminal;
+    import flint.engine.rpc.grpc_client : Terminal;
 
     // PROTOCOL-HTTP2: an invalid grpc-message must not discard the status. At worst it stays raw.
     Terminal percent;
@@ -163,7 +163,7 @@ unittest
 @("grpc deadlines take the earlier of grpc-timeout and the inherited context, saturating on overflow")
 unittest
 {
-    import flint.rpc.grpc_client : formatTimeout;
+    import flint.engine.rpc.grpc_client : formatTimeout;
 
     auto parent = Context.init.withDeadline(Deadline.afterMillis(60_000));
     const shorter = grpcDeadline("100m", parent);
@@ -194,7 +194,7 @@ unittest
 @("grpc terminal status: every wire code maps, and a missing or malformed status is never success")
 unittest
 {
-    import flint.rpc.grpc_client : Terminal;
+    import flint.engine.rpc.grpc_client : Terminal;
 
     foreach (uint code; 0 .. 17)
     {

@@ -1,8 +1,8 @@
 /// Exercises SSE delimiter, UTF-8 and field boundaries.
-module flint.rpc.sse_behavior;
+module flint.engine.rpc.sse_behavior;
 
 import flint.arena : Buffer, Error, RequestArena, Status;
-import flint.rpc.sse : SseDecoder, SseEvent, SseNotice, encodeEvent, encodeHeartbeat, maximumSseLine;
+import flint.engine.rpc.sse : SseDecoder, SseEvent, SseNotice, encodeEvent, encodeHeartbeat, maximumSseLine;
 
 @safe:
 

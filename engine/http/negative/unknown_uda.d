@@ -2,7 +2,7 @@ module http_negative.unknown_uda;
 
 import flint.arena : RequestArena, Result;
 import flint.conc : Context;
-import flint.http : GetExchange, HttpClient, HttpExchange, HttpResponse, bindHttpClient;
+import flint.engine.http : GetExchange, HttpClient, HttpExchange, HttpResponse, bindHttpClient;
 
 private struct Extra
 {

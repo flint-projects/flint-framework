@@ -1,4 +1,4 @@
-# flint:wasm-bridge acceptance traceability
+# flint:engine-wasm-bridge acceptance traceability
 
 Source: `handoff/specs/tier-5/wasm-bridge.md` section 6. Guest-side encoding is tested in `tests/contract_tests.d`. Host-side validation is in `benchmarks/bench-wasm/driver.mjs`, which this package's `fixtures/parity.mjs` (Node) and `fixtures/browser.html` (headless Chromium via `fixtures/check_browser.mjs`) exercise. All seeds are fixed.
 

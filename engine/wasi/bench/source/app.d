@@ -2,7 +2,7 @@
 module app;
 
 import core.lifetime : move;
-import flint.wasi : CompiledPlugin, GuestAbi, Plugin, PluginOptions;
+import flint.engine.wasi : CompiledPlugin, GuestAbi, Plugin, PluginOptions;
 import wasi_workload : run;
 
 @safe:

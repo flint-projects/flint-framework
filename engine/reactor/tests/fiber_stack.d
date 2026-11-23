@@ -1,9 +1,9 @@
-module flint.reactor.fiber_stack_test;
+module flint.engine.reactor.fiber_stack_test;
 
 import core.atomic : atomicLoad, atomicStore;
 import flint.arena : Status;
 import flint.conc : Deadline;
-import flint.reactor : Reactor, ReactorOptions, TaskContext;
+import flint.engine.reactor : Reactor, ReactorOptions, TaskContext;
 
 @safe:
 

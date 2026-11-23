@@ -1,4 +1,4 @@
-module flint.cache.redis_behavior_test;
+module flint.engine.cache.redis_behavior_test;
 
 version (FlintNativeHiredis)
 {
@@ -6,11 +6,11 @@ version (FlintNativeHiredis)
     import core.thread.osthread : Thread;
     import core.time : msecs;
     import flint.arena : Buffer, RequestArena, Result, Status;
-    import flint.cache : Cache, CacheBackend, getOrLoad;
-    import flint.cache.remote : RemoteStore;
-    import flint.cache.types : CacheOptions;
+    import flint.engine.cache : Cache, CacheBackend, getOrLoad;
+    import flint.engine.cache.remote : RemoteStore;
+    import flint.engine.cache.types : CacheOptions;
     import flint.conc : CancelSource, Context, Deadline;
-    import flint.reactor : Backend, Reactor, ReactorOptions;
+    import flint.engine.reactor : Backend, Reactor, ReactorOptions;
     import std.file : exists, readText;
     import std.process : environment;
 

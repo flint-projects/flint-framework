@@ -1,8 +1,8 @@
-module flint.style.style_behavior_test;
+module flint.engine.style.style_behavior_test;
 
-import flint.style : Alignment, Border, Color, Insets, Style, TextMetrics, joinHorizontal,
+import flint.engine.style : Alignment, Border, Color, Insets, Style, TextMetrics, joinHorizontal,
     joinVertical, measure, render, truncateCells;
-import flint.style.ffi.unicode : unicodeVersion;
+import flint.engine.style.ffi.unicode : unicodeVersion;
 import std.algorithm.searching : canFind, endsWith, startsWith;
 import std.utf : validate;
 

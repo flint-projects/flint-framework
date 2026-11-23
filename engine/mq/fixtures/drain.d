@@ -3,7 +3,7 @@ module drain_fixture;
 
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
-import flint.mq : QueueClient, QueueOptions;
+import flint.engine.mq : QueueClient, QueueOptions;
 import std.stdio : writeln;
 
 @safe:

@@ -2,7 +2,7 @@
 module duplicated_hook;
 
 import flint.arena : Error;
-import flint.di : AppContext, PostConstruct;
+import flint.engine.di : AppContext, PostConstruct;
 
 @safe:
 

@@ -1,4 +1,4 @@
-# flint:sql acceptance traceability
+# flint:engine-sql acceptance traceability
 
 Source: `handoff/specs/tier-3/sql.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance").
 PostgreSQL rows run when `FLINT_SQL_PG_TEST_DSN` names a disposable PostgreSQL 18.6 database; they were run
@@ -41,9 +41,9 @@ operations. `Transactional` is metadata only; the spec limits it to generated re
 ```sh
 FLINT_SQL_PG_TEST_DSN=... dub test :sql --compiler=dmd
 FLINT_SQL_PG_TEST_DSN=... dub test :sql --compiler=ldc2
-python3 packages/sql/fixtures/negative/verify.py <log-dir>
-python3 packages/sql/tests/native_asan.py --prefix <native>/install/linux-x86_64-glibc --output <dir>
-packages/sql/bench/build/probe-sql --measure [<dsn>]
+python3 packages/engine-sql/fixtures/negative/verify.py <log-dir>
+python3 packages/engine-sql/tests/native_asan.py --prefix <native>/install/linux-x86_64-glibc --output <dir>
+packages/engine-sql/bench/build/probe-sql --measure [<dsn>]
 DFLAGS='-g -O1 -unittest -preview=dip1000 -boundscheck=on -fsanitize=address' ASAN_OPTIONS=detect_leaks=0 \
   dub test :sql --compiler=ldc2 --build=plain
 ```

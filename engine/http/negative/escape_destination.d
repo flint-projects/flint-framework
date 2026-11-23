@@ -1,6 +1,6 @@
 module http_negative.escape_destination;
 
-import flint.http : DestinationPolicy;
+import flint.engine.http : DestinationPolicy;
 
 private const(char)[] leaked;
 

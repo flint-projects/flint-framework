@@ -1,7 +1,7 @@
 module prompt_interactive;
 
 import flint.arena : Status;
-import flint.prompt : Choice, Field, FormOptions, clear, confirm, form, input, multiSelect, password, select;
+import flint.engine.prompt : Choice, Field, FormOptions, clear, confirm, form, input, multiSelect, password, select;
 import flint.term : Session;
 import std.stdio : writeln;
 

@@ -1,11 +1,11 @@
-module flint.reactor.fiber_local_test;
+module flint.engine.reactor.fiber_local_test;
 
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.thread.osthread : Thread;
 import flint.arena : Status;
 import flint.conc : Deadline;
-import flint.reactor : Backend, FiberLocal, Reactor, ReactorOptions, TaskContext;
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor : Backend, FiberLocal, Reactor, ReactorOptions, TaskContext;
+import flint.engine.reactor.test_support : readinessBackend;
 
 @safe:
 

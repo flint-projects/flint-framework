@@ -1,8 +1,8 @@
-module flint.prompt.secret_fuzz;
+module flint.engine.prompt.secret_fuzz;
 
 import flint.arena : Status;
-import flint.prompt : Secret;
-import flint.tui : Event, EventKind, KeyCode;
+import flint.engine.prompt : Secret;
+import flint.engine.tui : Event, EventKind, KeyCode;
 
 @safe:
 

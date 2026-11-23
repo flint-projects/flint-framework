@@ -1,10 +1,10 @@
 /// Shared in-memory terminal cell observer for the widget and prompt probes.
-module flint.tui.widget_display_probe;
+module flint.engine.tui.widget_display_probe;
 
 import flint.arena : Error, Status;
 import flint.term : ColorProfile;
-import flint.tui : Frame, Size;
-import flint.tui.grid : Grid;
+import flint.engine.tui : Frame, Size;
+import flint.engine.tui.grid : Grid;
 
 @safe:
 

@@ -1,6 +1,6 @@
-# flint:actuator acceptance traceability
+# flint:engine-actuator acceptance traceability
 
-Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance"; this spec numbers the acceptance table 7, not 6). Unit tests run with `dub test :actuator` on DMD and LDC. Fixture commands run from `packages/actuator/fixtures/export` after `dub build`; `<fx>` is `build/actuator-export-fixture`.
+Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, fuzz and benchmark acceptance"; this spec numbers the acceptance table 7, not 6). Unit tests run with `dub test :actuator` on DMD and LDC. Fixture commands run from `packages/engine-actuator/fixtures/export` after `dub build`; `<fx>` is `build/actuator-export-fixture`.
 
 | # | Section 7 item (abridged) | Covering test(s) | Status |
 | --- | --- | --- | --- |
@@ -9,7 +9,7 @@ Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, 
 | 2a | histogram_buckets: "Boundary values map correctly" | `tests/behavior.d:Prometheus snapshots merge cumulative buckets and separate invalid values`; `tests/acceptance.d:histogram_buckets: 32 bounds accepted, 33 rejected, boundaries inclusive, invalid samples isolated` | covered / added (32/33 bound cap, below-first and above-last values) |
 | 2b | histogram_buckets: "cumulative buckets are monotonic, +Inf equals count" | same two tests (all 33 buckets checked monotonic; `+Inf == _count`) | covered |
 | 2c | histogram_buckets: "sum excludes invalid samples" | same two tests (NaN, +/-Inf and a finite sample whose sum would overflow go to `_invalid_total`) | covered / added (sum-overflow case) |
-| 3a | health_semantics: "Database outage flips readiness to 503 while liveness remains 200" | `tests/acceptance.d:health_semantics: outage fails readiness only; draining fails readiness while the listener serves` (in-process `flint.web` listener + `flint.http` client); fixture `<fx> <collector> <port>`; `tests/behavior.d:readiness hides failed dependency details and guards recursive probes` | added |
+| 3a | health_semantics: "Database outage flips readiness to 503 while liveness remains 200" | `tests/acceptance.d:health_semantics: outage fails readiness only; draining fails readiness while the listener serves` (in-process `flint.engine.web` listener + `flint.engine.http` client); fixture `<fx> <collector> <port>`; `tests/behavior.d:readiness hides failed dependency details and guards recursive probes` | added |
 | 3b | health_semantics: "draining flips readiness before listener shutdown" | same acceptance test (registry closed, listener still serving: ready 503, live 200); fixture final `/health/ready` 503 | added |
 | 3c | health_semantics (section 4): details hidden, shared listener needs auth | same acceptance test (503 body omits component, 403 when the policy denies); `tests/acceptance.d:health_semantics: a shared listener without an authorization policy is refused` | added |
 | 4a | trace_fibers: "Interleave 100 fibers on one core; every log/span has the correct request trace" | fixture `<fx> traces` (`fixtures/export/source/trace_fibers.d`): prints `interleaved_fibers=100 verified_logs=200 queued_spans=200` | covered |
@@ -21,13 +21,13 @@ Source: `handoff/specs/tier-2/actuator.md` section 7 ("Required unit, protocol, 
 | 6a | export_overload: "queue stays <=8192 spans ... drops are counted" | `tests/acceptance.d:export_overload: an offline collector keeps the ring bounded, counts drops and never fails requests` (reduced 32-slot ring, refused port); fixture `<fx> http://127.0.0.1:43189 43190 600` | added |
 | 6b | export_overload: "Hold exporter offline for ten minutes ... request latency stays bounded" | fixture `<fx> http://127.0.0.1:43189 43190 600` (600 s, liveness requested once per second, slowest recorded). Run of 2026-11-21 on a shared, loaded host: 14,959,360 spans attempted, pending peak 8,192, 14,951,169 dropped, 598 liveness requests all 200, slowest 7.84 ms, peak RSS 18.2 MB, exit 0 | covered |
 | 7 | scrape_race: "Continuously record during scrapes; no invalid text, deadlock or negative bucket count" | `tests/behavior.d:scrape emits complete cumulative bucket sets while a producer updates them` (2000 scrapes against a live writer thread) | covered |
-| 8a | observe_bench: "counter and histogram operations for 1/8/32 cores; no D allocation" | `bench/` probe (`dub run --build=release` in `packages/actuator/bench`): per-worker `GC.stats.allocatedInCurrentThread` delta must be 0 or the probe exits nonzero | covered |
+| 8a | observe_bench: "counter and histogram operations for 1/8/32 cores; no D allocation" | `bench/` probe (`dub run --build=release` in `packages/engine-actuator/bench`): per-worker `GC.stats.allocatedInCurrentThread` delta must be 0 or the probe exits nonzero | covered |
 | 8b | observe_bench: "no global hot lock" | same probe; `add`/`record` touch only the caller's cache-aligned per-core cell (`metrics.d` `Cell`), no registry mutex on the update path | covered |
-| 9 | General: native boundary corpora under ASan | actuator has no `ffi/`/`sys/` boundary and adds no C library (spec section 5); HTTP/TLS is exercised through `flint:http` | n/a |
+| 9 | General: native boundary corpora under ASan | actuator has no `ffi/`/`sys/` boundary and adds no C library (spec section 5); HTTP/TLS is exercised through `flint:engine-http` | n/a |
 
 ## Defect fixed
 
-- `source/flint/actuator/exporter.d`: each export round sent only 32 metric series and rotated the rest across later intervals, so with N series a value was exported once every ceil(N/32) intervals (4096 series: once per 640 s at the default 5 s interval). A round now sends every registered series in bounded 32-series requests, resuming a retained retry chunk first. Test: `tests/acceptance.d:otlp_export: one export round covers every registered series and full span batches leave early` (70 series; failed with "series 32 missing from the export round" before the fix).
+- `source/flint/engine/actuator/exporter.d`: each export round sent only 32 metric series and rotated the rest across later intervals, so with N series a value was exported once every ceil(N/32) intervals (4096 series: once per 640 s at the default 5 s interval). A round now sends every registered series in bounded 32-series requests, resuming a retained retry chunk first. Test: `tests/acceptance.d:otlp_export: one export round covers every registered series and full span batches leave early` (70 series; failed with "series 32 missing from the export round" before the fix).
 
 ## Stub review
 

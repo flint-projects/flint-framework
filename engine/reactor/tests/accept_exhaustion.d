@@ -1,12 +1,12 @@
-module flint.reactor.accept_exhaustion_test;
+module flint.engine.reactor.accept_exhaustion_test;
 
-import flint.reactor.test_support : readinessBackend;
+import flint.engine.reactor.test_support : readinessBackend;
 import core.atomic : atomicLoad, atomicOp, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : msecs;
 import flint.arena : Status;
 import flint.conc : Deadline;
-import flint.reactor : Backend, ConnectionId, ListenOptions, Reactor, ReactorOptions;
+import flint.engine.reactor : Backend, ConnectionId, ListenOptions, Reactor, ReactorOptions;
 import std.socket : InternetAddress, TcpSocket;
 
 private void giveUp() @safe nothrow @nogc
@@ -152,7 +152,7 @@ version (all)
 
     private void inspectAccepted(ConnectionId id) @safe nothrow @nogc
     {
-        import flint.reactor : connectionSendsImmediately;
+        import flint.engine.reactor : connectionSendsImmediately;
 
         atomicStore(acceptedWithoutDelay, connectionSendsImmediately(id));
         atomicStore(acceptChecked, true);

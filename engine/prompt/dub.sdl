@@ -1,4 +1,4 @@
-name "prompt"
+name "engine-prompt"
 description "Flint prompt subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -13,8 +13,8 @@ sourceFiles "build/prompt-secret.o" platform="osx"
 extraDependencyFiles "native/secret.c" "native/build.sh" platform="osx"
 dependency "flint:arena" version="*"
 dependency "flint:term" version="*"
-dependency "flint:tui" version="*"
-dependency "flint:widgets" version="*"
+dependency "flint:engine-tui" version="*"
+dependency "flint:engine-widgets" version="*"
 dependency "flint:validate" version="*"
 
 configuration "library" {

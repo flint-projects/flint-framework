@@ -2,7 +2,7 @@ module app;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : Context;
-import flint.sql : Driver, Pool, PoolOptions, Row, SqlValue, ValueKind;
+import flint.engine.sql : Driver, Pool, PoolOptions, Row, SqlValue, ValueKind;
 import probe : measureTrial, nanos, require, rows, schema;
 
 @safe:

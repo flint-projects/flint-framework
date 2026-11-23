@@ -1,7 +1,7 @@
 module betterc_signals;
 import flint.arena : Status;
-import flint.ui_signals : SignalGraph, SignalSlot, ObserverSlot;
-import flint.wasm_bridge : CommandBuffer, NodeHandle;
+import flint.engine.ui_signals : SignalGraph, SignalSlot, ObserverSlot;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
 
 @safe:
 /// Exercises graph state and bridge output without a GC/runtime dependency.

@@ -1,6 +1,6 @@
 module copy_secret;
 
-import flint.prompt : Secret;
+import flint.engine.prompt : Secret;
 
 @safe:
 

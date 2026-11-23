@@ -19,8 +19,8 @@ python3 tools/gates.py --package reactor --gate structural
 With the generated liburing flags in place, the loopback tests execute both Linux backends. The setup-denial fixture applies seccomp only to the test process and checks automatic epoll fallback with the provider present.
 
 ```sh
-cc -Wall -Wextra -Werror packages/reactor/bench/fixtures/deny_uring_setup.c -o /tmp/flint-deny-uring
-/tmp/flint-deny-uring packages/reactor/flint-reactor-test-unittest
+cc -Wall -Wextra -Werror packages/engine-reactor/bench/fixtures/deny_uring_setup.c -o /tmp/flint-deny-uring
+/tmp/flint-deny-uring packages/engine-reactor/flint-reactor-test-unittest
 ```
 
 The feature and direct-provider probes share the TCP traffic generator. They exercise 1, 64 and 1024 persistent clients with 64- and 4096-byte payloads, verify admission at capacity, cancel outstanding reads and check the result of every echo. Compare checksums and backend names across the same build profile. Set `FLINT_REACTOR_PROBE_BACKEND=epoll` to select the readiness path for both programs. Set `FLINT_REACTOR_PROBE_SAMPLE_DIR` to a separate directory for each run to retain latency samples in order.

@@ -24,8 +24,8 @@ must be unique. Multi-select accepts an explicit limit up to the choice count.
 dub test :prompt --compiler=dmd
 dub test :prompt --compiler=ldc2
 python3 tools/gates.py --package prompt --gate structural
-dub build --root=packages/prompt/fixtures --compiler=ldc2
-python3 packages/prompt/fixtures/test_prompt.py packages/prompt/fixtures/build/test-prompt-pty
-dub build --root=packages/prompt/bench --compiler=ldc2
-packages/prompt/bench/build/probe-prompt --measure
+dub build --root=packages/engine-prompt/fixtures --compiler=ldc2
+python3 packages/engine-prompt/fixtures/test_prompt.py packages/engine-prompt/fixtures/build/test-prompt-pty
+dub build --root=packages/engine-prompt/bench --compiler=ldc2
+packages/engine-prompt/bench/build/probe-prompt --measure
 ```

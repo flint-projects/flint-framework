@@ -4,7 +4,7 @@ import core.stdc.stdio : printf;
 import core.thread.osthread : Thread;
 import flint.arena : Status;
 import flint.conc : Context, Deadline;
-import flint.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
+import flint.engine.reactor : Backend, Completion, ConnectionId, IoId, ListenOptions, Reactor, ReactorOptions;
 import probe_workload : cancellationMarker, connectionLimit, maxPayload, runWorkloads, useUring;
 import std.exception : enforce;
 

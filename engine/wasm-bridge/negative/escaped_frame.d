@@ -1,7 +1,7 @@
 module escaped_frame;
 
 import flint.arena : Error;
-import flint.wasm_bridge : CommandBuffer;
+import flint.engine.wasm_bridge : CommandBuffer;
 
 private const(ubyte)[] saved;
 

@@ -4,7 +4,7 @@ import core.memory : GC;
 import core.time : MonoTime;
 import flint.arena : Error, RequestArena, Result, Status;
 import flint.conc : Context, Deadline;
-import flint.storage : Credentials, ObjectStorage, StorageOptions;
+import flint.engine.storage : Credentials, ObjectStorage, StorageOptions;
 import storage_workload : Checksum, access, address, bucket, key, objectBytes, objectType,
     parallelParts, partBytes, parts, report, require, secret, stripe, stripeBytes, token;
 

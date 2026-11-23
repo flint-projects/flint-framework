@@ -1,10 +1,10 @@
-module flint.mail.mail_behavior;
+module flint.engine.mail.mail_behavior;
 
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.mail : Attachment, MailAddress, MailBackend, MailMessage, MailOptions, MailSender;
-import flint.mail.mime : Boundaries, emitMime;
-import flint.mail.validation : validate;
+import flint.engine.mail : Attachment, MailAddress, MailBackend, MailMessage, MailOptions, MailSender;
+import flint.engine.mail.mime : Boundaries, emitMime;
+import flint.engine.mail.validation : validate;
 import std.algorithm.searching : canFind;
 import std.file : readText;
 import std.json : parseJSON;
@@ -155,7 +155,7 @@ version (FlintNativeCurl)
 
         void deliver() @safe nothrow @nogc
         {
-            import flint.reactor : Reactor;
+            import flint.engine.reactor : Reactor;
 
             scope arena = RequestArena(bytes[]);
             auto message = testMessage(arena);
@@ -174,7 +174,7 @@ version (FlintNativeCurl)
     @("SMTP uses the reactor fiber without blocking another task")
     unittest
     {
-        import flint.reactor : Backend, Reactor, ReactorOptions;
+        import flint.engine.reactor : Backend, Reactor, ReactorOptions;
 
         if (!fixture("FIBER").length)
             return;
@@ -310,7 +310,7 @@ version (FlintNativeCurl)
 @("Structured provider JSON fits any text body that fits the MIME limit")
 unittest
 {
-    import flint.mail.provider_payload : encodeProvider;
+    import flint.engine.mail.provider_payload : encodeProvider;
 
     // Providers reserve 1.5 times the MIME limit for JSON. A line-oriented body that passes the
     // MIME check must not be refused because every line break expanded into a six-byte escape.

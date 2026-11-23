@@ -1,13 +1,13 @@
-module flint.actuator.behavior_test;
+module flint.engine.actuator.behavior_test;
 
 import core.atomic : atomicLoad, atomicStore;
 import core.thread.osthread : Thread;
 import core.time : msecs;
-import flint.actuator : ActuatorOptions, Health, HealthStatus, Registry, TraceContext;
-import flint.actuator.exporter : retryAfter;
-import flint.actuator.metrics : Metrics;
-import flint.actuator.otlp : acknowledged, measurements, traces;
-import flint.actuator.spans : SpanRecord;
+import flint.engine.actuator : ActuatorOptions, Health, HealthStatus, Registry, TraceContext;
+import flint.engine.actuator.exporter : retryAfter;
+import flint.engine.actuator.metrics : Metrics;
+import flint.engine.actuator.otlp : acknowledged, measurements, traces;
+import flint.engine.actuator.spans : SpanRecord;
 import flint.arena : Buffer, RequestArena, Status;
 import flint.conc : Context, Deadline;
 import std.algorithm.searching : canFind, startsWith;

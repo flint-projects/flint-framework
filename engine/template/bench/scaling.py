@@ -30,7 +30,7 @@ def run(compiler, output, count, profile):
             leaf = directory / f"leaf{index}.d"
             leaf.write_text(f"""module leaf{index};
 import flint.arena : Buffer, RequestArena, Result;
-import flint.templates : render;
+import flint.engine.templates : render;
 import model : Record;
 Result!Buffer show(scope const ref Record record, ref scope RequestArena arena) @safe nothrow @nogc
 {{

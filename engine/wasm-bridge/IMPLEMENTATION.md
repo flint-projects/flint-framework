@@ -1,4 +1,4 @@
-# flint:wasm-bridge
+# flint:engine-wasm-bridge
 
 Construct a command buffer with exclusive caller-owned storage and the host's
 nonzero session epoch. The guest encodes little-endian FLNT v1 records and

@@ -1,7 +1,7 @@
 /// Minimal typed interactive model.
 module model_minimal;
 
-import flint.tui : Effects, Event, EventKind, Frame, run;
+import flint.engine.tui : Effects, Event, EventKind, Frame, run;
 
 @safe:
 

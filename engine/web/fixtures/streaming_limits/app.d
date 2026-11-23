@@ -4,8 +4,8 @@ module app;
 import core.atomic : atomicLoad, atomicStore;
 import flint.arena : Error, Result, Status;
 import flint.conc : Context, Deadline;
-import flint.web : Method, Request, RequestContext, Response, Server, ServerOptions, StreamMode,
-    StreamRoute, StreamToken;
+import flint.engine.web : Method, Request, RequestContext, Response, Server, ServerOptions,
+    StreamMode, StreamRoute, StreamToken;
 import std.conv : to;
 
 @safe:

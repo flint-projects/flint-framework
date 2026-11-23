@@ -14,7 +14,7 @@ CASES = {
 POSITIVE = """module valid_component;
 import flint.arena : Error;
 import flint.conc : Context;
-import flint.schedule : Retryable, Scheduled, Scheduler, registerScheduled;
+import flint.engine.schedule : Retryable, Scheduled, Scheduler, registerScheduled;
 @safe:
 final class Valid
 {

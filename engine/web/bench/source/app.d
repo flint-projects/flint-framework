@@ -1,12 +1,12 @@
 /// Monomorphic Flint request parser and radix-route probe.
-module flint.web.probe;
+module flint.engine.web.probe;
 
 import flint.arena : RequestArena, Result, Status;
-import flint.web : Handler, Method, Request, RequestContext, Response;
-import flint.web.dispatch : executeRoute;
-import flint.web.http1 : Http1Reader, ReadOutcome;
-import flint.web.types : HeaderRecord, maximumFields;
-import flint.web.router : RouteTable;
+import flint.engine.web : Handler, Method, Request, RequestContext, Response;
+import flint.engine.web.dispatch : executeRoute;
+import flint.engine.web.http1 : Http1Reader, ReadOutcome;
+import flint.engine.web.types : HeaderRecord, maximumFields;
+import flint.engine.web.router : RouteTable;
 import web_probe : Example, measure, observe;
 
 @safe:

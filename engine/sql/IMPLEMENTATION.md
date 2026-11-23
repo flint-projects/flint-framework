@@ -1,4 +1,4 @@
-# flint:sql
+# flint:engine-sql
 
 Open a pool with a pinned PostgreSQL or SQLite provider. The pool copies the
 configuration. A native connection opens on the first statement in its slot.

@@ -1,4 +1,4 @@
-name "mail"
+name "engine-mail"
 description "Flint mail subpackage"
 license "Apache-2.0"
 targetType "library"
@@ -6,8 +6,8 @@ sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:arena" version="*"
-dependency "flint:http" version="*"
-dependency "flint:reactor" version="*"
+dependency "flint:engine-http" version="*"
+dependency "flint:engine-reactor" version="*"
 dependency "flint:conc" version="*"
 
 configuration "library" {

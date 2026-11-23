@@ -1,11 +1,12 @@
-module flint.widgets.contract_tests;
+module flint.engine.widgets.contract_tests;
 
 import flint.arena : Status;
-import flint.style : foldGraphemes, visitGraphemeRanges, visitGraphemes;
-import flint.tui : Effects, Event, EventKind, Frame, KeyCode;
-import flint.widgets : Column, List, ListItem, Paginator, Progress, Spinner, Table, TextArea, TextInput, Viewport;
-import flint.tui : Size;
-import flint.tui.widget_test_display : capture;
+import flint.engine.style : foldGraphemes, visitGraphemeRanges, visitGraphemes;
+import flint.engine.tui : Effects, Event, EventKind, Frame, KeyCode;
+import flint.engine.widgets : Column, List, ListItem, Paginator, Progress, Spinner, Table,
+    TextArea, TextInput, Viewport;
+import flint.engine.tui : Size;
+import flint.engine.tui.widget_test_display : capture;
 import std.string : indexOf;
 
 @safe:

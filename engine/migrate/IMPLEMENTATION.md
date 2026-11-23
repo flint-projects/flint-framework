@@ -1,4 +1,4 @@
-# flint:migrate
+# flint:engine-migrate
 
 Run versioned SQL programs once, before the application serves traffic. Declare
 each program with `embeddedMigration`, which loads a vetted file name from the D

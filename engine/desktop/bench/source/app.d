@@ -5,7 +5,7 @@ import core.time : MonoTime;
 import desktop_probe : chooseDriver, count, height, report, require, title, verifyNativeFrame, width;
 import flint.arena : Error, RequestArena, Status;
 import flint.conc : Context;
-import flint.desktop : DesktopEvent, EventKind, Window, WindowOptions;
+import flint.engine.desktop : DesktopEvent, EventKind, Window, WindowOptions;
 
 @safe:
 

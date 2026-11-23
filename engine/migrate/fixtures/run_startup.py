@@ -42,7 +42,7 @@ def main():
     sources = sorted(str(path) for folder in folders for path in Path(folder).rglob("*.d"))
     flags = ["-L" + flag for flag in describe(args.compiler, root, "lflags")]
     worker = args.output / ("migrate-startup-" + args.compiler)
-    migrations = root / "packages/migrate/tests/migrations"
+    migrations = root / "packages/engine-migrate/tests/migrations"
     subprocess.run([args.compiler, "-preview=dip1000", "-of=" + str(worker), *versions, *imports, "-J" + str(migrations),
                     str(FIXTURES / "startup.d"), str(FIXTURES / "generated_plan.d"), *sources, *flags], check=True)
     command = [sys.executable, str(FIXTURES / "concurrency.py"), str(worker)]
