@@ -420,6 +420,381 @@ interface ServletResponse
     Locale getLocale();
 }
 
+/++
+`jakarta.servlet.ServletRequestWrapper`: a request that delegates every call to the request it wraps. Filters
+subclass it to change part of a request, and pass the wrapper down the chain.
++/
+class ServletRequestWrapper : ServletRequest
+{
+    private ServletRequest request;
+
+    /// Wraps `request`. Throws `IllegalArgumentException` when it is null.
+    this(ServletRequest request)
+    {
+        if (request is null)
+            throw new imported!"flint.java.lang".IllegalArgumentException("Request cannot be null");
+        this.request = request;
+    }
+
+    /// The wrapped request.
+    ServletRequest getRequest() pure nothrow @nogc
+    {
+        return request;
+    }
+
+    /// Replaces the wrapped request. Throws `IllegalArgumentException` when it is null.
+    void setRequest(ServletRequest request)
+    {
+        if (request is null)
+            throw new imported!"flint.java.lang".IllegalArgumentException("Request cannot be null");
+        this.request = request;
+    }
+
+    /// Whether this wrapper wraps `wrapped`, directly or through other wrappers.
+    bool isWrapperFor(ServletRequest wrapped)
+    {
+        if (request is wrapped)
+            return true;
+        if (auto inner = cast(ServletRequestWrapper) request)
+            return inner.isWrapperFor(wrapped);
+        return false;
+    }
+
+    /// Calls `getAttribute` on the wrapped request.
+    Any getAttribute(string name)
+    {
+        return request.getAttribute(name);
+    }
+
+    /// Calls `getAttributeNames` on the wrapped request.
+    string[] getAttributeNames()
+    {
+        return request.getAttributeNames();
+    }
+
+    /// Calls `getCharacterEncoding` on the wrapped request.
+    string getCharacterEncoding()
+    {
+        return request.getCharacterEncoding();
+    }
+
+    /// Calls `setCharacterEncoding` on the wrapped request.
+    void setCharacterEncoding(string env)
+    {
+        request.setCharacterEncoding(env);
+    }
+
+    /// Calls `getContentLength` on the wrapped request.
+    int getContentLength()
+    {
+        return request.getContentLength();
+    }
+
+    /// Calls `getContentLengthLong` on the wrapped request.
+    long getContentLengthLong()
+    {
+        return request.getContentLengthLong();
+    }
+
+    /// Calls `getContentType` on the wrapped request.
+    string getContentType()
+    {
+        return request.getContentType();
+    }
+
+    /// Calls `getInputStream` on the wrapped request.
+    ServletInputStream getInputStream()
+    {
+        return request.getInputStream();
+    }
+
+    /// Calls `getParameter` on the wrapped request.
+    string getParameter(string name)
+    {
+        return request.getParameter(name);
+    }
+
+    /// Calls `getParameterNames` on the wrapped request.
+    string[] getParameterNames()
+    {
+        return request.getParameterNames();
+    }
+
+    /// Calls `getParameterValues` on the wrapped request.
+    string[] getParameterValues(string name)
+    {
+        return request.getParameterValues(name);
+    }
+
+    /// Calls `getParameterMap` on the wrapped request.
+    string[][string] getParameterMap()
+    {
+        return request.getParameterMap();
+    }
+
+    /// Calls `getProtocol` on the wrapped request.
+    string getProtocol()
+    {
+        return request.getProtocol();
+    }
+
+    /// Calls `getScheme` on the wrapped request.
+    string getScheme()
+    {
+        return request.getScheme();
+    }
+
+    /// Calls `getServerName` on the wrapped request.
+    string getServerName()
+    {
+        return request.getServerName();
+    }
+
+    /// Calls `getServerPort` on the wrapped request.
+    int getServerPort()
+    {
+        return request.getServerPort();
+    }
+
+    /// Calls `getRemoteAddr` on the wrapped request.
+    string getRemoteAddr()
+    {
+        return request.getRemoteAddr();
+    }
+
+    /// Calls `getRemoteHost` on the wrapped request.
+    string getRemoteHost()
+    {
+        return request.getRemoteHost();
+    }
+
+    /// Calls `setAttribute` on the wrapped request.
+    void setAttribute(string name, Any o)
+    {
+        request.setAttribute(name, o);
+    }
+
+    /// Calls `removeAttribute` on the wrapped request.
+    void removeAttribute(string name)
+    {
+        request.removeAttribute(name);
+    }
+
+    /// Calls `isSecure` on the wrapped request.
+    bool isSecure()
+    {
+        return request.isSecure();
+    }
+
+    /// Calls `getRequestDispatcher` on the wrapped request.
+    RequestDispatcher getRequestDispatcher(string path)
+    {
+        return request.getRequestDispatcher(path);
+    }
+
+    /// Calls `getRemotePort` on the wrapped request.
+    int getRemotePort()
+    {
+        return request.getRemotePort();
+    }
+
+    /// Calls `getLocalName` on the wrapped request.
+    string getLocalName()
+    {
+        return request.getLocalName();
+    }
+
+    /// Calls `getLocalAddr` on the wrapped request.
+    string getLocalAddr()
+    {
+        return request.getLocalAddr();
+    }
+
+    /// Calls `getLocalPort` on the wrapped request.
+    int getLocalPort()
+    {
+        return request.getLocalPort();
+    }
+
+    /// Calls `getServletContext` on the wrapped request.
+    ServletContext getServletContext()
+    {
+        return request.getServletContext();
+    }
+
+    /// Calls `isAsyncSupported` on the wrapped request.
+    bool isAsyncSupported()
+    {
+        return request.isAsyncSupported();
+    }
+
+    /// Calls `getDispatcherType` on the wrapped request.
+    DispatcherType getDispatcherType()
+    {
+        return request.getDispatcherType();
+    }
+
+    /// Calls `getRequestId` on the wrapped request.
+    string getRequestId()
+    {
+        return request.getRequestId();
+    }
+
+    /// Calls `getProtocolRequestId` on the wrapped request.
+    string getProtocolRequestId()
+    {
+        return request.getProtocolRequestId();
+    }
+
+    /// Calls `getLocale` on the wrapped request.
+    Locale getLocale()
+    {
+        return request.getLocale();
+    }
+
+    /// Calls `getLocales` on the wrapped request.
+    Locale[] getLocales()
+    {
+        return request.getLocales();
+    }
+}
+
+/++
+`jakarta.servlet.ServletResponseWrapper`: a response that delegates every call to the response it wraps.
++/
+class ServletResponseWrapper : ServletResponse
+{
+    private ServletResponse response;
+
+    /// Wraps `response`. Throws `IllegalArgumentException` when it is null.
+    this(ServletResponse response)
+    {
+        if (response is null)
+            throw new imported!"flint.java.lang".IllegalArgumentException("Response cannot be null");
+        this.response = response;
+    }
+
+    /// The wrapped response.
+    ServletResponse getResponse() pure nothrow @nogc
+    {
+        return response;
+    }
+
+    /// Replaces the wrapped response. Throws `IllegalArgumentException` when it is null.
+    void setResponse(ServletResponse response)
+    {
+        if (response is null)
+            throw new imported!"flint.java.lang".IllegalArgumentException("Response cannot be null");
+        this.response = response;
+    }
+
+    /// Whether this wrapper wraps `wrapped`, directly or through other wrappers.
+    bool isWrapperFor(ServletResponse wrapped)
+    {
+        if (response is wrapped)
+            return true;
+        if (auto inner = cast(ServletResponseWrapper) response)
+            return inner.isWrapperFor(wrapped);
+        return false;
+    }
+
+    /// Calls `getCharacterEncoding` on the wrapped response.
+    string getCharacterEncoding()
+    {
+        return response.getCharacterEncoding();
+    }
+
+    /// Calls `getContentType` on the wrapped response.
+    string getContentType()
+    {
+        return response.getContentType();
+    }
+
+    /// Calls `getOutputStream` on the wrapped response.
+    ServletOutputStream getOutputStream()
+    {
+        return response.getOutputStream();
+    }
+
+    /// Calls `getWriter` on the wrapped response.
+    PrintWriter getWriter()
+    {
+        return response.getWriter();
+    }
+
+    /// Calls `setCharacterEncoding` on the wrapped response.
+    void setCharacterEncoding(string charset)
+    {
+        response.setCharacterEncoding(charset);
+    }
+
+    /// Calls `setContentLength` on the wrapped response.
+    void setContentLength(int len)
+    {
+        response.setContentLength(len);
+    }
+
+    /// Calls `setContentLengthLong` on the wrapped response.
+    void setContentLengthLong(long len)
+    {
+        response.setContentLengthLong(len);
+    }
+
+    /// Calls `setContentType` on the wrapped response.
+    void setContentType(string type)
+    {
+        response.setContentType(type);
+    }
+
+    /// Calls `setBufferSize` on the wrapped response.
+    void setBufferSize(int size)
+    {
+        response.setBufferSize(size);
+    }
+
+    /// Calls `getBufferSize` on the wrapped response.
+    int getBufferSize()
+    {
+        return response.getBufferSize();
+    }
+
+    /// Calls `flushBuffer` on the wrapped response.
+    void flushBuffer()
+    {
+        response.flushBuffer();
+    }
+
+    /// Calls `resetBuffer` on the wrapped response.
+    void resetBuffer()
+    {
+        response.resetBuffer();
+    }
+
+    /// Calls `isCommitted` on the wrapped response.
+    bool isCommitted()
+    {
+        return response.isCommitted();
+    }
+
+    /// Calls `reset` on the wrapped response.
+    void reset()
+    {
+        response.reset();
+    }
+
+    /// Calls `setLocale` on the wrapped response.
+    void setLocale(Locale loc)
+    {
+        response.setLocale(loc);
+    }
+
+    /// Calls `getLocale` on the wrapped response.
+    Locale getLocale()
+    {
+        return response.getLocale();
+    }
+}
+
 /// `jakarta.servlet.FilterChain`.
 interface FilterChain
 {

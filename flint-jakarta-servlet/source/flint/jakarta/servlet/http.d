@@ -15,7 +15,7 @@ module flint.jakarta.servlet.http;
 
 import flint.engine.aot.any : Any;
 import flint.jakarta.servlet : Filter, FilterChain, GenericFilter, GenericServlet, ServletException,
-    ServletRequest, ServletResponse;
+    ServletRequest, ServletRequestWrapper, ServletResponse, ServletResponseWrapper;
 
 @safe:
 
@@ -329,6 +329,258 @@ interface HttpServletResponse : ServletResponse
 
     /// The header names.
     string[] getHeaderNames();
+}
+
+/// `jakarta.servlet.http.HttpServletRequestWrapper`: an HTTP request that delegates to the request it wraps.
+class HttpServletRequestWrapper : ServletRequestWrapper, HttpServletRequest
+{
+    /// Wraps `request`. Throws `IllegalArgumentException` when it is null.
+    this(HttpServletRequest request)
+    {
+        super(request);
+    }
+
+    private HttpServletRequest httpRequest()
+    {
+        return cast(HttpServletRequest) getRequest();
+    }
+
+    /// Calls `getAuthType` on the wrapped request.
+    string getAuthType()
+    {
+        return httpRequest().getAuthType();
+    }
+
+    /// Calls `getCookies` on the wrapped request.
+    Cookie[] getCookies()
+    {
+        return httpRequest().getCookies();
+    }
+
+    /// Calls `getDateHeader` on the wrapped request.
+    long getDateHeader(string name)
+    {
+        return httpRequest().getDateHeader(name);
+    }
+
+    /// Calls `getHeader` on the wrapped request.
+    string getHeader(string name)
+    {
+        return httpRequest().getHeader(name);
+    }
+
+    /// Calls `getHeaders` on the wrapped request.
+    string[] getHeaders(string name)
+    {
+        return httpRequest().getHeaders(name);
+    }
+
+    /// Calls `getHeaderNames` on the wrapped request.
+    string[] getHeaderNames()
+    {
+        return httpRequest().getHeaderNames();
+    }
+
+    /// Calls `getIntHeader` on the wrapped request.
+    int getIntHeader(string name)
+    {
+        return httpRequest().getIntHeader(name);
+    }
+
+    /// Calls `getMethod` on the wrapped request.
+    string getMethod()
+    {
+        return httpRequest().getMethod();
+    }
+
+    /// Calls `getPathInfo` on the wrapped request.
+    string getPathInfo()
+    {
+        return httpRequest().getPathInfo();
+    }
+
+    /// Calls `getPathTranslated` on the wrapped request.
+    string getPathTranslated()
+    {
+        return httpRequest().getPathTranslated();
+    }
+
+    /// Calls `getContextPath` on the wrapped request.
+    string getContextPath()
+    {
+        return httpRequest().getContextPath();
+    }
+
+    /// Calls `getQueryString` on the wrapped request.
+    string getQueryString()
+    {
+        return httpRequest().getQueryString();
+    }
+
+    /// Calls `getRemoteUser` on the wrapped request.
+    string getRemoteUser()
+    {
+        return httpRequest().getRemoteUser();
+    }
+
+    /// Calls `isUserInRole` on the wrapped request.
+    bool isUserInRole(string role)
+    {
+        return httpRequest().isUserInRole(role);
+    }
+
+    /// Calls `getRequestedSessionId` on the wrapped request.
+    string getRequestedSessionId()
+    {
+        return httpRequest().getRequestedSessionId();
+    }
+
+    /// Calls `getRequestURI` on the wrapped request.
+    string getRequestURI()
+    {
+        return httpRequest().getRequestURI();
+    }
+
+    /// Calls `getRequestURL` on the wrapped request.
+    string getRequestURL()
+    {
+        return httpRequest().getRequestURL();
+    }
+
+    /// Calls `getServletPath` on the wrapped request.
+    string getServletPath()
+    {
+        return httpRequest().getServletPath();
+    }
+
+    /// Calls `isRequestedSessionIdValid` on the wrapped request.
+    bool isRequestedSessionIdValid()
+    {
+        return httpRequest().isRequestedSessionIdValid();
+    }
+}
+
+/// `jakarta.servlet.http.HttpServletResponseWrapper`: an HTTP response that delegates to the response it wraps.
+class HttpServletResponseWrapper : ServletResponseWrapper, HttpServletResponse
+{
+    /// Wraps `response`. Throws `IllegalArgumentException` when it is null.
+    this(HttpServletResponse response)
+    {
+        super(response);
+    }
+
+    private HttpServletResponse httpResponse()
+    {
+        return cast(HttpServletResponse) getResponse();
+    }
+
+    /// Calls `addCookie` on the wrapped response.
+    void addCookie(Cookie cookie)
+    {
+        httpResponse().addCookie(cookie);
+    }
+
+    /// Calls `containsHeader` on the wrapped response.
+    bool containsHeader(string name)
+    {
+        return httpResponse().containsHeader(name);
+    }
+
+    /// Calls `encodeURL` on the wrapped response.
+    string encodeURL(string url)
+    {
+        return httpResponse().encodeURL(url);
+    }
+
+    /// Calls `encodeRedirectURL` on the wrapped response.
+    string encodeRedirectURL(string url)
+    {
+        return httpResponse().encodeRedirectURL(url);
+    }
+
+    /// Calls `sendError` on the wrapped response.
+    void sendError(int sc, string msg)
+    {
+        httpResponse().sendError(sc, msg);
+    }
+
+    /// Calls `sendError` on the wrapped response.
+    void sendError(int sc)
+    {
+        httpResponse().sendError(sc);
+    }
+
+    /// Calls `sendRedirect` on the wrapped response.
+    void sendRedirect(string location)
+    {
+        httpResponse().sendRedirect(location);
+    }
+
+    /// Calls `setDateHeader` on the wrapped response.
+    void setDateHeader(string name, long date)
+    {
+        httpResponse().setDateHeader(name, date);
+    }
+
+    /// Calls `addDateHeader` on the wrapped response.
+    void addDateHeader(string name, long date)
+    {
+        httpResponse().addDateHeader(name, date);
+    }
+
+    /// Calls `setHeader` on the wrapped response.
+    void setHeader(string name, string value)
+    {
+        httpResponse().setHeader(name, value);
+    }
+
+    /// Calls `addHeader` on the wrapped response.
+    void addHeader(string name, string value)
+    {
+        httpResponse().addHeader(name, value);
+    }
+
+    /// Calls `setIntHeader` on the wrapped response.
+    void setIntHeader(string name, int value)
+    {
+        httpResponse().setIntHeader(name, value);
+    }
+
+    /// Calls `addIntHeader` on the wrapped response.
+    void addIntHeader(string name, int value)
+    {
+        httpResponse().addIntHeader(name, value);
+    }
+
+    /// Calls `setStatus` on the wrapped response.
+    void setStatus(int sc)
+    {
+        httpResponse().setStatus(sc);
+    }
+
+    /// Calls `getStatus` on the wrapped response.
+    int getStatus()
+    {
+        return httpResponse().getStatus();
+    }
+
+    /// Calls `getHeader` on the wrapped response.
+    string getHeader(string name)
+    {
+        return httpResponse().getHeader(name);
+    }
+
+    /// Calls `getHeaders` on the wrapped response.
+    string[] getHeaders(string name)
+    {
+        return httpResponse().getHeaders(name);
+    }
+
+    /// Calls `getHeaderNames` on the wrapped response.
+    string[] getHeaderNames()
+    {
+        return httpResponse().getHeaderNames();
+    }
 }
 
 /// `jakarta.servlet.http.HttpServlet`: dispatches `service` to `doGet`, `doPost`, ...

@@ -24,8 +24,8 @@ import flint.engine.web.fiber : FiberResponse, FiberRoute;
 import flint.engine.web.runtime : Server;
 import flint.engine.web.types : Request, RequestContext, ServerOptions, ShutdownMode;
 import flint.jakarta.servlet : DispatcherType, Filter, FilterChain, FilterConfig,
-    FilterRegistration, RequestDispatcher, Servlet,
-    ServletConfig, ServletContext, ServletException, ServletRegistration, ServletRequest, ServletResponse;
+    FilterRegistration, RequestDispatcher, Servlet, ServletConfig,
+    ServletContext, ServletException, ServletRegistration, ServletRequest, ServletRequestWrapper, ServletResponse;
 import flint.java.lang : IllegalArgumentException, IllegalStateException;
 
 @safe:
@@ -672,7 +672,24 @@ private bool urlPatternMatches(string pattern, string servletPath) pure nothrow 
     return false;
 }
 
-/// Tomcat's `ApplicationFilterChain`: the matching filters in order, then the servlet.
+/// The engine's own request under any `ServletRequestWrapper`s a filter put around it (Tomcat's
+/// `ApplicationDispatcher` walks the wrappers the same way); null for a request from elsewhere.
+private ServletEngineRequest engineRequest(ServletRequest request)
+{
+    for (auto current = request; current !is null;)
+    {
+        if (auto own = cast(ServletEngineRequest) current)
+            return own;
+        auto wrapper = cast(ServletRequestWrapper) current;
+        if (wrapper is null)
+            return null;
+        current = wrapper.getRequest();
+    }
+    return null;
+}
+
+/// Tomcat's `ApplicationFilterChain`: the matching filters in order, then the servlet. Matching reads the
+/// engine's request, so a wrapper a filter passes on does not change which filters run.
 private final class Chain : FilterChain
 {
     private ServletEngine engine;
@@ -687,7 +704,7 @@ private final class Chain : FilterChain
 
     void doFilter(ServletRequest request, ServletResponse response)
     {
-        auto http = cast(ServletEngineRequest) request;
+        auto http = engineRequest(request);
         const servletPath = http is null ? "/" : http.getServletPath();
         while (next < engine.chainOrder.length)
         {
@@ -716,7 +733,7 @@ private final class EngineDispatcher : RequestDispatcher
 
     void forward(ServletRequest request, ServletResponse response)
     {
-        auto http = cast(ServletEngineRequest) request;
+        auto http = engineRequest(request);
         if (http is null)
             throw new ServletException("the servlet engine forwards its own requests only");
         if (response.isCommitted())
@@ -745,7 +762,7 @@ private final class EngineDispatcher : RequestDispatcher
 
     void include(ServletRequest request, ServletResponse response)
     {
-        auto http = cast(ServletEngineRequest) request;
+        auto http = engineRequest(request);
         if (http is null)
             throw new ServletException("the servlet engine includes its own requests only");
         http.setAttribute(RequestDispatcher.INCLUDE_REQUEST_URI, Any.of(http.getContextPath() ~ path));

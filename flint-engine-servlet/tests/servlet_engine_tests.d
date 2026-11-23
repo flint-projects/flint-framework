@@ -9,7 +9,7 @@ import flint.engine.aot.any : Any;
 import flint.engine.servlet : ServletEngine, ServletEngineException, ServletEngineOptions;
 import flint.jakarta.servlet : DispatcherType, Filter, FilterChain, RequestDispatcher,
     ServletRequest, ServletResponse;
-import flint.jakarta.servlet.http : HttpServlet, HttpServletRequest, HttpServletResponse;
+import flint.jakarta.servlet.http : HttpServlet, HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse;
 import flint.java.lang : IllegalStateException;
 import flint.java.util : Locale;
 import std.socket : InternetAddress, Socket, SocketOption, SocketOptionLevel, TcpSocket;
@@ -497,4 +497,69 @@ unittest
     auto reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
     assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nX-Filter: early\r\nX-Filter: named\r\nX-Filter: late\r\n"
             ~ "Content-Type: application/json\r\nContent-Length: 34\r\n\r\n", reply.head);
+}
+
+/// A request with one header added, as Spring Security's wrappers add to the request they wrap.
+private final class WrappedRequest : HttpServletRequestWrapper
+{
+    this(HttpServletRequest request)
+    {
+        super(request);
+    }
+
+    override string getHeader(string name)
+    {
+        return name == "X-Wrapped" ? "yes" : super.getHeader(name);
+    }
+}
+
+/// Passes a `WrappedRequest` down the chain.
+private final class Wrapping : Filter
+{
+    mixin Filter.Defaults;
+
+    void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+    {
+        chain.doFilter(new WrappedRequest(cast(HttpServletRequest) request), response);
+    }
+}
+
+/// Forwards `/api/forward` to `/api/target`, which reports what it sees.
+private final class Forwarding : HttpServlet
+{
+    protected override void doGet(HttpServletRequest request, HttpServletResponse response)
+    {
+        if (request.getServletPath() == "/api/forward")
+            return request.getRequestDispatcher("/api/target").forward(request, response);
+        response.setHeader("X-Seen", request.getHeader("X-Wrapped"));
+        response.setHeader("X-Path", request.getServletPath());
+        response.setContentType("text/plain");
+        response.getWriter().write("ok");
+    }
+}
+
+@("a request a filter wraps still selects the filters mapped to its path, and forwards through the engine")
+unittest
+{
+    ServletEngineOptions options;
+    options.address = "127.0.0.1";
+    options.port = 0;
+    auto engine = new ServletEngine(options);
+    auto context = engine.getServletContext();
+    context.addServlet("dispatcherServlet", new Forwarding).addMapping("/");
+    context.addFilter("wrapping", new Wrapping).addMappingForUrlPatterns(null, false, "/*");
+    context.addFilter("api", new Tagging("api")).addMappingForUrlPatterns(null, false, "/api/*");
+    engine.start();
+    scope (exit)
+        engine.stop();
+
+    auto socket = new TcpSocket(new InternetAddress("127.0.0.1", cast(ushort) engine.getPort()));
+    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.RCVTIMEO, dur!"msecs"(3_000));
+    scope (exit)
+        socket.close();
+    char[] pending;
+    auto reply = exchange(socket, pending, "GET /api/forward HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nX-Filter: api\r\nX-Seen: yes\r\nX-Path: /api/target\r\n"
+            ~ "Content-Type: text/plain;charset=ISO-8859-1\r\nContent-Length: 2\r\n\r\n", reply.head);
+    assert(reply.content == "ok");
 }
