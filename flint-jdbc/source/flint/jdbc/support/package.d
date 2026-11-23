@@ -2,14 +2,15 @@
 // Copyright 2002-present the original author or authors.
 // Licensed under the Apache License, Version 2.0.
 // Modified by the Flint authors.
-// Also ported: AbstractFallbackSQLExceptionTranslator.java, SQLExceptionSubclassTranslator.java and
-// SQLStateSQLExceptionTranslator.java.
+// Also ported: AbstractFallbackSQLExceptionTranslator.java, SQLExceptionSubclassTranslator.java,
+// SQLStateSQLExceptionTranslator.java and JdbcTransactionManager.java.
 
 /++
 `org.springframework.jdbc.support`: the translation of `SQLException`s into Spring's `DataAccessException`
 hierarchy. `SQLExceptionSubclassTranslator` reads the JDBC 4 subclass the Flint driver throws and falls back to
-`SQLStateSQLExceptionTranslator`, which reads the SQLSTATE class (ADR-030). The error-code translator, which reads
-`sql-error-codes.xml`, and the rest of the package follow with `JdbcTemplate`.
+`SQLStateSQLExceptionTranslator`, which reads the SQLSTATE class (ADR-030). `JdbcTransactionManager` is the
+`DataSourceTransactionManager` that translates commit and rollback failures with them. The error-code translator,
+which reads `sql-error-codes.xml`, and the rest of the package follow with `JdbcTemplate`.
 +/
 module flint.jdbc.support;
 
@@ -19,7 +20,7 @@ import flint.dao : CannotAcquireLockException, DataAccessException,
     PermissionDeniedDataAccessException,
     PessimisticLockingFailureException,
     QueryTimeoutException, RecoverableDataAccessException, TransientDataAccessResourceException;
-import flint.java.lang : IllegalArgumentException;
+import flint.java.lang : IllegalArgumentException, RuntimeException;
 import flint.java.sql : BatchUpdateException, SQLDataException, SQLException,
     SQLFeatureNotSupportedException, SQLIntegrityConstraintViolationException,
     SQLInvalidAuthorizationSpecException, SQLNonTransientConnectionException,
@@ -27,7 +28,9 @@ import flint.java.sql : BatchUpdateException, SQLDataException, SQLException,
     SQLRecoverableException,
     SQLSyntaxErrorException, SQLTimeoutException,
     SQLTransactionRollbackException, SQLTransientConnectionException, SQLTransientException;
+import flint.javax.sql : DataSource;
 import flint.jdbc : BadSqlGrammarException, orNull;
+import flint.jdbc.datasource : DataSourceTransactionManager;
 import flint.slf4j : Logger, LoggerFactory;
 
 @safe:
@@ -339,4 +342,85 @@ private bool contains(string haystack, string needle) pure nothrow @nogc
         if (haystack[start .. start + needle.length] == needle)
             return true;
     return false;
+}
+
+/++
+`JdbcAccessor`-aligned subclass of the plain `DataSourceTransactionManager`, adding common JDBC exception translation
+for the commit and rollback step. Functionally equivalent otherwise.
+
+Flint has no `sql-error-codes.xml`, so the translator is always `SQLExceptionSubclassTranslator`, which falls back to
+the SQLSTATE translator; `setDatabaseProductName` keeps the configuration surface.
++/
+class JdbcTransactionManager : DataSourceTransactionManager
+{
+    private SQLExceptionTranslator exceptionTranslator;
+    private bool lazyInit = true;
+
+    /// Create a new `JdbcTransactionManager` instance. A `DataSource` has to be set to be able to use it.
+    this()
+    {
+    }
+
+    /// Create a new `JdbcTransactionManager` instance for the given `DataSource`.
+    this(DataSource dataSource)
+    {
+        // Java's setDataSource and afterPropertiesSet; lazyInit is true here, so nothing else initializes.
+        super(dataSource);
+    }
+
+    /// Specify the database product name for the `DataSource` that this transaction manager operates on. Without
+    /// an error codes file, this selects `SQLExceptionSubclassTranslator`.
+    void setDatabaseProductName(string)
+    {
+        exceptionTranslator = new SQLExceptionSubclassTranslator;
+    }
+
+    /// Set the exception translator for this transaction manager.
+    void setExceptionTranslator(SQLExceptionTranslator exceptionTranslator)
+    {
+        this.exceptionTranslator = exceptionTranslator;
+    }
+
+    /// Return the exception translator to use for this instance, creating a default if necessary.
+    SQLExceptionTranslator getExceptionTranslator()
+    {
+        synchronized (this)
+        {
+            if (exceptionTranslator is null)
+                exceptionTranslator = new SQLExceptionSubclassTranslator;
+            return exceptionTranslator;
+        }
+    }
+
+    /// Set whether to lazily initialize the `SQLExceptionTranslator` for this transaction manager, on first
+    /// encounter of an `SQLException`. Default is true; can be switched to false for initialization on startup.
+    void setLazyInit(bool lazyInit)
+    {
+        this.lazyInit = lazyInit;
+    }
+
+    /// Return whether to lazily initialize the `SQLExceptionTranslator` for this transaction manager.
+    bool isLazyInit()
+    {
+        return lazyInit;
+    }
+
+    /// Eagerly initialize the exception translator, if demanded, creating a default one for the specified
+    /// `DataSource` if none set.
+    override void afterPropertiesSet()
+    {
+        super.afterPropertiesSet();
+        if (!isLazyInit())
+            getExceptionTranslator();
+    }
+
+    /// This implementation attempts to use the `SQLExceptionTranslator`, falling back to a
+    /// `TransactionSystemException`.
+    protected override RuntimeException translateException(string task, SQLException ex)
+    {
+        auto dae = getExceptionTranslator().translate(task, null, ex);
+        if (dae !is null)
+            return dae;
+        return super.translateException(task, ex);
+    }
 }
