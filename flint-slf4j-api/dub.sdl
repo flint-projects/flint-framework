@@ -1,0 +1,23 @@
+name "slf4j-api"
+description "SLF4J 2.0 API for Flint: LoggerFactory, Logger with {} placeholders, MDC on FiberLocal, Marker (org.slf4j)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:arena" version="*"
+dependency "flint:conc" version="*"
+dependency "flint:engine-aot" version="*"
+dependency "flint:engine-reactor" version="*"
+dependency "flint:java" version="*"
+dependency "flint:log" version="*"
+dependency "flint:serde" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}
