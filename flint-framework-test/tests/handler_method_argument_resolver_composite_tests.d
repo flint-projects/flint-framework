@@ -107,20 +107,16 @@ unittest
     assert(resolvedValue == Any.of(1), "Didn't use the first registered resolver");
 }
 
-// Behaviour: for an unsupported parameter the port throws IllegalStateException, Spring IllegalArgumentException.
-version (FlintArgumentResolverUnsupportedIllegalArgument)
-{
-    import flint.java.lang : IllegalArgumentException;
+import flint.java.lang : IllegalArgumentException;
 
-    @("HandlerMethodArgumentResolverCompositeTests.noSuitableArgumentResolver")
-    unittest
-    {
-        auto f = setup();
-        bool thrown;
-        try
-            f.resolverComposite.resolveArgument(f.paramStr, null, null, null);
-        catch (IllegalArgumentException)
-            thrown = true;
-        assert(thrown);
-    }
+@("HandlerMethodArgumentResolverCompositeTests.noSuitableArgumentResolver")
+unittest
+{
+    auto f = setup();
+    bool thrown;
+    try
+        f.resolverComposite.resolveArgument(f.paramStr, null, null, null);
+    catch (IllegalArgumentException)
+        thrown = true;
+    assert(thrown);
 }

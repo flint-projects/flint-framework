@@ -200,20 +200,34 @@ abstract class AbstractNamedValueMethodArgumentResolver : HandlerMethodArgumentR
                 arg = Any.of(namedValueInfo.defaultValue);
             else if (namedValueInfo.required && !parameter.isOptional())
                 handleMissingValue(namedValueInfo.name, parameter, webRequest);
-            arg = handleNullValue(namedValueInfo.name, arg, parameter.getNestedParameterType());
+            // Optional!int stands for Optional<Integer>: its element is a wrapper, never a primitive.
+            if (!parameter.isOptional())
+                arg = handleNullValue(namedValueInfo.name, arg, parameter.getNestedParameterType());
         }
         else if (arg.holds!string && arg.get!string.length == 0 && namedValueInfo.defaultValue !is null)
             arg = Any.of(namedValueInfo.defaultValue);
-        if (binderFactory !is null && !arg.isNull())
+        if (binderFactory !is null)
         {
+            const targetType = parameter.getParameterType();
+            Any value = arg;
             try
-                arg = binderFactory.convertIfNecessary(arg, parameter.getNestedParameterType(), parameter);
+            {
+                arg = binderFactory.convertIfNecessary(value, targetType, parameter);
+                // Check for a null value after conversion of the incoming value (gh-29550, gh-31336).
+                if (arg.isNull())
+                {
+                    if (namedValueInfo.defaultValue !is null)
+                    {
+                        value = Any.of(namedValueInfo.defaultValue);
+                        arg = binderFactory.convertIfNecessary(value, targetType, parameter);
+                    }
+                    else if (namedValueInfo.required && !parameter.isOptional())
+                        handleMissingValueAfterConversion(namedValueInfo.name, parameter, webRequest);
+                }
+            }
             catch (ConversionFailedException ex)
-                throw new MethodArgumentTypeMismatchException(arg,
+                throw new MethodArgumentTypeMismatchException(value,
                         parameter.getNestedParameterType(), namedValueInfo.name, parameter, ex);
-            if (arg.isNull() && namedValueInfo.defaultValue is null && namedValueInfo.required
-                    && !parameter.isOptional())
-                handleMissingValueAfterConversion(namedValueInfo.name, parameter, webRequest);
         }
         handleResolvedValue(arg, namedValueInfo.name, parameter, mavContainer, webRequest);
         return arg;

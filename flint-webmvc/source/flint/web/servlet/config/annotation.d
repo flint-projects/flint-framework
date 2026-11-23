@@ -382,6 +382,8 @@ class WebMvcConfigurationSupport
             configurer.addReturnValueHandlers(customHandlers);
         }
         auto adapter = new RequestMappingHandlerAdapter(getMessageConverters(), null, customResolvers, customHandlers);
+        if (descriptors !is null)
+            adapter.setDescriptors(descriptors);
         if (validator !is null)
             adapter.setValidator(validator, descriptors);
 

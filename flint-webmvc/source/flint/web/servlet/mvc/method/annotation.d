@@ -44,7 +44,7 @@ import flint.web.method.annotation : AbstractNamedValueMethodArgumentResolver, C
 import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodArgumentResolverComposite,
     HandlerMethodReturnValueHandler,
     HandlerMethodReturnValueHandlerComposite, InvocableHandlerMethod, ModelAndViewContainer;
-import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView;
+import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView, View;
 import flint.web.servlet.handler : AbstractHandlerExceptionResolver;
 import flint.web.cors : CorsConfiguration;
 import flint.web.servlet.mvc.method : RequestMappingInfo, RequestMappingInfoHandlerMapping;
@@ -228,6 +228,16 @@ class PathVariableMethodArgumentResolver : AbstractNamedValueMethodArgumentResol
             NativeWebRequest request)
     {
         throw new MissingPathVariableException(name, parameter, true);
+    }
+
+    /// Records the value under `View.PATH_VARIABLES`, for views and redirects.
+    protected override void handleResolvedValue(Any arg, string name, MethodParameter parameter,
+            ModelAndViewContainer mavContainer, NativeWebRequest request)
+    {
+        auto existing = request.getAttribute(View.PATH_VARIABLES, WebRequest.SCOPE_REQUEST);
+        Any[string] pathVars = existing.isNull() ? null : existing.get!(Any[string]);
+        pathVars[name] = arg;
+        request.setAttribute(View.PATH_VARIABLES, Any.of(pathVars), WebRequest.SCOPE_REQUEST);
     }
 }
 
@@ -857,6 +867,13 @@ class RequestMappingHandlerAdapter : HandlerAdapter
     package(flint) WebDataBinderFactory getBinderFactory() pure nothrow @nogc
     {
         return binderFactory;
+    }
+
+    /// The descriptors request values convert through (`Optional!T` and array parameters); Spring's conversion
+    /// service in the `WebBindingInitializer`.
+    package(flint) void setDescriptors(DescriptorTable descriptors)
+    {
+        binderFactory = new DefaultDataBinderFactory(descriptors);
     }
 
     bool supports(Object handler)

@@ -15,7 +15,7 @@ module flint.web.request_param_method_argument_resolver_tests;
 
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : MergedAnnotation;
+import flint.engine.aot.descriptor : DescriptorTable, MergedAnnotation, descriptorOf;
 import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec;
 import flint.engine.aot.name : typeNameOf;
 import flint.java.util : List, Optional;
@@ -166,6 +166,18 @@ private E thrown(E : Exception)(scope void delegate() @safe action)
     catch (E ex)
         return ex;
     return null;
+}
+
+/// The descriptors the generated registry holds for the `Optional!T` and collection parameters: the D stand-in for
+/// the conversion service's run-time type information.
+private DescriptorTable optionalDescriptors()
+{
+    auto table = new DescriptorTable;
+    table.add(descriptorOf!(Optional!int));
+    table.add(descriptorOf!(Optional!(int[])));
+    table.add(descriptorOf!(Optional!(List!string)));
+    table.add(descriptorOf!(List!string));
+    return table;
 }
 
 /// Mockito's `WebDataBinderFactory` mock whose binder has `StringTrimmerEditor(true)` for `String`: strings are
@@ -619,21 +631,16 @@ unittest
     assert(result.isNull());
 }
 
-// gh-31336: the port's conversion rejects a blank `bool` value instead of converting it to null (Spring's
-// StringToBooleanConverter), so the default value is never applied.
-version (FlintWebBlankConversionToNull)
+@("RequestParamMethodArgumentResolverTests.missingRequestParamAfterConversionWithDefaultValue")
+unittest
 {
-    @("RequestParamMethodArgumentResolverTests.missingRequestParamAfterConversionWithDefaultValue")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
-        f.request.addParameter("booleanParam", " ");
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+    f.request.addParameter("booleanParam", " ");
 
-        MethodParameter param = arg(Handle.booleanParam);
-        const result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!bool == false);
-    }
+    MethodParameter param = arg(Handle.booleanParam);
+    const result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!bool == false);
 }
 
 @("RequestParamMethodArgumentResolverTests.missingRequestParamEmptyValueNotRequired")
@@ -648,20 +655,16 @@ unittest
     assert(result.isNull());
 }
 
-// gh-29550: when conversion yields null, the port does not fall back to the default value.
-version (FlintWebDefaultValueAfterConversion)
+@("RequestParamMethodArgumentResolverTests.missingRequestParamEmptyValueNotRequiredWithDefaultValue")
+unittest
 {
-    @("RequestParamMethodArgumentResolverTests.missingRequestParamEmptyValueNotRequiredWithDefaultValue")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new StringTrimmerBinderFactory();
-        f.request.addParameter("name", "    ");
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new StringTrimmerBinderFactory();
+    f.request.addParameter("name", "    ");
 
-        MethodParameter param = arg(Handle.param1);
-        const result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(!result.isNull() && result.get!string == "bar");
-    }
+    MethodParameter param = arg(Handle.param1);
+    const result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(!result.isNull() && result.get!string == "bar");
 }
 
 @("RequestParamMethodArgumentResolverTests.resolveSimpleTypeParam")
@@ -715,101 +718,97 @@ unittest
     assert(!result.isNull() && result.get!string == "");
 }
 
-// The resolver neither wraps values in Optional nor returns Optional.empty() for a missing Optional!T parameter.
-version (FlintWebJavaOptional)
+@("RequestParamMethodArgumentResolverTests.resolveOptionalParamValue")
+unittest
 {
-    @("RequestParamMethodArgumentResolverTests.resolveOptionalParamValue")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        MethodParameter param = arg(Handle.paramOptional);
-        Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!(Optional!int).isEmpty());
+    MethodParameter param = arg(Handle.paramOptional);
+    Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!(Optional!int).isEmpty());
 
-        f.request.addParameter("name", "123");
-        result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.holds!(Optional!int));
-        assert(result.get!(Optional!int).get() == 123);
-    }
+    f.request.addParameter("name", "123");
+    result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.holds!(Optional!int));
+    assert(result.get!(Optional!int).get() == 123);
+}
 
-    @("RequestParamMethodArgumentResolverTests.missingOptionalParamValue")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+@("RequestParamMethodArgumentResolverTests.missingOptionalParamValue")
+unittest
+{
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        MethodParameter param = arg(Handle.paramOptional);
-        Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!(Optional!int).isEmpty());
+    MethodParameter param = arg(Handle.paramOptional);
+    Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!(Optional!int).isEmpty());
 
-        result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.holds!(Optional!int));
-        assert(!result.get!(Optional!int).isPresent());
-    }
+    result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.holds!(Optional!int));
+    assert(!result.get!(Optional!int).isPresent());
+}
 
-    @("RequestParamMethodArgumentResolverTests.resolveOptionalParamArray")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+@("RequestParamMethodArgumentResolverTests.resolveOptionalParamArray")
+unittest
+{
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        MethodParameter param = arg(Handle.paramOptionalArray);
-        Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!(Optional!(int[])).isEmpty());
+    MethodParameter param = arg(Handle.paramOptionalArray);
+    Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!(Optional!(int[])).isEmpty());
 
-        f.request.addParameter("name", "123", "456");
-        result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.holds!(Optional!(int[])));
-        assert(result.get!(Optional!(int[])).get() == [123, 456]);
-    }
+    f.request.addParameter("name", "123", "456");
+    result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.holds!(Optional!(int[])));
+    assert(result.get!(Optional!(int[])).get() == [123, 456]);
+}
 
-    @("RequestParamMethodArgumentResolverTests.missingOptionalParamArray")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+@("RequestParamMethodArgumentResolverTests.missingOptionalParamArray")
+unittest
+{
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        MethodParameter param = arg(Handle.paramOptionalArray);
-        Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!(Optional!(int[])).isEmpty());
+    MethodParameter param = arg(Handle.paramOptionalArray);
+    Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!(Optional!(int[])).isEmpty());
 
-        result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.holds!(Optional!(int[])));
-        assert(!result.get!(Optional!(int[])).isPresent());
-    }
+    result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.holds!(Optional!(int[])));
+    assert(!result.get!(Optional!(int[])).isPresent());
+}
 
-    @("RequestParamMethodArgumentResolverTests.resolveOptionalParamList")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+@("RequestParamMethodArgumentResolverTests.resolveOptionalParamList")
+unittest
+{
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        MethodParameter param = arg(Handle.paramOptionalList);
-        Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!(Optional!(List!string)).isEmpty());
+    MethodParameter param = arg(Handle.paramOptionalList);
+    Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!(Optional!(List!string)).isEmpty());
 
-        f.request.addParameter("name", "123", "456");
-        result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.holds!(Optional!(List!string)));
-        assert(result.get!(Optional!(List!string)).get().toArray() == ["123", "456"]);
-    }
+    f.request.addParameter("name", "123", "456");
+    result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.holds!(Optional!(List!string)));
+    assert(result.get!(Optional!(List!string)).get().toArray() == ["123", "456"]);
+}
 
-    @("RequestParamMethodArgumentResolverTests.missingOptionalParamList")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+@("RequestParamMethodArgumentResolverTests.missingOptionalParamList")
+unittest
+{
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        MethodParameter param = arg(Handle.paramOptionalList);
-        Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.get!(Optional!(List!string)).isEmpty());
+    MethodParameter param = arg(Handle.paramOptionalList);
+    Any result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.get!(Optional!(List!string)).isEmpty());
 
-        result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
-        assert(result.holds!(Optional!(List!string)));
-        assert(!result.get!(Optional!(List!string)).isPresent());
-    }
+    result = f.resolver.resolveArgument(param, null, f.webRequest, binderFactory);
+    assert(result.holds!(Optional!(List!string)));
+    assert(!result.get!(Optional!(List!string)).isPresent());
 }
 
 // MultipartFile and its mocks are not ported.

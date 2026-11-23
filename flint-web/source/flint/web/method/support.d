@@ -17,7 +17,7 @@ import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.mapping : HandlerArguments;
 import flint.http : HttpStatusCode;
-import flint.java.lang : IllegalStateException;
+import flint.java.lang : IllegalArgumentException, IllegalStateException;
 import flint.java.util : LinkedHashMap;
 import flint.web.bind.support : WebDataBinderFactory;
 import flint.web.context.request : NativeWebRequest;
@@ -83,7 +83,7 @@ class HandlerMethodArgumentResolverComposite : HandlerMethodArgumentResolver
     {
         auto resolver = getArgumentResolver(parameter);
         if (resolver is null)
-            throw new IllegalStateException("Unsupported parameter type [" ~ parameter.getParameterType()
+            throw new IllegalArgumentException("Unsupported parameter type [" ~ parameter.getParameterType()
                     ~ "]. supportsParameter should be called first.");
         return resolver.resolveArgument(parameter, mavContainer, webRequest, binderFactory);
     }
@@ -132,7 +132,7 @@ class HandlerMethodReturnValueHandlerComposite : HandlerMethodReturnValueHandler
     {
         auto handler = selectHandler(returnValue, returnType);
         if (handler is null)
-            throw new IllegalStateException("Unknown return value type: " ~ returnType.getParameterType());
+            throw new IllegalArgumentException("Unknown return value type: " ~ returnType.getParameterType());
         handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
     }
 

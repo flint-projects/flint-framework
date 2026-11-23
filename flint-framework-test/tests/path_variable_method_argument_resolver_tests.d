@@ -14,7 +14,7 @@ module flint.web.path_variable_method_argument_resolver_tests;
 
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : MergedAnnotation;
+import flint.engine.aot.descriptor : DescriptorTable, MergedAnnotation, descriptorOf;
 import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec;
 import flint.engine.aot.name : typeNameOf;
 import flint.java.util : Optional;
@@ -28,6 +28,14 @@ import flint.web.servlet : HandlerMapping, View;
 import flint.web.servlet.mvc.method.annotation : PathVariableMethodArgumentResolver;
 
 @safe:
+
+/// The descriptor the generated registry holds for the `Optional!string` parameter.
+private DescriptorTable optionalDescriptors()
+{
+    auto table = new DescriptorTable;
+    table.add(descriptorOf!(Optional!string));
+    return table;
+}
 
 private struct Fixture
 {
@@ -108,66 +116,60 @@ unittest
     assert(!f.resolver.supportsParameter(f.paramString), "Parameter without @PathVariable annotation");
 }
 
-// The port does not expose resolved path variables under View.PATH_VARIABLES (Spring's handleResolvedValue).
-version (FlintWebPathVariablesAttribute)
+@("PathVariableMethodArgumentResolverTests.resolveArgument")
+unittest
 {
-    @("PathVariableMethodArgumentResolverTests.resolveArgument")
-    unittest
-    {
-        auto f = setup();
-        string[2][] uriTemplateVars = [["name", "value"]];
-        f.request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(uriTemplateVars));
+    auto f = setup();
+    string[2][] uriTemplateVars = [["name", "value"]];
+    f.request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(uriTemplateVars));
 
-        const result = f.resolver.resolveArgument(f.paramNamedString, f.mavContainer, f.webRequest, null);
-        assert(result.get!string == "value", "PathVariable not resolved correctly");
+    const result = f.resolver.resolveArgument(f.paramNamedString, f.mavContainer, f.webRequest, null);
+    assert(result.get!string == "value", "PathVariable not resolved correctly");
 
-        const pathVarsAttribute = f.request.getAttribute(View.PATH_VARIABLES);
-        assert(!pathVarsAttribute.isNull());
-        auto pathVars = pathVarsAttribute.get!(Any[string]);
-        assert(pathVars.length == 1);
-        assert(pathVars["name"] == Any.of("value"));
-    }
-
-    @("PathVariableMethodArgumentResolverTests.resolveArgumentNotRequired")
-    unittest
-    {
-        auto f = setup();
-        string[2][] uriTemplateVars = [["name", "value"]];
-        f.request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(uriTemplateVars));
-
-        const result = f.resolver.resolveArgument(f.paramNotRequired, f.mavContainer, f.webRequest, null);
-        assert(result.get!string == "value", "PathVariable not resolved correctly");
-
-        const pathVarsAttribute = f.request.getAttribute(View.PATH_VARIABLES);
-        assert(!pathVarsAttribute.isNull());
-        auto pathVars = pathVarsAttribute.get!(Any[string]);
-        assert(pathVars.length == 1);
-        assert(pathVars["name"] == Any.of("value"));
-    }
+    const pathVarsAttribute = f.request.getAttribute(View.PATH_VARIABLES);
+    assert(!pathVarsAttribute.isNull());
+    auto pathVars = pathVarsAttribute.get!(Any[string]);
+    assert(pathVars.length == 1);
+    assert(pathVars["name"] == Any.of("value"));
 }
 
-// The resolver neither wraps values in Optional nor returns Optional.empty() for a missing Optional!T parameter.
-version (FlintWebJavaOptional)
+@("PathVariableMethodArgumentResolverTests.resolveArgumentNotRequired")
+unittest
 {
-    @("PathVariableMethodArgumentResolverTests.resolveArgumentWrappedAsOptional")
-    unittest
-    {
-        auto f = setup();
-        string[2][] uriTemplateVars = [["name", "value"]];
-        f.request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(uriTemplateVars));
+    auto f = setup();
+    string[2][] uriTemplateVars = [["name", "value"]];
+    f.request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(uriTemplateVars));
 
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+    const result = f.resolver.resolveArgument(f.paramNotRequired, f.mavContainer, f.webRequest, null);
+    assert(result.get!string == "value", "PathVariable not resolved correctly");
 
-        const result = f.resolver.resolveArgument(f.paramOptional, f.mavContainer, f.webRequest,
-                binderFactory).get!(Optional!string);
-        assert(result.isPresent() && result.get() == "value", "PathVariable not resolved correctly");
+    const pathVarsAttribute = f.request.getAttribute(View.PATH_VARIABLES);
+    assert(!pathVarsAttribute.isNull());
+    auto pathVars = pathVarsAttribute.get!(Any[string]);
+    assert(pathVars.length == 1);
+    assert(pathVars["name"] == Any.of("value"));
+}
 
-        const pathVarsAttribute = f.request.getAttribute(View.PATH_VARIABLES);
-        assert(!pathVarsAttribute.isNull());
-        auto pathVars = pathVarsAttribute.get!(Any[string]);
-        assert(pathVars.length == 1);
-        assert(pathVars["name"] == Any.of(Optional!string.of("value")));
-    }
+@("PathVariableMethodArgumentResolverTests.resolveArgumentWrappedAsOptional")
+unittest
+{
+    auto f = setup();
+    string[2][] uriTemplateVars = [["name", "value"]];
+    f.request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(uriTemplateVars));
+
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
+
+    const result = f.resolver.resolveArgument(f.paramOptional, f.mavContainer, f.webRequest,
+            binderFactory).get!(Optional!string);
+    assert(result.isPresent() && result.get() == "value", "PathVariable not resolved correctly");
+
+    const pathVarsAttribute = f.request.getAttribute(View.PATH_VARIABLES);
+    assert(!pathVarsAttribute.isNull());
+    auto pathVars = pathVarsAttribute.get!(Any[string]);
+    assert(pathVars.length == 1);
+    // Any compares boxed values by identity, so the optional is compared by its contents.
+    const stored = pathVars["name"].get!(Optional!string);
+    assert(stored.isPresent() && stored.get() == "value");
 }
 
 @("PathVariableMethodArgumentResolverTests.resolveArgumentWithExistingPathVars")
@@ -212,16 +214,12 @@ unittest
     assert(f.resolver.resolveArgument(f.paramNotRequired, f.mavContainer, f.webRequest, null).isNull());
 }
 
-// The resolver neither wraps values in Optional nor returns Optional.empty() for a missing Optional!T parameter.
-version (FlintWebJavaOptional)
+@("PathVariableMethodArgumentResolverTests.wrapEmptyWithOptional")
+unittest
 {
-    @("PathVariableMethodArgumentResolverTests.wrapEmptyWithOptional")
-    unittest
-    {
-        auto f = setup();
-        WebDataBinderFactory binderFactory = new DefaultDataBinderFactory();
+    auto f = setup();
+    WebDataBinderFactory binderFactory = new DefaultDataBinderFactory(optionalDescriptors());
 
-        const result = f.resolver.resolveArgument(f.paramOptional, f.mavContainer, f.webRequest, binderFactory);
-        assert(result == Any.of(Optional!string.empty()));
-    }
+    const result = f.resolver.resolveArgument(f.paramOptional, f.mavContainer, f.webRequest, binderFactory);
+    assert(result.get!(Optional!string).isEmpty());
 }

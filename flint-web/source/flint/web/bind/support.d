@@ -14,6 +14,7 @@ module flint.web.bind.support;
 import flint.core : MethodParameter;
 import flint.core.convert : ConversionFailedException, TypeDescriptor;
 import flint.engine.aot.any : Any;
+import flint.engine.aot.descriptor : DescriptorTable;
 import flint.web.context.request : NativeWebRequest;
 
 @safe:
@@ -25,39 +26,95 @@ interface WebDataBinderFactory
     Any convertIfNecessary(Any value, string targetType, MethodParameter parameter);
 }
 
-/// The default factory: Spring's `DefaultConversionService` rules for request values.
+/// The default factory: Spring's `DefaultFormattingConversionService` rules for request values. `Optional!T` targets
+/// wrap through the type's descriptor (`ObjectToOptionalConverter`), so the table must describe them.
 class DefaultDataBinderFactory : WebDataBinderFactory
 {
+    private DescriptorTable descriptors;
+
+    /// With the descriptors of the `Optional!T`, array and collection parameter types (may be `null`).
+    this(DescriptorTable descriptors = null) pure nothrow @nogc
+    {
+        this.descriptors = descriptors;
+    }
+
     Any convertIfNecessary(Any value, string targetType, MethodParameter parameter)
     {
+        if (isOptionalType(targetType))
+            return toOptional(value, targetType, parameter);
         if (value.isNull())
             return value;
         if (value.typeName() == targetType)
             return value;
         if (value.holds!(string[]))
-        {
-            auto values = value.get!(string[]);
-            if (targetType == "string")
-            {
-                // ArrayToStringConverter: join with ','.
-                string joined;
-                foreach (i, v; values)
-                    joined ~= (i == 0 ? "" : ",") ~ v;
-                return Any.of(joined);
-            }
-            if (targetType == "string[]")
-                return value;
-            // ArrayToObjectConverter: the first element.
-            return values.length == 0 ? Any.init : SimpleConversion.convert(values[0], targetType);
-        }
+            return fromArray(value.get!(string[]), targetType);
         if (value.holds!string)
             return SimpleConversion.convert(value.get!string, targetType);
         return value;
     }
+
+    // ObjectToOptionalConverter: null becomes `Optional.empty()`, anything else is converted to the element type
+    // and wrapped. Without a descriptor for the optional type, the element value is returned unwrapped.
+    private Any toOptional(Any value, string targetType, MethodParameter parameter)
+    {
+        if (value.typeName() == targetType)
+            return value;
+        auto descriptor = descriptors is null ? null : descriptors.find(targetType);
+        string elementType = descriptor !is null ? descriptor.elementType : null;
+        if (elementType.length == 0)
+            elementType = parameter !is null && parameter.getParameterType() == targetType
+                ? parameter.getNestedParameterType() : optionalElement(targetType);
+        auto element = convertIfNecessary(value, elementType, parameter);
+        if (descriptor is null || descriptor.wrap is null)
+            return element;
+        return descriptor.wrap(element);
+    }
+
+    private Any fromArray(string[] values, string targetType)
+    {
+        if (targetType == "string")
+        {
+            // ArrayToStringConverter: join with ','.
+            string joined;
+            foreach (i, v; values)
+                joined ~= (i == 0 ? "" : ",") ~ v;
+            return Any.of(joined);
+        }
+        if (targetType == "string[]")
+            return Any.of(values);
+        if (SimpleConversion.isArray(targetType))
+            return SimpleConversion.convertEach(values, targetType);
+        // ArrayToArrayConverter and ArrayToCollectionConverter through the target type's descriptor.
+        auto descriptor = descriptors is null ? null : descriptors.find(targetType);
+        if (descriptor !is null && descriptor.fromElements !is null && descriptor.elementType.length)
+        {
+            Any[] elements;
+            foreach (v; values)
+                elements ~= SimpleConversion.convert(v, descriptor.elementType);
+            return descriptor.fromElements(elements);
+        }
+        // ArrayToObjectConverter: the first element.
+        return values.length == 0 ? Any.init : SimpleConversion.convert(values[0], targetType);
+    }
+
+    private static bool isOptionalType(string type) pure nothrow @nogc
+    {
+        enum prefix = "flint.java.util.Optional!";
+        return type.length > prefix.length && type[0 .. prefix.length] == prefix;
+    }
+
+    private static string optionalElement(string type) pure nothrow @nogc
+    {
+        enum prefix = "flint.java.util.Optional!";
+        auto rest = type[prefix.length .. $];
+        return rest.length > 1 && rest[0] == '(' && rest[$ - 1] == ')' ? rest[1 .. $ - 1] : rest;
+    }
 }
 
 /// Interim stand-in for spring-core's `ConversionService`, for the string-to-type conversion of request
-/// values: scalars, `string`, `bool`, and arrays of them by comma splitting. Throws `ConversionFailedException`.
+/// values: scalars, `string`, `bool`, `java.time` values, and arrays of them by comma splitting. As Spring's
+/// `StringToBooleanConverter`, number, character and formatter-based converters do, a blank value converts to
+/// null. Throws `ConversionFailedException`.
 package(flint) struct SimpleConversion
 {
     import flint.engine.aot.any : Any;
@@ -68,25 +125,72 @@ package(flint) struct SimpleConversion
         switch (targetType)
         {
         case "string", "bool", "byte", "ubyte", "short", "ushort", "int", "uint", "long", "ulong",
-                "float", "double", "char", "string[]", "int[]", "long[]":
+                "float", "double", "char", "string[]", "int[]", "long[]", localDate, localTime,
+                localDateTime, instant, offsetDateTime, zonedDateTime:
                 return true;
         default:
             return false;
         }
     }
 
-    /// `value` converted to `targetType`.
+    private enum localDate = "flint.java.time.LocalDate";
+    private enum localTime = "flint.java.time.LocalTime";
+    private enum localDateTime = "flint.java.time.LocalDateTime";
+    private enum instant = "flint.java.time.Instant";
+    private enum offsetDateTime = "flint.java.time.OffsetDateTime";
+    private enum zonedDateTime = "flint.java.time.ZonedDateTime";
+
+    /// Whether `targetType` is an array type `convertEach` builds.
+    static bool isArray(string targetType) pure nothrow @nogc
+    {
+        return targetType == "string[]" || targetType == "int[]" || targetType == "long[]";
+    }
+
+    /// Each of `values` converted to the element type of `targetType` (`ArrayToArrayConverter`).
+    static Any convertEach(string[] values, string targetType)
+    {
+        switch (targetType)
+        {
+        case "int[]":
+            return Any.of(convertAll!int(values, "int"));
+        case "long[]":
+            return Any.of(convertAll!long(values, "long"));
+        default:
+            return Any.of(values);
+        }
+    }
+
+    private static T[] convertAll(T)(string[] values, string elementType)
+    {
+        T[] result;
+        foreach (v; values)
+        {
+            auto element = convert(v, elementType);
+            if (element.isNull())
+                throw conversionFailed(elementType ~ "[]", v, null);
+            result ~= element.get!T;
+        }
+        return result;
+    }
+
+    /// `value` converted to `targetType`; null for a blank value and a non-string target.
     static Any convert(string value, string targetType)
     {
+        import flint.java.time : DateTimeException;
         import std.conv : ConvException, to;
         import std.string : strip;
 
+        if (targetType != "string" && !isArray(targetType) && (targetType == "char"
+                ? value.length == 0 : value.strip.length == 0))
+            return Any.init;
         try
         {
             switch (targetType)
             {
             case "string":
                 return Any.of(value);
+            case localDate, localTime, localDateTime, instant, offsetDateTime, zonedDateTime:
+                return parseTemporal(value.strip, targetType);
             case "bool":
                 return Any.of(parseBoolean(value));
             case "byte":
@@ -136,6 +240,31 @@ package(flint) struct SimpleConversion
         catch (ConvException e)
             throw conversionFailed(targetType, value,
                     new imported!"flint.java.lang".NumberFormatException(forInput(value)));
+        catch (DateTimeException e)
+            throw conversionFailed(targetType, value, e);
+    }
+
+    // TemporalAccessorParser's ISO fallback (`LocalDate.parse(text)` and the like); the localized SHORT style is
+    // not ported.
+    private static Any parseTemporal(string text, string targetType)
+    {
+        import flint.java.time : Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZonedDateTime;
+
+        switch (targetType)
+        {
+        case localDate:
+            return Any.of(LocalDate.parse(text));
+        case localTime:
+            return Any.of(LocalTime.parse(text));
+        case localDateTime:
+            return Any.of(LocalDateTime.parse(text));
+        case instant:
+            return Any.of(Instant.parse(text));
+        case offsetDateTime:
+            return Any.of(OffsetDateTime.parse(text));
+        default:
+            return Any.of(ZonedDateTime.parse(text));
+        }
     }
 
     /// The real `ConversionFailedException`, with Java's type names as Spring's message prints them.
@@ -201,6 +330,7 @@ package(flint) string javaTypeName(string type) pure nothrow
     case "string[]":
         return "java.lang.String[]";
     default:
-        return type;
+        enum prefix = "flint.java.";
+        return type.length > prefix.length && type[0 .. prefix.length] == prefix ? type["flint.".length .. $] : type;
     }
 }
