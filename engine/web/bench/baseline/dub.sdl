@@ -12,17 +12,3 @@ dependency "flint:di" path="../../../.."
 dependency "flint:serde" path="../../../.."
 dependency "flint:validate" path="../../../.."
 dependency "flint:log" path="../../../.."
-
-// BEGIN FLINT NATIVE
-versions "FlintNativeLlhttp" platform="linux-x86_64"
-versions "FlintNativeNghttp2" platform="linux-x86_64"
-versions "FlintNativeOpenssl" platform="linux-x86_64"
-lflags "/home/olfa/flint-work/flint/.claude/worktrees/laughing-hugle-4ff9ba/.native/install/linux-x86_64-glibc/lib/libflint_ffi.a" platform="linux-x86_64"
-lflags "/home/olfa/flint-work/flint/.claude/worktrees/laughing-hugle-4ff9ba/.native/install/linux-x86_64-glibc/lib/libssl.a" platform="linux-x86_64"
-lflags "/home/olfa/flint-work/flint/.claude/worktrees/laughing-hugle-4ff9ba/.native/install/linux-x86_64-glibc/lib/libcrypto.a" platform="linux-x86_64"
-lflags "/home/olfa/flint-work/flint/.claude/worktrees/laughing-hugle-4ff9ba/.native/install/linux-x86_64-glibc/lib/libnghttp2.a" platform="linux-x86_64"
-lflags "/home/olfa/flint-work/flint/.claude/worktrees/laughing-hugle-4ff9ba/.native/install/linux-x86_64-glibc/lib/libllhttp.a" platform="linux-x86_64"
-lflags "-lpthread" platform="linux-x86_64"
-lflags "-ldl" platform="linux-x86_64"
-lflags "-lm" platform="linux-x86_64"
-// END FLINT NATIVE
