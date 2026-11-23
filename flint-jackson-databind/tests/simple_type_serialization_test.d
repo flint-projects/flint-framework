@@ -784,22 +784,17 @@ unittest
     assert(map2.get("next").isNull());
 }
 
-// LIKELY BUG: FAIL_ON_SELF_REFERENCES (on by default) is not honoured: Jackson throws InvalidDefinitionException
-// "Direct self-reference leading to cycle"; flint.jackson recurses without bound (the process dies).
-version (FlintJacksonSelfReferences)
+@("SimpleTypeSerializationTest.testSimpleDirectSelfReference")
+unittest
 {
-    @("SimpleTypeSerializationTest.testSimpleDirectSelfReference")
-    unittest
-    {
-        auto selfRef = new CyclicBean(null, "self-refs");
-        auto first = new CyclicBean(selfRef, "first");
-        selfRef.assignNext(selfRef);
-        auto wrapper = [first];
-        try
-            writeAndMap(mapper(), wrapper);
-        catch (InvalidDefinitionException e)
-            verifyException(e, "Direct self-reference leading to cycle");
-    }
+    auto selfRef = new CyclicBean(null, "self-refs");
+    auto first = new CyclicBean(selfRef, "first");
+    selfRef.assignNext(selfRef);
+    auto wrapper = [first];
+    try
+        writeAndMap(mapper(), wrapper);
+    catch (InvalidDefinitionException e)
+        verifyException(e, "Direct self-reference leading to cycle");
 }
 
 // ObjectWriter has no with/without(SerializationFeature) (nor WRITE_SELF_REFERENCES_AS_NULL, Shape.ARRAY beans).

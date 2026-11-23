@@ -356,6 +356,20 @@ private void writeField(MapperConfig config, BeanDescription bean, BeanPropertyD
         auto v = p.accessor.get(value);
         if (!include(config, bean, p, v))
             return;
+        // BeanPropertyWriter._handleSelfReference: a property whose value is the bean itself.
+        if (auto self = v.asObject())
+            if (self is value.asObject() && !p.unwrapped && bean.jsonValue is null)
+            {
+                if (config.isEnabled(SerializationFeature.WRITE_SELF_REFERENCES_AS_NULL))
+                {
+                    g.writeName(prefix.length || suffix.length ? prefix ~ p.name ~ suffix : p.name);
+                    g.writeNull();
+                    return;
+                }
+                if (config.isEnabled(SerializationFeature.FAIL_ON_SELF_REFERENCES))
+                    throw new InvalidDefinitionException("Direct self-reference leading to cycle", bean.descriptor.name)
+                        .prependPath(Reference(p.name, -1, null, bean.descriptor.name));
+            }
         withPath(Reference(p.name, -1, null, bean.descriptor.name), () {
             if (p.unwrapped)
                 return writeUnwrapped(config, p, v, g, prefix ~ p.unwrapPrefix, p.unwrapSuffix ~ suffix);
