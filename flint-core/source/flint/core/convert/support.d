@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-core/src/main/java/org/springframework/core/convert/support
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -379,24 +383,44 @@ private Any parseNumber(string text, string target)
     case "byte":
         return Any.of(NumberUtils.parseNumber!byte(text));
     case "ubyte":
-        return Any.of(NumberUtils.parseNumber!ubyte(text));
+        return Any.of(parseUnsigned!ubyte(text));
     case "short":
         return Any.of(NumberUtils.parseNumber!short(text));
     case "ushort":
-        return Any.of(NumberUtils.parseNumber!ushort(text));
+        return Any.of(parseUnsigned!ushort(text));
     case "int":
         return Any.of(NumberUtils.parseNumber!int(text));
     case "uint":
-        return Any.of(NumberUtils.parseNumber!uint(text));
+        return Any.of(parseUnsigned!uint(text));
     case "long":
         return Any.of(NumberUtils.parseNumber!long(text));
     case "ulong":
-        return Any.of(NumberUtils.parseNumber!ulong(text));
+        return Any.of(parseUnsigned!ulong(text));
     case "float":
         return Any.of(NumberUtils.parseNumber!float(text));
     default:
         return Any.of(NumberUtils.parseNumber!double(text));
     }
+}
+
+/// Parse an unsigned D integer (Java has none): `NumberUtils.parseNumber!long`, range-checked.
+private T parseUnsigned(T)(string text)
+{
+    import std.conv : ConvException, to;
+
+    static if (is(T == ulong))
+    {
+        try
+            return text.to!ulong;
+        catch (ConvException)
+        {
+        }
+    }
+    const value = NumberUtils.parseNumber!long(text);
+    if (value < 0 || cast(ulong) value > T.max)
+        throw new IllegalArgumentException("Could not convert number [" ~ text
+                ~ "] of type [java.lang.Long] to target class [" ~ T.stringof ~ "]: overflow");
+    return cast(T) value;
 }
 
 /// Scalars to `string` (Spring's `ObjectToStringConverter` for numbers, characters and booleans).

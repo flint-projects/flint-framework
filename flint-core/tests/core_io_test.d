@@ -27,7 +27,8 @@ unittest
     catch (FileNotFoundException e)
         threw = e.getMessage() == "class path resource [no/such.txt] cannot be opened because it does not exist";
     assert(threw);
-    assert(new ClassPathResource("a/b.txt").createRelative("c.txt").getDescription() == "class path resource [a/c.txt]");
+    auto relative = new ClassPathResource("a/b.txt").createRelative("c.txt");
+    assert(relative.getDescription() == "class path resource [a/c.txt]");
     assert(new ClassPathResource("x") == new ClassPathResource("/x"));
 }
 

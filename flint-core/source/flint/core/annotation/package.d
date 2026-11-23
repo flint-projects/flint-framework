@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-core/src/main/java/org/springframework/core/annotation
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -22,23 +26,15 @@
 The annotations of `org.springframework.core.annotation`: `@AliasFor` and `@Order`, plus `ClassRef` and `classOf`
 for `Class`-valued annotation attributes (AOT contract section 2).
 
-This is a leaf module (rulebook R2): it imports nothing, so generated code and every annotation module may import
-it. The package's runtime types (`MergedAnnotations`, `AnnotationAwareOrderComparator`, `AnnotationUtils`) are in
+This is a leaf module (rulebook R2): it imports only `flint.java.lang` (for `ClassRef`, Java's `Class`, shared with
+the third-party annotation modules), so generated code and every annotation module may import it. The package's runtime types (`MergedAnnotations`, `AnnotationAwareOrderComparator`, `AnnotationUtils`) are in
 `flint.core.annotation.types` (deviation D-21).
 +/
 module flint.core.annotation;
 
+public import flint.java.lang : ClassRef, classOf;
+
 @safe:
-
-/// A `Class`-valued annotation attribute: the referenced type's fully qualified D name.
-struct ClassRef
-{
-    /// The fully qualified D name; empty for `ClassRef.init` ("none" or "this annotation").
-    string name;
-}
-
-/// Java's `T.class` in an annotation attribute: `@ConditionalOnMissingBean(classOf!DataSource)`.
-enum ClassRef classOf(T) = ClassRef(__traits(fullyQualifiedName, T));
 
 /++
 `@AliasFor` declares aliases for annotation attributes.

@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-core/src/main/java/org/springframework/core/annotation/types
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -254,9 +258,11 @@ class AnnotationAwareOrderComparator : OrderComparator
         auto order = super.findOrder(obj);
         if (order.isPresent() || descriptors is null || obj is null)
             return order;
-        bool found;
-        const annotated = OrderUtils.getOrder(descriptors.find(canonicalTypeName(typeid(obj).name)), found);
-        return found ? Optional!int.of(annotated) : Optional!int.empty();
+        auto descriptor = descriptors.find(canonicalTypeName(typeid(obj).name));
+        auto annotation = descriptor is null ? null : descriptor.annotation(typeNameOf!Order);
+        if (annotation is null)
+            return Optional!int.empty();
+        return Optional!int.of(annotation.value.get!(const Order).value);
     }
 }
 

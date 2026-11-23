@@ -37,8 +37,8 @@ unittest
     auto component = annotations.get!Component();
     assert(component.isMetaPresent && component.getDistance() == 1 && component.synthesize().value == "ownerService");
     assert(!annotations.get!AliasFor().isPresent && annotations.get!AliasFor().getDistance() == -1);
-    bool found;
-    assert(AnnotationUtils.findAnnotation!Order(descriptorOf!OwnerService, found).value == 5 && found);
+    assert(annotations.get!Order().synthesize().value == 5);
+    assert(AnnotationUtils.isAnnotationDeclaredLocally!Order(descriptorOf!OwnerService));
 }
 
 unittest

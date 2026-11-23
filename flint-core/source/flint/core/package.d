@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-core/src/main/java/org/springframework/core
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
@@ -477,24 +481,36 @@ abstract class NestedRuntimeException : RuntimeException
     }
 
     /// The innermost cause, or null when there is no cause.
-    Throwable getRootCause()
+    Throwable getRootCause() pure nothrow @nogc
     {
         return NestedExceptionUtils.getRootCause(this);
     }
 
     /// The root cause, or this exception when it has none.
-    Throwable getMostSpecificCause()
+    Throwable getMostSpecificCause() pure nothrow @nogc
     {
         auto rootCause = getRootCause();
         return rootCause !is null ? rootCause : this;
     }
 
     /// Whether this exception or a cause is an `E` (Java's `contains(Class)`, R4).
-    bool contains(E : Throwable)()
+    bool contains(E : Throwable)() pure nothrow @nogc
     {
+        return contains(typeid(E));
+    }
+
+    /// Whether this exception or a cause is an instance of `exType`; false for null.
+    bool contains(const TypeInfo_Class exType) pure nothrow @nogc
+    {
+        if (exType is null)
+            return false;
         for (Throwable cause = this; cause !is null; cause = causeOf(cause))
-            if (cast(E) cause !is null)
+        {
+            if (typeid(cause) is exType || exType.isBaseOf(typeid(cause)))
                 return true;
+            if (causeOf(cause) is cause)
+                break;
+        }
         return false;
     }
 }
@@ -503,7 +519,7 @@ abstract class NestedRuntimeException : RuntimeException
 struct NestedExceptionUtils
 {
     /// The innermost cause of `original`, or null when it has none.
-    static Throwable getRootCause(Throwable original)
+    static Throwable getRootCause(Throwable original) pure nothrow @nogc
     {
         if (original is null)
             return null;
@@ -514,7 +530,7 @@ struct NestedExceptionUtils
     }
 
     /// The root cause of `original`, or `original` itself when it has none.
-    static Throwable getMostSpecificCause(Throwable original)
+    static Throwable getMostSpecificCause(Throwable original) pure nothrow @nogc
     {
         auto rootCause = getRootCause(original);
         return rootCause !is null ? rootCause : original;

@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-core/src/test/java/org/springframework/core
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /++
 Ported from spring-framework v7.1.0 spring-core/src/test/java/org/springframework/core/io/{ClassPathResourceTests,
 ResourceTests}.java (Apache-2.0; modified by the Flint authors).
@@ -30,7 +34,8 @@ unittest
     // equalsAndHashCode
     Resource resource1 = new ClassPathResource("org/springframework/core/io/Resource.class");
     Resource resource2 = new ClassPathResource("org/springframework/core/../core/io/./Resource.class");
-    Resource resource3 = new ClassPathResource("org/springframework/core/").createRelative("../core/io/./Resource.class");
+    Resource resource3 = new ClassPathResource("org/springframework/core/").createRelative(
+            "../core/io/./Resource.class");
     assert(resource2.equals(cast(Object) resource1) && resource3.equals(cast(Object) resource1));
     assert((cast(Object) resource2).toHash() == (cast(Object) resource1).toHash());
     assert((cast(Object) resource3).toHash() == (cast(Object) resource1).toHash());
@@ -74,15 +79,15 @@ unittest
 unittest
 {
     // withStringConstructor (GetDescription)
-    assert(new ClassPathResource(ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE).getDescription()
-            == "class path resource [" ~ ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE ~ "]");
+    assert(new ClassPathResource(ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE)
+            .getDescription() == "class path resource [" ~ ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE ~ "]");
 }
 
 unittest
 {
     // withStringConstructorAndLeadingSlash (GetDescription)
-    assert(new ClassPathResource(ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE_WITH_LEADING_SLASH).getDescription()
-            == "class path resource [" ~ ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE ~ "]");
+    assert(new ClassPathResource(ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE_WITH_LEADING_SLASH)
+            .getDescription() == "class path resource [" ~ ABSOLUTE_PATH_TO_NONEXISTENT_RESOURCE ~ "]");
 }
 
 unittest

@@ -1,3 +1,7 @@
+// Ported from spring-framework v7.1.0: spring-core/src/main/java/org/springframework/core/convert/converter
+// Copyright 2002-present the original author or authors.
+// Licensed under the Apache License, Version 2.0.
+// Modified by the Flint authors.
 /*
  * Copyright 2002-present the original author or authors.
  *
