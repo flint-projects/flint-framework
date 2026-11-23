@@ -25,6 +25,8 @@ typedef struct {
     int retired;
     int retiring;
     int dirty;
+    /* The failure of the lease's last finished operation; cleared when the next one starts. */
+    flint_sql_failure failure;
 } connection_slot;
 
 typedef struct {
@@ -471,6 +473,7 @@ int flint_sql_operation_start(flint_sql_operation *operation, uint64_t slot, uin
         return status;
     }
     connection->active = operation;
+    memset(&connection->failure, 0, sizeof(connection->failure));
     operation->lease_slot = slot;
     operation->lease_identity = identity;
     pthread_mutex_unlock(&gate);
@@ -621,7 +624,46 @@ int flint_sql_operation_finish(flint_sql_operation *operation, uint64_t *affecte
     if (!operation->reusable)
         connection->retired = 1;
     *affected = operation->affected;
+    connection->failure = operation->failure;
     int status = operation->status;
+    pthread_mutex_unlock(&gate);
+    return status;
+}
+
+void flint_sql_note_failure(flint_sql_operation *operation, const char *state, int vendor, const char *message)
+{
+    flint_sql_failure *failure = &operation->failure;
+    if (failure->state[0] || !state || strlen(state) != 5)
+        return;
+    memcpy(failure->state, state, 6);
+    failure->vendor = vendor;
+    size_t length = message ? strlen(message) : 0;
+    /* Server messages may end in a newline; JDBC drivers report them without it. */
+    while (length && (message[length - 1] == '\n' || message[length - 1] == '\r'))
+        --length;
+    if (length > FLINT_SQL_MESSAGE_CAPACITY - 1)
+        length = FLINT_SQL_MESSAGE_CAPACITY - 1;
+    /* Never end inside a UTF-8 sequence: drop continuation bytes, then a lead byte left without them. */
+    if (length == FLINT_SQL_MESSAGE_CAPACITY - 1) {
+        while (length && ((unsigned char)message[length] & 0xC0) == 0x80)
+            --length;
+    }
+    if (length)
+        memcpy(failure->message, message, length);
+    failure->message[length] = 0;
+    failure->length = (uint32_t)length;
+}
+
+int flint_sql_lease_failure(uint64_t slot, uint64_t identity, flint_sql_failure *output)
+{
+    pthread_mutex_lock(&gate);
+    pool_slot *owner = NULL;
+    const connection_slot *connection = connection_at(slot, &owner);
+    int status = FLINT_SQL_NOT_FOUND;
+    if (connection && identity && connection->lease == identity) {
+        *output = connection->failure;
+        status = FLINT_SQL_OK;
+    }
     pthread_mutex_unlock(&gate);
     return status;
 }
@@ -675,6 +717,38 @@ int flint_sql_row_copy(uint64_t slot, uint64_t row, uint32_t index, void *output
             status = FLINT_SQL_INVALID;
         else if (length)
             memcpy(output, data, length);
+    }
+    pthread_mutex_unlock(&gate);
+    return status;
+}
+
+int flint_sql_row_name(uint64_t slot, uint64_t row, uint32_t index, char *output, size_t capacity,
+                       size_t *length)
+{
+    pthread_mutex_lock(&gate);
+    pool_slot *owner = NULL;
+    const connection_slot *connection = connection_at(slot, &owner);
+    const char *name = NULL;
+    int status = FLINT_SQL_NOT_FOUND;
+    if (connection && row && row == connection->row && connection->active) {
+        status = index < connection->columns ? FLINT_SQL_OK : FLINT_SQL_INVALID;
+#ifdef FLINT_HAS_SQLITE
+        if (status == FLINT_SQL_OK && owner->driver == DRIVER_SQLITE)
+            name = flint_sqlite_name(connection->active, index);
+#endif
+#ifdef FLINT_HAS_LIBPQ
+        if (status == FLINT_SQL_OK && owner->driver == DRIVER_POSTGRES)
+            name = flint_pg_name(connection->active, index);
+#endif
+        if (status == FLINT_SQL_OK && !name)
+            status = FLINT_SQL_NOMEM;
+    }
+    if (status == FLINT_SQL_OK) {
+        *length = strlen(name);
+        if (*length > capacity || (*length && !output))
+            status = FLINT_SQL_EXHAUSTED;
+        else if (*length)
+            memcpy(output, name, *length);
     }
     pthread_mutex_unlock(&gate);
     return status;

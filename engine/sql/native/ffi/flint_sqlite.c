@@ -59,6 +59,49 @@ int flint_sqlite_available(void)
     return sqlite3_threadsafe() != 0 && sqlite3_libversion_number() == 3054001;
 }
 
+/* SQLSTATE for an extended result code, so JDBC-level translation sees what PostgreSQL would report. */
+static const char *sqlite_state(int extended)
+{
+    switch (extended) {
+    case SQLITE_CONSTRAINT_PRIMARYKEY: case SQLITE_CONSTRAINT_UNIQUE: return "23505";
+    case SQLITE_CONSTRAINT_FOREIGNKEY: return "23503";
+    case SQLITE_CONSTRAINT_NOTNULL: return "23502";
+    case SQLITE_CONSTRAINT_CHECK: return "23514";
+    default: break;
+    }
+    switch (extended & 0xff) {
+    case SQLITE_CONSTRAINT: return "23000";
+    case SQLITE_ERROR: return "42000";
+    case SQLITE_BUSY: case SQLITE_LOCKED: return "40001";
+    case SQLITE_READONLY: return "25006";
+    case SQLITE_PERM: case SQLITE_AUTH: return "42501";
+    case SQLITE_TOOBIG: return "22001";
+    case SQLITE_MISMATCH: return "22005";
+    case SQLITE_RANGE: return "07009";
+    case SQLITE_FULL: return "53100";
+    case SQLITE_NOMEM: return "53200";
+    case SQLITE_CANTOPEN: return "08001";
+    case SQLITE_INTERRUPT: return "57014";
+    case SQLITE_IOERR: case SQLITE_CORRUPT: case SQLITE_NOTADB: return "58030";
+    default: return "HY000";
+    }
+}
+
+/* Record a failed prepare, bind or step while the connection's error state still describes it. */
+static void note_sqlite(sqlite3 *database, flint_sql_operation *operation, int result)
+{
+    if (result == SQLITE_OK || result == SQLITE_DONE || result == SQLITE_ROW)
+        return;
+    int extended = sqlite3_extended_errcode(database);
+    const char *message = sqlite3_errmsg(database);
+    if ((extended & 0xff) != (result & 0xff)) {
+        /* The connection's state belongs to another call; report the result itself. */
+        extended = result;
+        message = sqlite3_errstr(result);
+    }
+    flint_sql_note_failure(operation, sqlite_state(extended), extended, message);
+}
+
 static int sqlite_status(int result)
 {
     switch (result & 0xff) {
@@ -226,6 +269,8 @@ static void notify(flint_sqlite_connection *connection)
 typedef struct {
     flint_sql_cell cell;
     void *data;
+    /* Owned by the statement, which outlives the published row. */
+    const char *name;
     int status;
 } sqlite_cell;
 
@@ -252,6 +297,7 @@ static int snapshot_row(sqlite3_stmt *statement, sqlite_row *row)
     for (uint32_t index = 0; index < row->columns; ++index) {
         sqlite_cell *entry = &row->cells[index];
         const void *bytes = NULL;
+        entry->name = sqlite3_column_name(statement, (int)index);
         entry->status = sqlite_read_cell(statement, index, &entry->cell, &bytes);
         if (entry->status != FLINT_SQL_OK || !entry->cell.length)
             continue;
@@ -330,6 +376,7 @@ static int step_script(flint_sqlite_connection *connection, flint_sql_operation 
             else
                 result = step_rows(connection, statement, operation);
         }
+        note_sqlite(connection->database, operation, result);
         sqlite3_finalize(statement);
         if (result != SQLITE_DONE)
             break;
@@ -344,11 +391,17 @@ static int step_statement(flint_sqlite_connection *connection, flint_sql_operati
     cached_statement *entry = NULL;
     int status = FLINT_SQL_OK;
     sqlite3_stmt *statement = prepare(connection, operation, &entry, &status);
-    if (!statement)
+    if (!statement) {
+        if (sqlite3_errcode(connection->database) != SQLITE_OK)
+            note_sqlite(connection->database, operation, sqlite3_errcode(connection->database));
+        else
+            flint_sql_note_failure(operation, "42000", SQLITE_ERROR, "a statement must hold exactly one SQL command");
         return status;
+    }
     int result = bind_all(statement, operation);
     if (result == SQLITE_OK)
         result = step_rows(connection, statement, operation);
+    note_sqlite(connection->database, operation, result);
     if (entry) {
         sqlite3_reset(statement);
         sqlite3_clear_bindings(statement);
@@ -581,6 +634,12 @@ uint32_t flint_sqlite_columns(const flint_sql_operation *operation)
 {
     const sqlite_row *row = operation->row;
     return row ? row->columns : 0;
+}
+
+const char *flint_sqlite_name(const flint_sql_operation *operation, uint32_t index)
+{
+    const sqlite_row *row = operation->row;
+    return row && index < row->columns ? row->cells[index].name : NULL;
 }
 
 int flint_sqlite_cell(const flint_sql_operation *operation, uint32_t index, flint_sql_cell *cell, const void **data)

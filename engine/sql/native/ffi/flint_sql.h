@@ -44,6 +44,16 @@ typedef struct {
     size_t length;
 } flint_sql_cell;
 
+/* The first failure the server or library reported for a lease's last operation. An empty state means
+   none was reported: the operation succeeded, or it failed locally (cancellation, timeout, a bad lease). */
+enum { FLINT_SQL_MESSAGE_CAPACITY = 256 };
+typedef struct {
+    char state[6];   /* five-character SQLSTATE, NUL-terminated */
+    int vendor;      /* SQLite extended result code; zero for PostgreSQL, which has none */
+    uint32_t length; /* bytes of message, at most FLINT_SQL_MESSAGE_CAPACITY - 1 */
+    char message[FLINT_SQL_MESSAGE_CAPACITY];
+} flint_sql_failure;
+
 int flint_sql_pool_open(int driver, const char *address, size_t length, unsigned capacity,
                         unsigned waiters, unsigned prepared, uint64_t *slot, uint64_t *identity);
 int flint_sql_pool_acquire(uint64_t slot, uint64_t identity, uint64_t *ticket,
@@ -76,6 +86,9 @@ void flint_sql_operation_free(flint_sql_operation *operation);
 uint32_t flint_sql_row_columns(uint64_t slot, uint64_t row);
 int flint_sql_row_info(uint64_t slot, uint64_t row, uint32_t column, flint_sql_cell *output);
 int flint_sql_row_copy(uint64_t slot, uint64_t row, uint32_t column, void *data, size_t length);
+int flint_sql_row_name(uint64_t slot, uint64_t row, uint32_t column, char *data, size_t capacity,
+                       size_t *length);
+int flint_sql_lease_failure(uint64_t slot, uint64_t identity, flint_sql_failure *output);
 int flint_sql_poll(int fd, unsigned interest, unsigned millis);
 
 #ifdef __cplusplus

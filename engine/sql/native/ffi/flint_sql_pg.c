@@ -562,6 +562,9 @@ static int handle_result(flint_sql_operation *operation, PGresult *result)
         if (commits_transaction(operation->text) && !strcmp(PQcmdStatus(result), "ROLLBACK")) {
             if (operation->status == FLINT_SQL_OK)
                 operation->status = FLINT_SQL_CONFLICT;
+            /* pgjdbc reports this as in_failed_sql_transaction. */
+            flint_sql_note_failure(operation, "25P02", 0,
+                                   "the transaction was aborted, so COMMIT rolled it back");
             break;
         }
         if (operation->phase == PG_QUERY)
@@ -574,6 +577,8 @@ static int handle_result(flint_sql_operation *operation, PGresult *result)
     default:
         if (operation->status == FLINT_SQL_OK)
             operation->status = status_for_result(result);
+        flint_sql_note_failure(operation, PQresultErrorField(result, PG_DIAG_SQLSTATE), 0,
+                               PQresultErrorField(result, PG_DIAG_MESSAGE_PRIMARY));
         if (operation->status == FLINT_SQL_UNAVAILABLE)
             operation->reusable = 0;
         break;
@@ -628,8 +633,12 @@ static int step_connect(flint_pg_connection *connection, flint_sql_operation *op
     int status = flint_pg_connect_poll(connection, &socket);
     *fd = (int)socket;
     *interest = status == PGRES_POLLING_READING ? FLINT_SQL_READ : FLINT_SQL_WRITE;
-    if (status == PGRES_POLLING_FAILED)
+    if (status == PGRES_POLLING_FAILED) {
+        /* 08001: sqlclient_unable_to_establish_sqlconnection. */
+        flint_sql_note_failure(operation, "08001", 0, connection->database
+                ? PQerrorMessage(connection->database) : "could not start the PostgreSQL connection");
         return finish(connection, operation, FLINT_SQL_UNAVAILABLE);
+    }
     return FLINT_SQL_WAIT;
 }
 
@@ -698,6 +707,12 @@ int flint_pg_drive(flint_pg_connection *connection, flint_sql_operation *operati
 uint32_t flint_pg_columns(const flint_sql_operation *operation)
 {
     return operation->row ? (uint32_t)PQnfields(operation->row) : 0;
+}
+
+const char *flint_pg_name(const flint_sql_operation *operation, uint32_t index)
+{
+    PGresult *row = operation->row;
+    return row && index < (uint32_t)PQnfields(row) ? PQfname(row, (int)index) : NULL;
 }
 
 static int decode_integer(flint_sql_cell *cell, Oid type, const void *data, size_t length)

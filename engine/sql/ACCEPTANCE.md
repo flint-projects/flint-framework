@@ -47,3 +47,6 @@ packages/sql/bench/build/probe-sql --measure [<dsn>]
 DFLAGS='-g -O1 -unittest -preview=dip1000 -boundscheck=on -fsanitize=address' ASAN_OPTIONS=detect_leaks=0 \
   dub test :sql --compiler=ldc2 --build=plain
 ```
+| driver failures carry SQLSTATE, vendor code and message; the next statement clears them (both drivers) | `tests/failures.d:"SQLite failures carry SQLSTATE, extended result code and message, and rows carry column labels"`, `tests/failures.d:"PostgreSQL failures carry the server's SQLSTATE and message, and rows carry column labels"` | added |
+| column labels, including labels longer than the engine's local span and PostgreSQL's 63-byte truncation | `tests/failures.d` (`exerciseLongName`); `native/ffi/sql_native_test.c` `failures_and_names()` | added |
+| failure message cut at 255 bytes on a UTF-8 boundary; stale lease and row identities refused at the C boundary | `native/ffi/sql_native_test.c` `failures_and_names()`, run by `tests/native_asan.py` | added |

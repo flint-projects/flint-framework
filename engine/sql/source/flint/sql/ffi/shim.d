@@ -47,6 +47,15 @@ package(flint.sql) struct Completed
     ulong affected;
 }
 
+/// Mirrors flint_sql_failure: the first failure the driver reported for a lease's last operation.
+package(flint.sql) struct Failure
+{
+    char[6] state;
+    int vendor;
+    uint length;
+    char[256] message;
+}
+
 package(flint.sql) struct Interest
 {
     int fd = -1;
@@ -84,6 +93,8 @@ version (FlintSqlNative)
         private uint flint_sql_row_columns(ulong, ulong);
         private int flint_sql_row_info(ulong, ulong, uint, Cell*);
         private int flint_sql_row_copy(ulong, ulong, uint, void*, size_t);
+        private int flint_sql_row_name(ulong, ulong, uint, char*, size_t, size_t*);
+        private int flint_sql_lease_failure(ulong, ulong, Failure*);
         private int flint_sql_poll(int, uint, uint);
     }
 }
@@ -342,6 +353,25 @@ package(flint.sql) Status copyCell(Identity row, uint column, scope ubyte[] outp
 {
     version (FlintSqlNative)
         return cast(Status) flint_sql_row_copy(row.slot, row.generation, column, output.ptr, output.length);
+    else
+        return Status.unsupported;
+}
+
+// SAFETY: Generation and column checks run under the shim's lock; it writes at most into.length bytes
+// and reports the full length, so a short span gets `resourceExhausted` and nothing past its end.
+package(flint.sql) Status nameCell(Identity row, uint index, scope char[] into, out size_t size) @trusted nothrow @nogc
+{
+    version (FlintSqlNative)
+        return cast(Status) flint_sql_row_name(row.slot, row.generation, index, into.ptr, into.length, &size);
+    else
+        return Status.unsupported;
+}
+
+// SAFETY: A generation-checked lease's record is copied by value into a live, fixed-size output.
+package(flint.sql) Status leaseFailure(Identity lease, out Failure failure) @trusted nothrow @nogc
+{
+    version (FlintSqlNative)
+        return cast(Status) flint_sql_lease_failure(lease.slot, lease.generation, &failure);
     else
         return Status.unsupported;
 }

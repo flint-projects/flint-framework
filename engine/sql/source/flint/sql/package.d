@@ -4,9 +4,9 @@ module flint.sql;
 import core.thread.fiber : Fiber;
 import flint.arena : Buffer, Error, RequestArena, Result, Status;
 import flint.conc : CancelSource, Context, Deadline;
-import flint.sql.ffi.shim : Cell, Identity, Interest, Operation, Progress, acquirePool,
-    claimTransaction, closePool, copyCell, dirtyLease, endTransaction, inspectCell, openPool,
-    releasePool, retireLease, rowColumns, withdrawPool;
+import flint.sql.ffi.shim : Cell, Failure, Identity, Interest, Operation, Progress, acquirePool,
+    claimTransaction, closePool, copyCell, dirtyLease, endTransaction, inspectCell, leaseFailure,
+    nameCell, openPool, releasePool, retireLease, rowColumns, withdrawPool;
 import flint.sql.sys.wait : admit, admitStartup, joinLeaseQueue, leaseChanged, leaseMark,
     leaveLeaseQueue, pause, pauseForLease, waitFor;
 
@@ -75,6 +75,38 @@ struct PoolOptions
     uint maxPreparedPerConnection = 128;
 }
 
+/// What the server or library reported about a lease's last statement, kept until the next one starts.
+/// It is empty when the statement succeeded or failed locally (cancellation, a deadline, a stale lease).
+struct SqlFailure
+{
+    private Failure record;
+
+    /// Whether the driver reported a failure.
+    bool reported() const pure nothrow @nogc
+    {
+        return record.state[0] != 0;
+    }
+
+    /// The five-character SQLSTATE. SQLite's extended result codes are mapped to their PostgreSQL
+    /// equivalents, such as `23505` for a unique or primary-key violation.
+    const(char)[] sqlState() const return pure nothrow @nogc
+    {
+        return reported ? record.state[0 .. 5] : null;
+    }
+
+    /// SQLite's extended result code; zero for PostgreSQL, which reports none.
+    int vendorCode() const pure nothrow @nogc
+    {
+        return record.vendor;
+    }
+
+    /// The driver's primary message, cut to at most 255 bytes on a UTF-8 boundary.
+    const(char)[] message() const return pure nothrow @nogc
+    {
+        return record.message[0 .. record.length < record.message.length ? record.length : 0];
+    }
+}
+
 /// Generation-checked access to the row currently inside a consumer.
 struct Row
 {
@@ -119,6 +151,38 @@ struct Row
     {
         return rowColumns(slot, generation);
     }
+
+    /// Copy one column's label into the supplied arena: the `AS` alias or the column name, as the
+    /// driver reports it (`PQfname`, `sqlite3_column_name`).
+    Result!Buffer name(uint column, ref scope RequestArena arena) const nothrow @nogc
+    {
+        const row = Identity(slot, generation);
+        size_t length;
+        char[64] local;
+        auto status = nameCell(row, column, local[], length);
+        if (status != Status.ok && status != Status.resourceExhausted)
+            return Result!Buffer(Buffer.init, Error(status, "SQL column name is unavailable"));
+        const destination = arena.allocate(length, 1);
+        if (!destination.ok())
+            return Result!Buffer(Buffer.init, destination.error);
+        Status copied = Status.ok;
+        status = arena.write(destination.value, (scope ubyte[] bytes) @safe nothrow @nogc {
+            // A name longer than the local span is fetched again straight into the arena.
+            if (length <= local.length)
+                bytes[] = cast(const(ubyte)[]) local[0 .. length];
+            else
+            {
+                size_t again;
+                copied = nameCell(row, column, cast(char[]) bytes, again);
+                if (copied == Status.ok && again != length)
+                    copied = Status.conflict;
+            }
+        });
+        if (status != Status.ok || copied != Status.ok)
+            return Result!Buffer(Buffer.init, Error(status == Status.ok ? copied : status,
+                    "SQL column name is unavailable"));
+        return Result!Buffer(destination.value);
+    }
 }
 
 /// Consumes a single row synchronously on the caller's thread or fiber.
@@ -156,6 +220,16 @@ struct Connection
             return startup;
         scope RequestArena unused;
         return perform(identity(), sql, [], unused, context, null, true).error;
+    }
+
+    /// The failure the driver reported for this lease's last statement, if any. JDBC-level code reads it
+    /// after an `Error` to build a `SQLException` with its SQLSTATE and vendor code.
+    SqlFailure lastFailure() const nothrow @nogc
+    {
+        SqlFailure failure;
+        if (leaseFailure(identity(), failure.record) != Status.ok)
+            failure = SqlFailure.init;
+        return failure;
     }
 
     /// Retire the native session when external transaction or lock cleanup cannot be verified.

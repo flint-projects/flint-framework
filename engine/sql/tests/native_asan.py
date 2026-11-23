@@ -14,7 +14,15 @@ import subprocess
 
 SHIMS = ("flint_sql_core.c", "flint_sql_pg.c", "flint_sqlite.c", "flint_sql_script.c")
 ARCHIVES = ("lib/libsqlite3.a", "lib/libpq.a", "lib/libpgcommon_shlib.a", "lib/libpgport_shlib.a",
-            "lib/libssl.a", "lib/libcrypto.a", "lib64/libz.a")
+            "lib/libssl.a", "lib/libcrypto.a")
+
+
+def zlib(prefix):
+    """zlib installs into lib64 on some hosts and lib on others."""
+    for directory in ("lib", "lib64"):
+        if (prefix / directory / "libz.a").is_file():
+            return prefix / directory / "libz.a"
+    raise SystemExit("libz.a missing under " + str(prefix))
 
 
 def main():
@@ -30,7 +38,8 @@ def main():
     command = [args.cc, "-std=c11", "-g", "-O1", "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                "-DFLINT_HAS_SQLITE=1", "-DFLINT_HAS_LIBPQ=1", f"-I{source}", f"-I{args.prefix / 'include'}",
                str(source / "sql_native_test.c"), *(str(source / name) for name in SHIMS),
-               *(str(args.prefix / name) for name in ARCHIVES), "-lpthread", "-ldl", "-lm", "-o", str(binary)]
+               *(str(args.prefix / name) for name in ARCHIVES), str(zlib(args.prefix)),
+               "-lpthread", "-ldl", "-lm", "-o", str(binary)]
     subprocess.run(command, check=True)
     env = dict(os.environ, ASAN_OPTIONS="detect_leaks=1:abort_on_error=1:detect_stack_use_after_return=1",
                UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1")

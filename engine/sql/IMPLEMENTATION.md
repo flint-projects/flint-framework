@@ -17,6 +17,17 @@ NUL. Use bytes for binary data. SQLite preserves embedded NUL in both text and
 bytes. SQLite INTEGER columns declared BOOL or BOOLEAN produce boolean cells.
 Untyped integer expressions produce int64 cells.
 
+When a statement fails, `Connection.lastFailure()` returns what the driver
+reported, until the lease's next statement starts: the SQLSTATE, the vendor code
+and the primary message (at most 255 bytes, cut on a UTF-8 boundary).
+PostgreSQL's SQLSTATE comes from the server. SQLite's extended result codes map
+to the PostgreSQL equivalents, such as `23505` for a unique or primary-key
+violation, and the vendor code keeps the extended code (2067, 1555, ...). A
+failure the engine raised itself, such as cancellation, a deadline or a stale
+lease, leaves the record empty. `Row.name(column, arena)` copies a column's label,
+which is its `AS` alias or name. These are what the JDBC layer of `flint:jdbc`
+builds `SQLException` and `ResultSet` column lookup from.
+
 ## Connection and cleanup
 
 SQL calls on a reactor run in a task fiber. PostgreSQL progresses through

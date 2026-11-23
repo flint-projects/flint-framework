@@ -38,6 +38,7 @@ struct flint_sql_operation {
     int reusable;
     int dirty;
     atomic_int cancelled;
+    flint_sql_failure failure;
     /* Driver-owned storage. The row source cannot advance while its Row is published. */
     void *connection;
     void *row;
@@ -55,6 +56,8 @@ typedef struct {
 
 void flint_sql_retired(flint_sql_retirement receipt);
 int flint_sql_utf8(const void *data, size_t length);
+/* Keep the first failure an operation reports; later ones are consequences of it. */
+void flint_sql_note_failure(flint_sql_operation *operation, const char *state, int vendor, const char *message);
 
 #ifdef FLINT_HAS_SQLITE
 int flint_sqlite_available(void);
@@ -65,6 +68,7 @@ int flint_sqlite_drive(flint_sqlite_connection *connection, flint_sql_operation 
 uint32_t flint_sqlite_columns(const flint_sql_operation *operation);
 int flint_sqlite_cell(const flint_sql_operation *operation, uint32_t index, flint_sql_cell *cell,
                       const void **data);
+const char *flint_sqlite_name(const flint_sql_operation *operation, uint32_t index);
 void flint_sqlite_next(flint_sqlite_connection *connection, flint_sql_operation *operation);
 void flint_sqlite_abandon(flint_sqlite_connection *connection, flint_sql_operation *operation,
                          flint_sql_retirement receipt);
@@ -80,6 +84,7 @@ int flint_pg_drive(flint_pg_connection *connection, flint_sql_operation *operati
 uint32_t flint_pg_columns(const flint_sql_operation *operation);
 int flint_pg_cell(const flint_sql_operation *operation, uint32_t index, flint_sql_cell *cell,
                   const void **data);
+const char *flint_pg_name(const flint_sql_operation *operation, uint32_t index);
 void flint_pg_next(flint_sql_operation *operation);
 void flint_pg_discard(flint_sql_operation *operation);
 void flint_pg_retire(flint_pg_connection *connection, flint_sql_retirement receipt);
