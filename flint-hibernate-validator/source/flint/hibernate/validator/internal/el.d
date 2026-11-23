@@ -88,7 +88,7 @@ struct ElValue
     /// EL's coercion to String: "" for null, Java's text for numbers and booleans.
     string coerceToString() const pure nothrow
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         final switch (kind)
         {
@@ -98,12 +98,7 @@ struct ElValue
             return boolean ? "true" : "false";
         case Kind.number:
             if (integral)
-            {
-                try
-                    return (cast(long) number).to!string;
-                catch (Exception)
-                    return javaDoubleString(number);
-            }
+                return decimal(cast(long) number);
             return javaDoubleString(number);
         case Kind.string_:
             return text;
@@ -320,7 +315,7 @@ private struct Parser
 
     ElValue numberLiteral()
     {
-        import std.conv : to;
+        import flint.engine.aot.text : tryParseDouble, tryParseLong;
 
         const start = position;
         bool fraction;
@@ -331,7 +326,17 @@ private struct Parser
             ++position;
         }
         const text = source[start .. position];
-        return fraction ? ElValue.ofDouble(text.to!double) : ElValue.of(text.to!long);
+        if (fraction)
+        {
+            const real_ = tryParseDouble(text);
+            if (!real_.ok)
+                throw new ElException("malformed number literal: " ~ text);
+            return ElValue.ofDouble(real_.value);
+        }
+        const whole = tryParseLong(text);
+        if (!whole.ok)
+            throw new ElException("malformed number literal: " ~ text);
+        return ElValue.of(whole.value);
     }
 
     ElValue identifier()
@@ -379,7 +384,7 @@ private struct Parser
 
     static double toNumber(ElValue v) pure nothrow
     {
-        import std.conv : to;
+        import flint.engine.aot.text : tryParseDouble;
 
         final switch (v.kind)
         {
@@ -390,10 +395,8 @@ private struct Parser
         case ElValue.Kind.number:
             return v.number;
         case ElValue.Kind.string_:
-            try
-                return v.text.to!double;
-            catch (Exception)
-                return double.nan;
+            const parsed = tryParseDouble(v.text);
+            return parsed.ok ? parsed.value : double.nan;
         }
     }
 }

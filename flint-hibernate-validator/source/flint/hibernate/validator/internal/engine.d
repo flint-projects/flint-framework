@@ -78,11 +78,11 @@ final class NodeImpl : Path.Node
     /// The node as it appears in a path: `name`, `[3]name`, `[key]name`.
     override string toString() const
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         string text;
         if (inIterable)
-            text = "[" ~ (index >= 0 ? index.to!string : key.isNull() ? "" : key.toString()) ~ "]";
+            text = "[" ~ (index >= 0 ? decimal(cast(long) index) : key.isNull() ? "" : key.toString()) ~ "]";
         return name is null ? text : text ~ name;
     }
 }

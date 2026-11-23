@@ -120,13 +120,30 @@ private ElValue elValue(T)(const T value)
     else
     {
         // Arrays (Pattern.flags): Arrays.toString, as Hibernate's ParameterTermResolver prints them.
-        import std.conv : to;
-
         string text = "[";
         foreach (i, element; value)
-            text ~= (i ? ", " : "") ~ element.to!string;
+            text ~= (i ? ", " : "") ~ elementText(element);
         return ElValue.of(text ~ "]");
     }
+}
+
+// An array element's Java text. An enum prints its constant's name, as to!string did, without std.format: one
+// to!string of an enum instantiated most of std.format in this module.
+private string elementText(E)(const E element)
+{
+    static if (is(E == enum))
+    {
+        foreach (member; __traits(allMembers, E))
+            if (element == __traits(getMember, E, member))
+                return member;
+        return "";
+    }
+    else static if (__traits(isIntegral, E))
+        return imported!"flint.engine.aot.text".decimal(cast(long) element);
+    else static if (is(E : const(char)[]))
+        return element.idup;
+    else
+        static assert(false, "no Java text for an array of " ~ E.stringof);
 }
 
 /// The attribute named `name`, as text for `{name}`; null when there is none.
@@ -380,13 +397,44 @@ private NumberRead readNumber(ref Any value)
 
 private double decimal(string text) pure nothrow
 {
-    import std.conv : to;
-    import std.string : strip;
+    import flint.engine.aot.text : tryParseDouble;
 
-    try
-        return text.strip().to!double;
-    catch (Exception)
-        return double.nan;
+    const parsed = tryParseDouble(stripWhite(text));
+    return parsed.ok ? parsed.value : double.nan;
+}
+
+// std.string.strip without std.uni: removes leading and trailing characters that std.uni.isWhite accepts.
+private string stripWhite(string text) pure nothrow @nogc
+{
+    size_t start, end = text.length;
+    size_t width;
+    while (start < end && (width = whiteAt(text, start)) != 0)
+        start += width;
+    while (end > start)
+    {
+        size_t at = end - 1;
+        while (at > start && (text[at] & 0xC0) == 0x80)
+            --at;
+        if (whiteAt(text, at) != end - at)
+            break;
+        end = at;
+    }
+    return text[start .. end];
+}
+
+// The byte width of the std.uni.isWhite character starting at `i`, or 0 if `text[i]` does not start one.
+private size_t whiteAt(string text, size_t i) pure nothrow @nogc
+{
+    static immutable dchar[] white = [
+        ' ', '\t', '\n', '\v', '\f', '\r', 0x85, 0xA0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003,
+        0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000
+    ];
+    size_t next = i;
+    const c = decodeAt(text, next);
+    foreach (w; white)
+        if (c == w)
+            return next - i;
+    return 0;
 }
 
 // NumberComparatorHelper.compare: NaN compares as `nanAs` (-1 for @Min, 1 for @Max), so it fails both.
@@ -405,19 +453,30 @@ private int compareTo(bool integral, long whole, double number, double bound, in
 // DigitsValidatorForNumber: BigDecimal(value.toString()).stripTrailingZeros(), integer digits = precision - scale.
 private bool checkDigits(ref Any value, bool integral, double number, int maxInteger, int maxFraction)
 {
+    import flint.engine.aot.text : decimalText = decimal;
     import flint.serde.java_number : javaDoubleString;
-    import std.conv : to;
 
-    string text = integral ? value.get!long().to!string : value.holds!string()
+    string text = integral ? decimalText(value.get!long()) : value.holds!string()
         ? value.get!string() : javaDoubleString(number);
     long[2] digits = countDigits(text);
     return digits[0] <= maxInteger && digits[1] <= maxFraction;
 }
 
+// The exponent after `e` in `text`, as Long.parseLong reads it; NumberFormatException otherwise.
+private long exponentOf(string text, string exponent)
+{
+    import flint.engine.aot.text : tryParseLong;
+    import flint.java.lang : NumberFormatException;
+
+    const parsed = tryParseLong(exponent);
+    if (!parsed.ok)
+        throw new NumberFormatException("For input string: \"" ~ text ~ "\"");
+    return parsed.value;
+}
+
 // Integer and fraction digits of a decimal text with an optional sign and exponent, trailing zeros stripped.
 private long[2] countDigits(string text)
 {
-    import std.conv : to;
 
     if (text.length && (text[0] == '-' || text[0] == '+'))
         text = text[1 .. $];
@@ -426,7 +485,7 @@ private long[2] countDigits(string text)
     {
         if (ch == 'E' || ch == 'e')
         {
-            exponent = text[i + 1 .. $].to!long;
+            exponent = exponentOf(text, text[i + 1 .. $]);
             text = text[0 .. i];
             break;
         }
@@ -606,17 +665,55 @@ private bool quotedWord(string s, ref size_t i)
     return true;
 }
 
-private dchar decodeAt(string s, ref size_t i)
+// std.utf.decode without Phobos: one well-formed UTF-8 sequence (no overlong form, surrogate or value above
+// U+10FFFF); anything else advances one byte and reads as U+FFFD, as the std.utf fallback here did.
+private dchar decodeAt(string s, ref size_t i) pure nothrow @nogc
 {
-    import std.utf : decode;
-
-    try
-        return decode(s, i);
-    catch (Exception)
+    const lead = s[i];
+    if (lead < 0x80)
+        return s[i++];
+    size_t length;
+    dchar c;
+    dchar least;
+    if ((lead & 0xE0) == 0xC0)
+    {
+        length = 2;
+        c = lead & 0x1F;
+        least = 0x80;
+    }
+    else if ((lead & 0xF0) == 0xE0)
+    {
+        length = 3;
+        c = lead & 0x0F;
+        least = 0x800;
+    }
+    else if ((lead & 0xF8) == 0xF0)
+    {
+        length = 4;
+        c = lead & 0x07;
+        least = 0x10000;
+    }
+    if (length == 0 || i + length > s.length)
     {
         ++i;
         return 0xFFFD;
     }
+    foreach (k; 1 .. length)
+    {
+        if ((s[i + k] & 0xC0) != 0x80)
+        {
+            ++i;
+            return 0xFFFD;
+        }
+        c = (c << 6) | (s[i + k] & 0x3F);
+    }
+    if (c < least || c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF))
+    {
+        ++i;
+        return 0xFFFD;
+    }
+    i += length;
+    return c;
 }
 
 // DomainNameUtil.isValidEmailDomainAddress: no trailing dot, at most 255 characters, then labels separated by
@@ -790,4 +887,40 @@ unittest
         "plain", "a@b.", ".a@b", "a..b@c", "a@-b", "a@b..c", "a@[1.2.3]", "a@[1.2.3.4444]", "a b@c"
     ])
         assert(!isValidEmail(bad), bad);
+}
+
+unittest
+{
+    import std.string : strip;
+
+    static immutable texts = [
+        "", " ", "1.5", "  1.5\t\n", " 1.5　", "
+1
+", "x\u0085", " ", "1​", "  2  ", "é é", " -3 "
+    ];
+    foreach (text; texts)
+        assert(stripWhite(text) == text.strip(), text);
+}
+
+unittest
+{
+    import std.utf : decode;
+
+    static immutable texts = [
+        "a", "é", "€", "😀", "\xC0\x80", "\xE0\x80\x80", "\xED\xA0\x80", "\xF4\x90\x80\x80",
+        "\xFF", "\xC3", "\xE2\x82", "\xC3\x28", "a\xF0\x9F\x98"
+    ];
+    foreach (text; texts)
+    {
+        size_t mine, theirs;
+        dchar expected;
+        try
+            expected = decode(text, theirs);
+        catch (Exception)
+        {
+            expected = 0xFFFD;
+            theirs = 1;
+        }
+        assert(decodeAt(text, mine) == expected && mine == theirs, text);
+    }
 }
