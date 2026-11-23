@@ -653,6 +653,14 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
         return result;
     }
 
+    package(flint) HandlerMethod[] mappedHandlerMethods()
+    {
+        HandlerMethod[] result;
+        foreach (r; registrations)
+            result ~= r.handlerMethod;
+        return result;
+    }
+
     /// Every registered mapping.
     RequestMappingInfo[] getHandlerMethods() pure nothrow
     {

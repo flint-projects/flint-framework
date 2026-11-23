@@ -14,8 +14,8 @@ module flint.web.method;
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : MergedAnnotation, findAnnotation;
-import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec, ExceptionHandlerSpec,
-    ExceptionInvoker, HandlerArguments, HandlerInvoker, HandlerMapping;
+import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec, ExceptionArrayInvoker, ExceptionHandlerSpec,
+    ExceptionInvoker, HandlerArguments, HandlerArrayInvoker, HandlerInvoker, HandlerMapping;
 
 @safe:
 
@@ -30,6 +30,12 @@ class HandlerMethod
     private MethodParameter returnType;
     private HandlerInvoker handlerInvoker;
     private ExceptionInvoker exceptionInvoker;
+    // Contract 4's invokers over the argument array itself; null in older generated code.
+    private HandlerArrayInvoker handlerArrayInvoker;
+    private ExceptionArrayInvoker exceptionArrayInvoker;
+    // Flint: the invocable a handler adapter prepared for this method on the starting thread, and that adapter.
+    private Object preparedInvocable;
+    private Object preparedBy;
     private int responseStatus;
     private string responseStatusReason;
     private bool responseBody;
@@ -44,6 +50,7 @@ class HandlerMethod
         this.beanType = beanType;
         methodName = mapping.method !is null ? mapping.method.name : "";
         handlerInvoker = mapping.invoke;
+        handlerArrayInvoker = mapping.invokeArguments;
         responseStatus = mapping.responseStatus;
         responseStatusReason = mapping.reason;
         responseBody = mapping.responseBody;
@@ -77,6 +84,7 @@ class HandlerMethod
         this.beanType = beanType;
         this.methodName = methodName;
         exceptionInvoker = handler.invoke;
+        exceptionArrayInvoker = handler.invokeArguments;
         responseStatus = handler.responseStatus;
         responseBody = handler.responseBody;
         initParameters(handler.arguments, handler.returnType);
@@ -190,6 +198,8 @@ class HandlerMethod
         returnType = other.returnType;
         handlerInvoker = other.handlerInvoker;
         exceptionInvoker = other.exceptionInvoker;
+        handlerArrayInvoker = other.handlerArrayInvoker;
+        exceptionArrayInvoker = other.exceptionArrayInvoker;
         responseStatus = other.responseStatus;
         responseStatusReason = other.responseStatusReason;
         responseBody = other.responseBody;
@@ -215,5 +225,36 @@ class HandlerMethod
         else if (exceptionInvoker !is null)
             exceptionInvoker(bean, exception, arguments, result);
         return result;
+    }
+
+    /// Whether the generated code invokes this method over an argument array (contract 4), so the arguments
+    /// need no `HandlerArguments` object and may live on the caller's stack.
+    package(flint) bool invokesArguments() const pure nothrow @nogc
+    {
+        return handlerInvoker !is null ? handlerArrayInvoker !is null : exceptionArrayInvoker !is null;
+    }
+
+    /// `invoke` over `arguments` themselves; `invokesArguments` must hold.
+    package(flint) Any invokeArguments(scope Any[] arguments, Exception exception)
+    {
+        Any result;
+        if (handlerArrayInvoker !is null)
+            handlerArrayInvoker(bean, arguments, result);
+        else
+            exceptionArrayInvoker(bean, exception, arguments, result);
+        return result;
+    }
+
+    /// Records the invocable `adapter` prepared for this method before requests run.
+    package(flint) void setPreparedInvocable(Object adapter, Object invocable) pure nothrow @nogc
+    {
+        preparedBy = adapter;
+        preparedInvocable = invocable;
+    }
+
+    /// The invocable `adapter` prepared for this method, or null.
+    package(flint) Object getPreparedInvocable(scope const Object adapter) pure nothrow @nogc
+    {
+        return preparedBy is adapter ? preparedInvocable : null;
     }
 }

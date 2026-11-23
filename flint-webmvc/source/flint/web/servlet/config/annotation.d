@@ -389,6 +389,7 @@ class WebMvcConfigurationSupport
         // Flint: requests run on several reactor threads, so the resolver cache (Spring's ConcurrentHashMap) is
         // filled here, on the starting thread, and only read while requests run.
         adapter.getArgumentResolvers().warmUp(requestMappings.mappedParameters());
+        adapter.prepareInvocables(requestMappings.mappedHandlerMethods());
 
         HandlerExceptionResolver[] resolvers;
         foreach (configurer; configurers)

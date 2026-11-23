@@ -254,6 +254,9 @@ class InvocableHandlerMethod : HandlerMethod
 {
     private HandlerMethodArgumentResolverComposite resolvers;
     private WebDataBinderFactory dataBinderFactory;
+    // Whether this class resolves and invokes as Spring's does (it overrides neither getMethodArgumentValues nor
+    // doInvoke), so invokeForRequest may resolve into stack storage when the generated code takes an array.
+    private bool standardInvocation;
 
     ///
     this(HandlerMethod handlerMethod)
@@ -261,6 +264,15 @@ class InvocableHandlerMethod : HandlerMethod
         // The resolvers are set per invocation (setHandlerMethodArgumentResolvers); an empty composite is made only
         // when none were, on first use.
         super(handlerMethod);
+        standardInvocation = typeid(this) is typeid(InvocableHandlerMethod);
+    }
+
+    /// For a subclass that overrides neither `getMethodArgumentValues` nor `doInvoke`: its instances of exactly
+    /// `type` may resolve arguments into stack storage.
+    package(flint) final void invokesAsBase(TypeInfo_Class type) pure nothrow @nogc
+    {
+        if (typeid(this) is type)
+            standardInvocation = true;
     }
 
     /// Sets the argument resolvers.
@@ -278,6 +290,16 @@ class InvocableHandlerMethod : HandlerMethod
     /// Resolves every argument (preferring `providedArgs` by type) and invokes the method.
     Any invokeForRequest(NativeWebRequest request, ModelAndViewContainer mavContainer, Any[] providedArgs = null)
     {
+        // Flint: with contract 4's array invoker, the arguments live on this stack frame: no array and no
+        // HandlerArguments object per request.
+        enum stackArguments = 8;
+        if (standardInvocation && invokesArguments() && getMethodParameters().length <= stackArguments)
+        {
+            Any[stackArguments] storage;
+            auto stacked = storage[0 .. getMethodParameters().length];
+            resolveArguments(stacked, request, mavContainer, providedArgs);
+            return invokeArguments(stacked, invokedException(stacked, providedArgs));
+        }
         auto args = getMethodArgumentValues(request, mavContainer, providedArgs);
         return doInvoke(args, invokedException(args, providedArgs));
     }
@@ -285,7 +307,7 @@ class InvocableHandlerMethod : HandlerMethod
     // The generated invoker of an @ExceptionHandler casts this to the handler's exception parameter, so it is the
     // provided exception (the exception or one of its causes) that parameter resolved to, as Spring passes it as
     // that argument; without such a parameter, the top-level exception, which providedArgs lists first.
-    private static Exception invokedException(Any[] args, Any[] providedArgs)
+    private static Exception invokedException(scope Any[] args, Any[] providedArgs)
     {
         foreach (arg; args)
         {
@@ -307,9 +329,15 @@ class InvocableHandlerMethod : HandlerMethod
     protected Any[] getMethodArgumentValues(NativeWebRequest request,
             ModelAndViewContainer mavContainer, Any[] providedArgs)
     {
-        auto parameters = getMethodParameters();
-        auto args = new Any[parameters.length];
-        foreach (i, parameter; parameters)
+        auto args = new Any[getMethodParameters().length];
+        resolveArguments(args, request, mavContainer, providedArgs);
+        return args;
+    }
+
+    private void resolveArguments(scope Any[] args, NativeWebRequest request,
+            ModelAndViewContainer mavContainer, Any[] providedArgs)
+    {
+        foreach (i, parameter; getMethodParameters())
         {
             if (findProvidedArgument(parameter, providedArgs, args[i]))
                 continue;
@@ -319,7 +347,6 @@ class InvocableHandlerMethod : HandlerMethod
                 throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
             args[i] = resolvers.resolveArgument(parameter, mavContainer, request, dataBinderFactory);
         }
-        return args;
     }
 
     private static bool findProvidedArgument(MethodParameter parameter, Any[] providedArgs, ref Any result)

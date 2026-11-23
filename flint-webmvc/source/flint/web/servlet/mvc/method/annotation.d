@@ -768,6 +768,7 @@ class ServletInvocableHandlerMethod : InvocableHandlerMethod
     this(HandlerMethod handlerMethod)
     {
         super(handlerMethod);
+        invokesAsBase(typeid(ServletInvocableHandlerMethod));
     }
 
     /// Sets the return value handlers, and the `@ResponseBody` handler used for `@ResponseBody` methods.
@@ -874,6 +875,8 @@ class RequestMappingHandlerAdapter : HandlerAdapter
     private HandlerMethodReturnValueHandler[] customReturnValueHandlers;
     private DefaultHandlers handlers;
     private WebDataBinderFactory binderFactory;
+    // Whether the invocables prepareInvocables made still hold this adapter's resolvers, handlers and binder factory.
+    private bool invocablesCurrent;
 
     /// With the message converters (Spring Boot's `HttpMessageConverters`).
     this(HttpMessageConverter[] messageConverters, ContentNegotiationManager manager = null,
@@ -929,6 +932,26 @@ class RequestMappingHandlerAdapter : HandlerAdapter
     package(flint) void setDescriptors(DescriptorTable descriptors)
     {
         binderFactory = new DefaultDataBinderFactory(descriptors);
+        invocablesCurrent = false;
+    }
+
+    /// Flint: one invocable per mapped handler method, made on the starting thread and only read while requests run.
+    /// It holds this adapter's resolvers, handlers and binder factory and no request state, so every request
+    /// shares it where Spring copies the handler method per request.
+    package(flint) void prepareInvocables(scope HandlerMethod[] handlerMethods)
+    {
+        foreach (handlerMethod; handlerMethods)
+            handlerMethod.setPreparedInvocable(this, createInvocable(handlerMethod));
+        invocablesCurrent = true;
+    }
+
+    private ServletInvocableHandlerMethod createInvocable(HandlerMethod handlerMethod)
+    {
+        auto invocable = new ServletInvocableHandlerMethod(handlerMethod);
+        invocable.setHandlerMethodArgumentResolvers(handlers.argumentResolvers);
+        invocable.setHandlerMethodReturnValueHandlers(handlers.returnValueHandlers, handlers.responseBody);
+        invocable.setDataBinderFactory(binderFactory);
+        return invocable;
     }
 
     bool supports(Object handler)
@@ -940,10 +963,11 @@ class RequestMappingHandlerAdapter : HandlerAdapter
     {
         auto handlerMethod = cast(HandlerMethod) handler;
         auto webRequest = new ServletWebRequest(request, response);
-        auto invocable = new ServletInvocableHandlerMethod(handlerMethod);
-        invocable.setHandlerMethodArgumentResolvers(handlers.argumentResolvers);
-        invocable.setHandlerMethodReturnValueHandlers(handlers.returnValueHandlers, handlers.responseBody);
-        invocable.setDataBinderFactory(binderFactory);
+        ServletInvocableHandlerMethod invocable;
+        if (invocablesCurrent)
+            invocable = cast(ServletInvocableHandlerMethod) handlerMethod.getPreparedInvocable(this);
+        if (invocable is null)
+            invocable = createInvocable(handlerMethod);
         auto mavContainer = new ModelAndViewContainer;
         invocable.invokeAndHandle(webRequest, mavContainer);
         return getModelAndView(mavContainer);

@@ -470,3 +470,76 @@ unittest
     bare.setHandlerMethodArgumentResolvers(f.composite);
     assert(bare.invokeForRequest(f.request, null, provided).get!string == "could not execute statement");
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Flint: contract 4's array invoker
+
+private int arrayInvocations;
+
+/// Flint AOT's contract 4 invoker: `invokeHandler` over the argument array itself.
+private void invokeHandlerArray(C, alias method)(Object bean, scope Any[] arguments, ref Any result)
+{
+    ++arrayInvocations;
+    auto controller = cast(C) bean;
+    Parameters!method args;
+    static foreach (i, P; Parameters!method)
+        if (!arguments[i].isNull())
+            args[i] = arguments[i].get!P;
+    result = Any.of(__traits(child, controller, method)(args));
+}
+
+private HandlerMethod arrayHandlerMethod()
+{
+    alias method = handlerMethodOf!(int, string);
+    auto row = handlerRow!(Handler, method)();
+    row.invokeArguments = &invokeHandlerArray!(Handler, method);
+    return new HandlerMethod(new Handler(), typeNameOf!Handler, row);
+}
+
+/// Resolves as Spring does, then doubles the int argument: an override `invokeForRequest` must still call.
+private final class DoublingInvocable : InvocableHandlerMethod
+{
+    this(HandlerMethod handlerMethod)
+    {
+        super(handlerMethod);
+    }
+
+    protected override Any[] getMethodArgumentValues(NativeWebRequest request,
+            ModelAndViewContainer mavContainer, Any[] providedArgs)
+    {
+        auto args = super.getMethodArgumentValues(request, mavContainer, providedArgs);
+        args[0] = Any.of(args[0].get!int * 2);
+        return args;
+    }
+}
+
+@("Flint: with the generated array invoker, arguments resolve into stack storage and reach the method")
+unittest
+{
+    auto f = setup();
+    f.composite.addResolvers(StubArgumentResolver.of(99));
+    f.composite.addResolvers(StubArgumentResolver.of("value"));
+    auto invocable = new InvocableHandlerMethod(arrayHandlerMethod());
+    invocable.setHandlerMethodArgumentResolvers(f.composite);
+    const before = arrayInvocations;
+
+    assert(invocable.invokeForRequest(f.request, null).get!string == "99-value");
+    assert(arrayInvocations == before + 1);
+    // A provided argument still wins over the resolvers.
+    assert(invocable.invokeForRequest(f.request, null, [Any.of(5)]).get!string == "5-value");
+    assert(arrayInvocations == before + 2);
+}
+
+@("Flint: a subclass overriding getMethodArgumentValues keeps Spring's path, without the array invoker")
+unittest
+{
+    auto f = setup();
+    f.composite.addResolvers(StubArgumentResolver.of(99));
+    f.composite.addResolvers(StubArgumentResolver.of("value"));
+    auto invocable = new DoublingInvocable(arrayHandlerMethod());
+    invocable.setHandlerMethodArgumentResolvers(f.composite);
+    const before = arrayInvocations;
+
+    assert(invocable.invokeForRequest(f.request, null).get!string == "198-value");
+    assert(arrayInvocations == before);
+}
