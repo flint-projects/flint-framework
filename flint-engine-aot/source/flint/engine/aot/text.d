@@ -73,6 +73,90 @@ string utf8(dchar c) pure nothrow
     return null;
 }
 
+/++
+The code point at `index` in UTF-8 `text`, advancing `index` past it, as `std.utf.decode!(Yes.useReplacementDchar)`:
+a malformed sequence (bad lead or continuation byte, truncated, overlong, a surrogate or above U+10FFFF) reads as
+U+FFFD and advances as far as std.utf does. `index` must be below `text.length`.
++/
+dchar decodeUtf8(scope const(char)[] text, ref size_t index) pure nothrow @nogc
+{
+    const c = decodeOrInvalid(text, index);
+    return c == invalid ? 0xFFFD : c;
+}
+
+// Above every code point: what decodeOrInvalid reads for a malformed sequence.
+private enum dchar invalid = cast(dchar) 0x110000;
+
+// std.utf's decodeImpl, replacement path: one sequence, or `invalid` once std.utf would have used U+FFFD.
+private dchar decodeOrInvalid(scope const(char)[] text, ref size_t index) pure nothrow @nogc
+{
+    static immutable uint[4] mask = [0x7F, 0x7FF, 0xFFFF, 0x1F_FFFF];
+    const lead = text[index];
+    if (lead < 0x80)
+    {
+        ++index;
+        return lead;
+    }
+    if ((lead & 0xC0) != 0xC0)
+        return skip(index, 1);
+    const available = text.length - index;
+    dchar d = lead;
+    uint shifted = (lead << 1) & 0xFF;
+    foreach (i; 1 .. 4)
+    {
+        if (i == available)
+            return skip(index, i);
+        const next = text[index + i];
+        if ((next & 0xC0) != 0x80)
+            return skip(index, i + 1);
+        d = (d << 6) | (next & 0x3F);
+        shifted = (shifted << 1) & 0xFF;
+        if (shifted & 0x80)
+            continue;
+        d &= mask[i];
+        if ((d & ~mask[i - 1]) == 0 || (i == 2 && d >= 0xD800 && d <= 0xDFFF) || d > 0x10FFFF)
+            return skip(index, i + 1); // overlong, a surrogate, or beyond U+10FFFF
+        index += i + 1;
+        return d;
+    }
+    return skip(index, 4); // a five- or six-byte lead: std.utf has read four by now
+}
+
+// `invalid`, advancing `index` by the `consumed` code units std.utf skips.
+private dchar skip(ref size_t index, size_t consumed) pure nothrow @nogc
+{
+    index += consumed;
+    return invalid;
+}
+
+/// The number of UTF-8 code units that encode `c`, as `std.utf.codeLength!char`.
+size_t utf8Length(dchar c) pure nothrow @nogc
+{
+    return c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+}
+
+/// Whether `text` is well-formed UTF-8, as `std.utf.validate` not throwing.
+bool isValidUtf8(scope const(char)[] text) pure nothrow @nogc
+{
+    size_t i;
+    while (i < text.length)
+        if (decodeOrInvalid(text, i) == invalid)
+            return false;
+    return true;
+}
+
+/// The number of code points in UTF-8 `text`, a malformed sequence counting as the one U+FFFD `decodeUtf8` reads.
+size_t codePointCount(scope const(char)[] text) pure nothrow @nogc
+{
+    size_t count, i;
+    while (i < text.length)
+    {
+        cast(void) decodeUtf8(text, i);
+        ++count;
+    }
+    return count;
+}
+
 /// Reads a whole decimal integer as `to!long` does: an optional sign and digits only. False where `to!long`
 /// throws, for malformed text or a value out of range.
 bool parseLong(scope const(char)[] text, out long value) pure nothrow @nogc
@@ -705,4 +789,76 @@ unittest
 
     foreach (value; [Color.red, Color.GREEN, Color.blueSky, cast(Color) 7])
         assert(enumName(value) == value.to!string);
+}
+
+unittest
+{
+    import std.typecons : Yes;
+    import std.utf : decode;
+
+    // Parity with std.utf's replacement decode over every string of one and two bytes and a spread of three and
+    // four, from each starting index: the same code point and the same advance.
+    void check(scope const(char)[] text)
+    {
+        for (size_t i; i < text.length;)
+        {
+            size_t mine = i, theirs = i;
+            const a = decodeUtf8(text, mine);
+            const b = decode!(Yes.useReplacementDchar)(text, theirs);
+            assert(a == b && mine == theirs);
+            i = mine;
+        }
+    }
+
+    char[4] buffer;
+    foreach (x; 0 .. 256)
+    {
+        buffer[0] = cast(char) x;
+        check(buffer[0 .. 1]);
+        foreach (y; 0 .. 256)
+        {
+            buffer[1] = cast(char) y;
+            check(buffer[0 .. 2]);
+        }
+    }
+    static immutable ubyte[] interesting = [
+        0x00, 0x41, 0x7F, 0x80, 0x8F, 0x90, 0x9F, 0xA0, 0xBF, 0xC0, 0xC1, 0xC2, 0xDF, 0xE0, 0xE1,
+        0xED, 0xEE, 0xEF, 0xF0, 0xF1, 0xF4, 0xF5, 0xF7, 0xF8, 0xFF
+    ];
+    foreach (a; interesting)
+        foreach (b; interesting)
+            foreach (c; interesting)
+            {
+                buffer[0 .. 3] = [cast(char) a, cast(char) b, cast(char) c];
+                check(buffer[0 .. 3]);
+                foreach (d; interesting)
+                {
+                    buffer[3] = cast(char) d;
+                    check(buffer[0 .. 4]);
+                }
+            }
+}
+
+unittest
+{
+    import std.utf : codeLength, validate, UTFException, count;
+
+    foreach (dchar c; [0, 0x7F, 0x80, 0x7FF, 0x800, 0xFFFF, 0x10000, 0x10FFFF])
+        assert(utf8Length(c) == codeLength!char(c));
+    foreach (text; [
+        "", "abc", "héllo", "\U0001F600", "�", "a\xFFb", "\xE2\x82", "\xED\xA0\x80",
+        "\xC0\xAF", "\xF4\x90\x80\x80"
+    ])
+    {
+        bool valid = true;
+        try
+            validate(text);
+        catch (UTFException)
+            valid = false;
+        assert(isValidUtf8(text) == valid, text);
+        if (valid)
+            assert(codePointCount(text) == count(text));
+    }
+    // Negative: malformed input counts as std.utf's replacement decode reads it; \xFF takes the byte after it along.
+    assert(codePointCount("a\xFFb") == 2 && codePointCount("\xE2\x82") == 1 && !isValidUtf8("\xF8\x80\x80\x80"));
 }
