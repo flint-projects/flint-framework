@@ -16,6 +16,7 @@ $(UL
 module flint.java.lang;
 
 import flint.engine.aot.objects : objectEquals, objectToHash, objectToString;
+import flint.java.util : Iterator; // module scope: a template-scoped import breaks -i builds (forward references)
 
 @safe:
 
@@ -288,7 +289,6 @@ interface AutoCloseable
 /// Java's `Iterable`: a source of an `Iterator`, usable in `foreach`.
 interface Iterable(T)
 {
-    import flint.java.util : Iterator;
 
     /// An iterator over the elements.
     Iterator!T iterator();
