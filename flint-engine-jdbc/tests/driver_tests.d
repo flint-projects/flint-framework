@@ -72,6 +72,32 @@ version (FlintNativeSqlite)
         assert(connection.getMetaData().getDatabaseProductName() == "SQLite");
     }
 
+    @("FlintDataSource connections reuse one statement buffer instead of allocating 1 MiB each")
+    unittest
+    {
+        import flint.arena.gc : Allocations, installAllocationCounter, thisThreadAllocations,
+            uninstallAllocationCounter;
+
+        auto source = new FlintDataSource("jdbc:sqlite:file:flint-jdbc-scratch?mode=memory&cache=shared");
+        scope (exit)
+            source.close();
+        assert(installAllocationCounter());
+        scope (exit)
+            uninstallAllocationCounter();
+        Allocations before, first, second;
+        assert(thisThreadAllocations(before));
+        auto one = source.getConnection();
+        assert(one.createStatement().executeQuery("SELECT 1 AS n").next());
+        one.close();
+        assert(thisThreadAllocations(first));
+        auto two = source.getConnection();
+        assert(two.createStatement().executeQuery("SELECT 1 AS n").next());
+        two.close();
+        assert(thisThreadAllocations(second));
+        assert(first.bytes - before.bytes >= 1 << 20, "the first connection allocates its statement buffer");
+        assert(second.bytes - first.bytes < 64 * 1024, "the next connection reuses it");
+    }
+
     @("FlintDataSource pools engine leases and applies its connection defaults")
     unittest
     {

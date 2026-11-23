@@ -261,6 +261,9 @@ private string stateOf(Status status) pure nothrow @nogc
 // ---------------------------------------------------------------------------------------------------------------
 // Connections
 
+/// Bytes of a connection's statement buffer, which a statement's parameters and rows pass through.
+private enum statementBufferBytes = 1 << 20;
+
 /// A JDBC connection over one engine lease.
 final class FlintConnection : Connection
 {
@@ -295,11 +298,19 @@ final class FlintConnection : Connection
         return pool.driver;
     }
 
-    /// An arena over this connection's statement buffer, which a statement's parameters and rows pass through.
+    /// An arena over this connection's statement buffer, which a statement's parameters and rows pass through. The
+    /// buffer is its data source's to reuse: a connection takes one on its first statement and gives it back when it
+    /// closes, so a request no longer allocates and clears 1 MiB (policy/request-allocations.json: it was about 1.1 MB
+    /// of every petclinic-rest request that touched the database). A new buffer is left uninitialized, so only the
+    /// pages statements write become resident.
     package(flint.engine) RequestArena newArena()
     {
+        import std.array : uninitializedArray;
+
+        if (scratch is null && source !is null)
+            scratch = source.takeScratch();
         if (scratch is null)
-            scratch = new ubyte[1 << 20];
+            scratch = uninitializedArray!(ubyte[])(statementBufferBytes);
         return RequestArena(scratch);
     }
 
@@ -444,7 +455,12 @@ final class FlintConnection : Connection
         if (ownsPool)
             cast(void) pool.close(context);
         if (source !is null)
+        {
+            if (scratch !is null)
+                source.giveScratch(scratch);
+            scratch = null;
             source.returned();
+        }
     }
 
     override bool isClosed()
@@ -2116,6 +2132,9 @@ final class FlintDataSource : DataSource
     private Pool pool;
     private bool opened;
     private bool closed_;
+    /// Statement buffers closed connections gave back; the first `freeScratch` are free.
+    private ubyte[][] scratchBuffers;
+    private size_t freeScratch;
 
     /// Create an unconfigured data source.
     this()
@@ -2281,6 +2300,32 @@ final class FlintDataSource : DataSource
 
     private void returned()
     {
+    }
+
+    /// A statement buffer a closed connection gave back, or null.
+    package(flint.engine) ubyte[] takeScratch()
+    {
+        synchronized (this)
+        {
+            if (freeScratch == 0)
+                return null;
+            auto buffer = scratchBuffers[--freeScratch];
+            scratchBuffers[freeScratch] = null;
+            return buffer;
+        }
+    }
+
+    /// Keep a closing connection's statement buffer for the next connection.
+    package(flint.engine) void giveScratch(ubyte[] buffer)
+    {
+        synchronized (this)
+        {
+            if (freeScratch == scratchBuffers.length)
+                scratchBuffers ~= buffer;
+            else
+                scratchBuffers[freeScratch] = buffer;
+            ++freeScratch;
+        }
     }
 
     /// Close the pool. Connections still out are retired when they are closed.
