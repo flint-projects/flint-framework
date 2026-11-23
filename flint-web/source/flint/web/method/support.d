@@ -52,6 +52,9 @@ class HandlerMethodArgumentResolverComposite : HandlerMethodArgumentResolver
 {
     private HandlerMethodArgumentResolver[] argumentResolvers;
     private HandlerMethodArgumentResolver[MethodParameter] cache;
+    // Flint: requests run on several reactor threads, so the cache (Spring's ConcurrentHashMap) is filled before
+    // they start (`warmUp`) and only read afterwards.
+    private bool frozen;
 
     /// Adds resolvers, consulted in order.
     HandlerMethodArgumentResolverComposite addResolvers(HandlerMethodArgumentResolver[] resolvers...)
@@ -71,6 +74,17 @@ class HandlerMethodArgumentResolverComposite : HandlerMethodArgumentResolver
     {
         argumentResolvers = null;
         cache = null;
+        frozen = false;
+    }
+
+    /// Flint: caches the resolver of each of `parameters`, then freezes the cache, which is read-only from then
+    /// on, so request threads may share it. A parameter outside the cache is still resolved, by trying each
+    /// resolver. `DispatcherServlet.init` warms the cache with every mapped handler method's parameters.
+    package(flint) void warmUp(scope MethodParameter[] parameters)
+    {
+        foreach (parameter; parameters)
+            getArgumentResolver(parameter);
+        frozen = true;
     }
 
     bool supportsParameter(MethodParameter parameter)
@@ -96,7 +110,8 @@ class HandlerMethodArgumentResolverComposite : HandlerMethodArgumentResolver
         {
             if (resolver.supportsParameter(parameter))
             {
-                cache[parameter] = resolver;
+                if (!frozen)
+                    cache[parameter] = resolver;
                 return resolver;
             }
         }

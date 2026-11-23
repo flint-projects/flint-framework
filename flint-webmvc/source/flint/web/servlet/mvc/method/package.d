@@ -15,6 +15,7 @@ class and method paths are already combined. Ambiguous mappings fail at startup 
 +/
 module flint.web.servlet.mvc.method;
 
+import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.http : HttpHeaders, HttpMethod, InvalidMediaTypeException, MediaType;
 import flint.jakarta.servlet : DispatcherType;
@@ -623,6 +624,15 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
             if (!pattern.hasPatternSyntax())
                 directPathRegistrations[pattern.getPatternString()] ~= registrations.length;
         registrations ~= Registration(info, handlerMethod);
+    }
+
+    // The parameters of every registered handler method, for the adapter's resolver cache.
+    package(flint) MethodParameter[] mappedParameters()
+    {
+        MethodParameter[] result;
+        foreach (r; registrations)
+            result ~= r.handlerMethod.getMethodParameters();
+        return result;
     }
 
     /// Every registered mapping.

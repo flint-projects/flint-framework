@@ -120,3 +120,40 @@ unittest
         thrown = true;
     assert(thrown);
 }
+
+/// Counts `supportsParameter` calls, to see which lookups reach the resolvers.
+private final class CountingResolver : HandlerMethodArgumentResolver
+{
+    size_t checks;
+
+    bool supportsParameter(MethodParameter parameter)
+    {
+        checks++;
+        return true;
+    }
+
+    Any resolveArgument(MethodParameter, ModelAndViewContainer, NativeWebRequest, WebDataBinderFactory)
+    {
+        return Any.of(1);
+    }
+}
+
+@("Flint: warmUp caches the given parameters, then the cache is read-only for request threads")
+unittest
+{
+    auto f = setup();
+    auto counting = new CountingResolver;
+    f.resolverComposite.addResolvers(counting);
+    f.resolverComposite.warmUp([f.paramInt]);
+    assert(counting.checks == 1);
+
+    // A warmed parameter is answered from the cache.
+    assert(f.resolverComposite.supportsParameter(f.paramInt));
+    assert(f.resolverComposite.resolveArgument(f.paramInt, null, null, null) == Any.of(1));
+    assert(counting.checks == 1);
+
+    // Any other parameter (an exception handler's, made per invocation) is resolved each time and never cached.
+    assert(f.resolverComposite.resolveArgument(f.paramStr, null, null, null) == Any.of(1));
+    assert(f.resolverComposite.resolveArgument(f.paramStr, null, null, null) == Any.of(1));
+    assert(counting.checks == 3);
+}

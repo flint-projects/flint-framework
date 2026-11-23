@@ -828,19 +828,27 @@ private final class EngineContext : ServletContext
         return contextPath;
     }
 
+    // The attributes are shared by every reactor thread, as Tomcat's ApplicationContext keeps them in a
+    // ConcurrentHashMap.
     Any getAttribute(string name)
     {
-        if (auto value = name in attributes)
-            return *value;
+        synchronized (this)
+        {
+            if (auto value = name in attributes)
+                return *value;
+        }
         return Any.init;
     }
 
     void setAttribute(string name, Any object)
     {
-        if (object.isNull())
-            attributes.remove(name);
-        else
-            attributes[name] = object;
+        synchronized (this)
+        {
+            if (object.isNull())
+                attributes.remove(name);
+            else
+                attributes[name] = object;
+        }
     }
 
     string getServerInfo()
