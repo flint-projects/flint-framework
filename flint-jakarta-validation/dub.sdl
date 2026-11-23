@@ -1,0 +1,19 @@
+name "jakarta-validation"
+description "Jakarta Validation 3.1 API for Flint: Validator, ConstraintViolation, the constraint annotations (jakarta.validation)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:conc" version="*"
+dependency "flint:engine-aot" version="*"
+dependency "flint:java" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

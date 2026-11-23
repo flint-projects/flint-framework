@@ -1,0 +1,23 @@
+active	must be true	{jakarta.validation.constraints.AssertTrue.message}	false
+age	must be greater than or equal to 1	{jakarta.validation.constraints.Min.message}	0
+amount	numeric value out of bounds (<3 digits>.<2 digits> expected)	{jakarta.validation.constraints.Digits.message}	1234.567
+balance	must be greater than or equal to 0	{jakarta.validation.constraints.PositiveOrZero.message}	-0.5
+blankName	must not be blank	{jakarta.validation.constraints.NotBlank.message}	 	
+city	size must be between 2 and 30	{jakarta.validation.constraints.Size.message}	A
+code	'ab' must have at least 3 characters	'${validatedValue}' must have at least {min} characters	ab
+debt	must be less than or equal to 0	{jakarta.validation.constraints.NegativeOrZero.message}	5
+deleted	must be false	{jakarta.validation.constraints.AssertFalse.message}	true
+email	must be a well-formed email address	{jakarta.validation.constraints.Email.message}	not-an-email
+escaped	literal {min} and {min}	literal \{min\} and {min}	null
+firstName	must not be blank	{jakarta.validation.constraints.NotBlank.message}	
+id	must be greater than 0	{jakarta.validation.constraints.Positive.message}	-3
+lastName	must not be null	{jakarta.validation.constraints.NotNull.message}	null
+maxAge	must be less than or equal to 120	{jakarta.validation.constraints.Max.message}	150
+nicknames	size must be between 0 and 2	{jakarta.validation.constraints.Size.message}	[a, b, c]
+nothing	must be null	{jakarta.validation.constraints.Null.message}	x
+pets[0].name	must not be blank	{jakarta.validation.constraints.NotBlank.message}	  
+pets[0].type	must not be null	{jakarta.validation.constraints.NotNull.message}	null
+price	must be greater than 0	{jakarta.validation.constraints.DecimalMin.message}	0.0
+rating	must be less than or equal to 99.5	{jakarta.validation.constraints.DecimalMax.message}	100.0
+tags	must not be empty	{jakarta.validation.constraints.NotEmpty.message}	[]
+telephone	must match "\d{1,10}"	{jakarta.validation.constraints.Pattern.message}	60855510239999

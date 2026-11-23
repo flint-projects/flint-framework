@@ -1,0 +1,22 @@
+name "hibernate-validator"
+description "Hibernate Validator 9.1 for Flint: the Jakarta Validation provider, built-in validators and English messages (org.hibernate.validator)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:engine-aot" version="*"
+dependency "flint:jakarta-validation" version="*"
+dependency "flint:java" version="*"
+dependency "flint:serde" version="*"
+dependency "flint:validate" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+    stringImportPaths "tests/golden"
+}

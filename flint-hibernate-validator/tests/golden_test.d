@@ -1,0 +1,141 @@
+/// Message and path equality with Hibernate Validator 9.1.6.Final: the D twin of the bean in
+/// tests/golden/GoldenValidation.java, whose violations the real Hibernate Validator wrote to
+/// tests/golden/validation.tsv (path, message, template and invalid value, sorted).
+module golden_test;
+
+import flint.engine.aot.any : Any;
+import flint.engine.aot.descriptor : DescriptorTable, descriptorOf;
+import flint.hibernate.validator : HibernateValidatorConfiguration;
+import flint.jakarta.validation : ConstraintViolation, Valid, Validation, Validator;
+import flint.jakarta.validation.constraints;
+import flint.java.util : ArrayList, List;
+
+@safe:
+
+private final class Pet
+{
+    @NotBlank string name;
+    @NotNull string type;
+
+    this(string name, string type)
+    {
+        this.name = name;
+        this.type = type;
+    }
+}
+
+private final class Owner
+{
+    @NotBlank string firstName = "";
+    @NotNull string lastName;
+    @Size(min : 2, max:
+            30) string city = "A";
+    @Pattern(regexp : `\d{1,10}`) string telephone = "60855510239999";
+    @Email string email = "not-an-email";
+    @Email string goodEmail = "george@example.com";
+    @Min(1) int age = 0;
+    @Max(120) long maxAge = 150;
+    @Positive int id = -3;
+    @NegativeOrZero int debt = 5;
+    @PositiveOrZero double balance = -0.5;
+    @DecimalMax("99.5") double rating = 100.0;
+    @DecimalMin(value : "0", inclusive:
+            false) double price = 0.0;
+    @Digits(integer : 3, fraction:
+            2) double amount = 1234.567;
+    @AssertTrue bool active = false;
+    @AssertFalse bool deleted = true;
+    @NotEmpty List!string tags;
+    @Size(max : 2) List!string nicknames;
+    @Null string nothing = "x";
+    @NotBlank string blankName = " \t";
+    @Size(min : 3, message:
+            "'${validatedValue}' must have at least {min} characters") string code = "ab";
+    @NotNull(message : `literal \{min\} and {min}`) string escaped;
+    @Size(min : 1, max:
+            5) string ok = "fine";
+    @Valid List!Pet pets;
+
+    this()
+    {
+        tags = new ArrayList!string();
+        nicknames = new ArrayList!string();
+        nicknames.add("a");
+        nicknames.add("b");
+        nicknames.add("c");
+        pets = new ArrayList!Pet();
+        pets.add(new Pet("  ", null));
+        pets.add(new Pet("Leo", "cat"));
+    }
+}
+
+// String.valueOf of the invalid value, as GoldenValidation prints it.
+private string valueOf(Any value)
+{
+    import flint.engine.aot.objects : objectToString;
+    import flint.serde.java_number : javaDoubleString;
+
+    if (value.isNull())
+        return "null";
+    if (auto o = value.asObject())
+        return objectToString(o);
+    if (value.holds!string())
+        return value.get!string();
+    if (value.holds!bool())
+        return value.get!bool() ? "true" : "false";
+    if (value.holds!long())
+        return value.toString();
+    return javaDoubleString(value.get!double());
+}
+
+private Validator validator()
+{
+    auto table = DescriptorTable.withBuiltins();
+    table.add(descriptorOf!Owner());
+    table.add(descriptorOf!Pet());
+    auto configuration = cast(HibernateValidatorConfiguration) Validation.byDefaultProvider();
+    assert(configuration !is null, "Hibernate Validator registers itself as the default provider");
+    return configuration.descriptors(table).buildValidatorFactory().getValidator();
+}
+
+@("golden: paths, interpolated messages, templates and invalid values match Hibernate Validator")
+unittest
+{
+    string[] lines;
+    foreach (v; validator().validate(new Owner()))
+        lines ~= v.getPropertyPath()
+            .toString() ~ "\t" ~ v.getMessage() ~ "\t" ~ v.getMessageTemplate() ~ "\t" ~ valueOf(v.getInvalidValue());
+    import std.algorithm.sorting : sort;
+    import std.array : join;
+
+    lines.sort();
+    const actual = lines.join("\n") ~ "\n";
+    const expected = import("validation.tsv");
+    if (actual != expected)
+    {
+        import std.string : splitLines;
+
+        auto want = expected.splitLines();
+        foreach (i, line; lines)
+            assert(i < want.length && line == want[i],
+                    "\nflint:     " ~ line ~ "\nhibernate: " ~ (i < want.length ? want[i] : "(none)"));
+        assert(false, "missing lines after " ~ lines[$ - 1]);
+    }
+}
+
+@("validateProperty checks one property and does not cascade")
+unittest
+{
+    auto violations = validator().validateProperty(new Owner(), "city");
+    assert(violations.length == 1 && violations[0].getMessage() == "size must be between 2 and 30");
+    assert(validator().validateProperty(new Owner(), "ok").length == 0);
+}
+
+@("validateValue checks a value against a property's constraints")
+unittest
+{
+    auto violations = validator().validateValue("golden_test.Owner", "age", Any.of(5));
+    assert(violations.length == 0);
+    violations = validator().validateValue("golden_test.Owner", "age", Any.of(-1));
+    assert(violations.length == 1 && violations[0].getPropertyPath().toString() == "age");
+}
