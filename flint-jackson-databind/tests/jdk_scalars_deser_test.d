@@ -689,74 +689,66 @@ version (FlintJacksonReadValueSequence)
  * Empty String coercion, handling
  */
 
-// flint.jackson does not coerce an empty String to a scalar's empty value (null for wrappers, 0/false for
-// primitives).
-// LIKELY BUG: {"byteValue":""} into WrappersBean throws InvalidFormatException "Cannot deserialize value of type
-// `byte` from String "": not a valid `byte` value" (expected byteValue null); likewise "" for every other
-// wrapper and primitive (expected null, or 0/false/'\0' for primitives).
-version (FlintJacksonEmptyStringCoercion)
+@("JDKScalarsDeserTest.testEmptyStringForIntegerWrappers")
+unittest
 {
-    @("JDKScalarsDeserTest.testEmptyStringForIntegerWrappers")
-    unittest
-    {
-        auto m = mapper();
-        auto bean = m.readValue!WrappersBean(`{"byteValue":""}`);
-        assert(bean.byteValue.isNull);
+    auto m = mapper();
+    auto bean = m.readValue!WrappersBean(`{"byteValue":""}`);
+    assert(bean.byteValue.isNull);
 
-        // char/Character is different... not sure if this should work or not:
-        bean = m.readValue!WrappersBean(`{"charValue":""}`);
-        assert(bean.charValue.isNull);
+    // char/Character is different... not sure if this should work or not:
+    bean = m.readValue!WrappersBean(`{"charValue":""}`);
+    assert(bean.charValue.isNull);
 
-        bean = m.readValue!WrappersBean(`{"shortValue":""}`);
-        assert(bean.shortValue.isNull);
-        bean = m.readValue!WrappersBean(`{"intValue":""}`);
-        assert(bean.intValue.isNull);
-        bean = m.readValue!WrappersBean(`{"longValue":""}`);
-        assert(bean.longValue.isNull);
-    }
+    bean = m.readValue!WrappersBean(`{"shortValue":""}`);
+    assert(bean.shortValue.isNull);
+    bean = m.readValue!WrappersBean(`{"intValue":""}`);
+    assert(bean.intValue.isNull);
+    bean = m.readValue!WrappersBean(`{"longValue":""}`);
+    assert(bean.longValue.isNull);
+}
 
-    @("JDKScalarsDeserTest.testEmptyStringForFloatWrappers")
-    unittest
-    {
-        auto m = mapper();
-        auto bean = m.readValue!WrappersBean(`{"floatValue":""}`);
-        assert(bean.floatValue.isNull);
-        bean = m.readValue!WrappersBean(`{"doubleValue":""}`);
-        assert(bean.doubleValue.isNull);
-    }
+@("JDKScalarsDeserTest.testEmptyStringForFloatWrappers")
+unittest
+{
+    auto m = mapper();
+    auto bean = m.readValue!WrappersBean(`{"floatValue":""}`);
+    assert(bean.floatValue.isNull);
+    bean = m.readValue!WrappersBean(`{"doubleValue":""}`);
+    assert(bean.doubleValue.isNull);
+}
 
-    @("JDKScalarsDeserTest.testEmptyStringForBooleanPrimitive")
-    unittest
-    {
-        const bean = mapper().readValue!PrimitivesBean(`{"booleanValue":""}`);
-        assert(!bean.booleanValue);
-    }
+@("JDKScalarsDeserTest.testEmptyStringForBooleanPrimitive")
+unittest
+{
+    const bean = mapper().readValue!PrimitivesBean(`{"booleanValue":""}`);
+    assert(!bean.booleanValue);
+}
 
-    @("JDKScalarsDeserTest.testEmptyStringForIntegerPrimitives")
-    unittest
-    {
-        auto m = mapper();
-        auto bean = m.readValue!PrimitivesBean(`{"byteValue":""}`);
-        assert(bean.byteValue == 0);
-        bean = m.readValue!PrimitivesBean(`{"charValue":""}`);
-        assert(bean.charValue == 0);
-        bean = m.readValue!PrimitivesBean(`{"shortValue":""}`);
-        assert(bean.shortValue == 0);
-        bean = m.readValue!PrimitivesBean(`{"intValue":""}`);
-        assert(bean.intValue == 0);
-        bean = m.readValue!PrimitivesBean(`{"longValue":""}`);
-        assert(bean.longValue == 0L);
-    }
+@("JDKScalarsDeserTest.testEmptyStringForIntegerPrimitives")
+unittest
+{
+    auto m = mapper();
+    auto bean = m.readValue!PrimitivesBean(`{"byteValue":""}`);
+    assert(bean.byteValue == 0);
+    bean = m.readValue!PrimitivesBean(`{"charValue":""}`);
+    assert(bean.charValue == 0);
+    bean = m.readValue!PrimitivesBean(`{"shortValue":""}`);
+    assert(bean.shortValue == 0);
+    bean = m.readValue!PrimitivesBean(`{"intValue":""}`);
+    assert(bean.intValue == 0);
+    bean = m.readValue!PrimitivesBean(`{"longValue":""}`);
+    assert(bean.longValue == 0L);
+}
 
-    @("JDKScalarsDeserTest.testEmptyStringForFloatPrimitives")
-    unittest
-    {
-        auto m = mapper();
-        auto bean = m.readValue!PrimitivesBean(`{"floatValue":""}`);
-        assert(bean.floatValue == 0.0f);
-        bean = m.readValue!PrimitivesBean(`{"doubleValue":""}`);
-        assert(bean.doubleValue == 0.0);
-    }
+@("JDKScalarsDeserTest.testEmptyStringForFloatPrimitives")
+unittest
+{
+    auto m = mapper();
+    auto bean = m.readValue!PrimitivesBean(`{"floatValue":""}`);
+    assert(bean.floatValue == 0.0f);
+    bean = m.readValue!PrimitivesBean(`{"doubleValue":""}`);
+    assert(bean.doubleValue == 0.0);
 }
 
 /*

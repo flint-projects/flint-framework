@@ -485,6 +485,9 @@ private bool include(MapperConfig config, BeanDescription bean, BeanPropertyDefi
 {
     bool wrapper;
     auto v = unwrapNullable(config, property, wrapper);
+    // With WRITE_EMPTY_JSON_ARRAYS disabled an empty container property is left out, whatever the inclusion.
+    if (!config.isEnabled(SerializationFeature.WRITE_EMPTY_JSON_ARRAYS) && isEmptyContainer(config, v))
+        return false;
     auto rule = p.inclusion;
     if (rule == JsonInclude.Include.USE_DEFAULTS)
         rule = bean.inclusion;
@@ -502,12 +505,74 @@ private bool include(MapperConfig config, BeanDescription bean, BeanPropertyDefi
     case JsonInclude.Include.NON_EMPTY:
         return !isEmptyValue(v);
     case JsonInclude.Include.NON_DEFAULT:
-        // [databind#5570]: with WRAPPERS_DEFAULT_TO_NULL a wrapper's default is null, not its primitive's.
-        if (wrapper
-                && config.isEnabled(MapperFeature.WRAPPERS_DEFAULT_TO_NULL))
-            return !v.isNull();
-        return !isEmptyValue(v) && !isDefaultScalar(v);
+        return includeNonDefault(config, p, v, wrapper);
     }
+}
+
+// NON_DEFAULT: unequal to the property's value in a default-constructed bean when the type is NON_DEFAULT
+// (PropertyBuilder's real defaults), otherwise neither empty nor its type's default (0, false).
+private bool includeNonDefault(MapperConfig config, BeanPropertyDefinition p, ref Any v, bool wrapper)
+{
+    if (p.realDefault)
+    {
+        bool defaultWrapper;
+        auto defaultValue = p.defaultValue;
+        auto suppressed = unwrapNullable(config, defaultValue, defaultWrapper);
+        return suppressed.isNull() ? !v.isNull() : !valueEquals(config, v, suppressed);
+    }
+    // [databind#5570]: with WRAPPERS_DEFAULT_TO_NULL a wrapper's default is null, not its primitive's.
+    if (wrapper && config.isEnabled(MapperFeature.WRAPPERS_DEFAULT_TO_NULL))
+        return !v.isNull();
+    return !isEmptyValue(v) && !isDefaultScalar(v);
+}
+
+// `Object.equals` for a property value and its default: equal scalars and Strings, `equals` for references, and
+// arrays element by element (ArrayBuilders' comparator).
+private bool valueEquals(MapperConfig config, ref Any a, ref Any b)
+{
+    import flint.engine.aot.objects : objectEquals;
+
+    if (a.isNull() || b.isNull())
+        return a.isNull() && b.isNull();
+    if (a == b)
+        return true;
+    if (a.typeName() != b.typeName())
+        return false;
+    if (auto o = a.asObject())
+        return objectEquals(o, b.asObject());
+    const d = config.descriptor(a.typeName());
+    if (d is null || d.length is null || d.element is null || d.length(a) != d.length(b))
+        return false;
+    foreach (i; 0 .. d.length(a))
+    {
+        auto x = d.element(a, i);
+        auto y = d.element(b, i);
+        if (!valueEquals(config, x, y))
+            return false;
+    }
+    return true;
+}
+
+// A Collection, Map, array or associative array without elements (Jackson's container types); null is not one.
+private bool isEmptyContainer(MapperConfig config, ref Any v)
+{
+    if (v.holds!string())
+        return false;
+    if (auto o = v.asObject())
+    {
+        if (auto c = cast(RawCollection) o)
+            return c.toAnyArray().length == 0;
+        if (auto m = cast(RawMap) o)
+            return m.keysAsAny().length == 0;
+        return false;
+    }
+    const d = v.typeName().length ? config.descriptor(v.typeName()) : null;
+    if (d is null)
+        return false;
+    // A null D array is the empty array (D-JACKSON-6).
+    if (d.kind == TypeKind.array)
+        return v.isNull() || (d.length !is null && d.length(v) == 0);
+    return !v.isNull() && d.toKeys !is null && d.toKeys(v).length == 0;
 }
 
 /// Jackson's "empty": null, an empty String, an empty collection or map.

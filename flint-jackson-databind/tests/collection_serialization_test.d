@@ -348,14 +348,10 @@ unittest
     assert(m.writeValueAsString(list) == `{"empty":[]}`);
     assert(m.writeValueAsString(array) == `{"empty":[]}`);
 
-    // LIKELY BUG: with WRITE_EMPTY_JSON_ARRAYS disabled Jackson writes {} for both; Flint writes {"empty":[]}.
-    version (FlintJacksonWriteEmptyJsonArrays)
-    {
-        // note: value of setting may be cached when constructing serializer, need a new instance
-        auto m2 = jsonMapperBuilder(table()).configure(SerializationFeature.WRITE_EMPTY_JSON_ARRAYS, false).build();
-        assert(m2.writeValueAsString(list) == "{}", m2.writeValueAsString(list));
-        assert(m2.writeValueAsString(array) == "{}", m2.writeValueAsString(array));
-    }
+    // note: value of setting may be cached when constructing serializer, need a new instance
+    auto m2 = jsonMapperBuilder(table()).configure(SerializationFeature.WRITE_EMPTY_JSON_ARRAYS, false).build();
+    assert(m2.writeValueAsString(list) == "{}", m2.writeValueAsString(list));
+    assert(m2.writeValueAsString(array) == "{}", m2.writeValueAsString(array));
 }
 
 @("CollectionSerializationTest.testStaticList")

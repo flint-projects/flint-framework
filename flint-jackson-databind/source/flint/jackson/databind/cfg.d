@@ -452,9 +452,28 @@ final class MapperConfig
         collector.naming = naming;
         collector.classNaming = classNaming;
         auto collected = collector.collect(d);
+        applyRealDefaults(collected);
         synchronized (this)
             beans[d.name] = collected;
         return collected;
+    }
+
+    // PropertyBuilder: under a type-level `NON_DEFAULT` (the class's `@JsonInclude`, else the mapper's default), a
+    // property is left out when it equals its value in a bean made with the default constructor. A type without
+    // one keeps the weaker per-type defaults (0, false, "", empty).
+    private void applyRealDefaults(BeanDescription bean)
+    {
+        const rule = bean.inclusion == JsonInclude.Include.USE_DEFAULTS ? defaultInclusion : bean.inclusion;
+        if (rule != JsonInclude.Include.NON_DEFAULT || bean.descriptor.create is null)
+            return;
+        auto defaults = bean.descriptor.create();
+        foreach (p; bean.properties)
+        {
+            if (!p.isReadable())
+                continue;
+            p.realDefault = true;
+            p.defaultValue = p.accessor.get(defaults);
+        }
     }
 
     /// A copy with an empty bean cache, for a builder to change.

@@ -92,6 +92,11 @@ final class BeanPropertyDefinition
     int creatorIndex = -1;
     /// The merged annotations of the property, for datatype handlers.
     const(MergedAnnotation)[] annotations;
+    /// Whether a type-level `NON_DEFAULT` compares this property with `defaultValue`, its value in a
+    /// default-constructed bean (Jackson's `PropertyBuilder` "real property defaults").
+    bool realDefault;
+    /// ditto
+    Any defaultValue;
 
     /// Whether serialization writes this property.
     bool isReadable() const pure nothrow @nogc

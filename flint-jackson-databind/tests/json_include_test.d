@@ -372,24 +372,18 @@ unittest
     assert(result.get("b").isNull());
 }
 
-// flint.jackson's class-level NON_DEFAULT does not compare with the default instance's values.
-// LIKELY BUG: NonDefaultBean{_a:"notA"} writes {"a":"notA","b":"b"}, expected {"a":"notA"}; MixedBean writes "a":"a";
-// ArrayBean writes {"ints":[1,2]}, expected {}; NonDefaultBean4741{value:""} writes {}, expected {"value":""}.
-version (FlintJacksonNonDefaultByClass)
+@("JsonIncludeTest.testNonDefaultByClass")
+unittest
 {
-    @("JsonIncludeTest.testNonDefaultByClass")
-    unittest
-    {
-        auto bean = new NonDefaultBean();
-        // need to change one of defaults
-        bean._a = "notA";
-        auto result = writeAndMap(mapper(), Any.of(bean));
-        assert(result.size() == 1);
-        assert(result.containsKey("a"));
-        assert(result.get("a").get!string() == "notA");
-        assert(!result.containsKey("b"));
-        assert(result.get("b").isNull());
-    }
+    auto bean = new NonDefaultBean();
+    // need to change one of defaults
+    bean._a = "notA";
+    auto result = writeAndMap(mapper(), Any.of(bean));
+    assert(result.size() == 1);
+    assert(result.containsKey("a"));
+    assert(result.get("a").get!string() == "notA");
+    assert(!result.containsKey("b"));
+    assert(result.get("b").isNull());
 }
 
 // [databind#998]
@@ -401,26 +395,23 @@ unittest
     assert(json == a2q("{'x':1,'y':2}"), json);
 }
 
-version (FlintJacksonNonDefaultByClass)
+@("JsonIncludeTest.testMixedMethod")
+unittest
 {
-    @("JsonIncludeTest.testMixedMethod")
-    unittest
-    {
-        auto bean = new MixedBean();
-        bean._a = "xyz";
-        bean._b = null;
-        auto result = writeAndMap(mapper(), Any.of(bean));
-        assert(result.size() == 1);
-        assert(result.get("a").get!string() == "xyz");
-        assert(!result.containsKey("b"));
+    auto bean = new MixedBean();
+    bean._a = "xyz";
+    bean._b = null;
+    auto result = writeAndMap(mapper(), Any.of(bean));
+    assert(result.size() == 1);
+    assert(result.get("a").get!string() == "xyz");
+    assert(!result.containsKey("b"));
 
-        bean._a = "a";
-        bean._b = "b";
-        result = writeAndMap(mapper(), Any.of(bean));
-        assert(result.size() == 1);
-        assert(result.get("b").get!string() == "b");
-        assert(!result.containsKey("a"));
-    }
+    bean._a = "a";
+    bean._b = "b";
+    result = writeAndMap(mapper(), Any.of(bean));
+    assert(result.size() == 1);
+    assert(result.get("b").get!string() == "b");
+    assert(!result.containsKey("a"));
 }
 
 @("JsonIncludeTest.testDefaultForEmptyList")
@@ -430,13 +421,10 @@ unittest
 }
 
 // NON_DEFAULT should work for arrays too
-version (FlintJacksonNonDefaultByClass)
+@("JsonIncludeTest.testNonEmptyDefaultArray")
+unittest
 {
-    @("JsonIncludeTest.testNonEmptyDefaultArray")
-    unittest
-    {
-        assert(mapper().writeValueAsString(new ArrayBean()) == "{}");
-    }
+    assert(mapper().writeValueAsString(new ArrayBean()) == "{}");
 }
 
 @("JsonIncludeTest.testDefaultForIntegers")
@@ -569,13 +557,10 @@ unittest
 }
 
 // [databind#4741]
-version (FlintJacksonNonDefaultByClass)
+@("JsonIncludeTest.testSerialization4741")
+unittest
 {
-    @("JsonIncludeTest.testSerialization4741")
-    unittest
-    {
-        auto bean = new NonDefaultBean4741();
-        bean.value = "";
-        assert(mapper().writeValueAsString(bean) == a2q("{'value':''}"));
-    }
+    auto bean = new NonDefaultBean4741();
+    bean.value = "";
+    assert(mapper().writeValueAsString(bean) == a2q("{'value':''}"));
 }

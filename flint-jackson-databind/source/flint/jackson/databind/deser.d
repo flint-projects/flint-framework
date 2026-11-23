@@ -114,7 +114,13 @@ private Shaped readShaped(MapperConfig config, JsonParser p, const Descriptor d,
     if (d.kind == TypeKind.enum_)
         return Shaped(true, readEnum(p, d, t));
     if (d.wrap !is null)
+    {
+        // A wrapper of a JDK scalar (Integer, Boolean, Character...) reads "", a blank String or "null" as null.
+        if (t == JsonToken.VALUE_STRING && isPrimitive(d.elementType)
+                && emptyScalarText(d.elementType, p.getString()) != EmptyText.none)
+            return Shaped(true, d.wrap(Any.init));
         return Shaped(true, d.wrap(deserializeValue(config, p, d.elementType)));
+    }
     if (d.fromEntries !is null && d.create is null)
         return Shaped(true, readEntries(config, p, d, t));
     if (d.fromElements !is null && (d.kind == TypeKind.array || (d.create is null && existing.isNull())))
@@ -223,6 +229,8 @@ private struct Scalar
 // The JDK scalars of NumberDeserializers, StringDeserializer and BooleanDeserializer; null for other types.
 private Scalar* readScalar(MapperConfig config, JsonParser p, string type, JsonToken t)
 {
+    if (auto empty = readEmptyScalar(config, p, type, t))
+        return empty;
     switch (type)
     {
     case "string":
@@ -303,6 +311,65 @@ private MismatchedInputException nullPrimitive(string type, JsonParser p)
     enum hint = " (set `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to 'false' to allow)";
     return new MismatchedInputException("Cannot map `null` into type `" ~ javaTypeName(type) ~ "`" ~ hint,
             type, p.currentLocation());
+}
+
+// An empty, blank or textual-null String for a primitive, or null.
+private Scalar* readEmptyScalar(MapperConfig config, JsonParser p, string type, JsonToken t)
+{
+    if (t != JsonToken.VALUE_STRING || !isPrimitive(type))
+        return null;
+    const empty = emptyScalarText(type, p.getString());
+    return empty == EmptyText.none ? null : new Scalar(emptyForPrimitive(config, p, type, empty));
+}
+
+// How a String reads for a JDK scalar under Jackson's default coercion: "" (and, except for char, a String of
+// characters up to U+0020) as an empty value, "null" as a textual null; both become null for a wrapper.
+private enum EmptyText
+{
+    none,
+    empty,
+    textualNull,
+}
+
+private EmptyText emptyScalarText(string type, scope const(char)[] text) pure nothrow @nogc
+{
+    const isChar = type == "char" || type == "wchar" || type == "dchar";
+    if (text == "null" && !isChar)
+        return EmptyText.textualNull;
+    if (isChar && text.length)
+        return EmptyText.none;
+    foreach (c; text)
+        if (c > ' ')
+            return EmptyText.none;
+    return EmptyText.empty;
+}
+
+// StdDeserializer._coerceEmptyString / _checkTextualNull for a primitive: its default (0, false, '\0') unless
+// FAIL_ON_NULL_FOR_PRIMITIVES, which Jackson 3 enables by default.
+private Any emptyForPrimitive(MapperConfig config, JsonParser p, string type, EmptyText empty)
+{
+    if (config.isEnabled(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES))
+    {
+        enum hint = " value (disable `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to allow)";
+        if (type == "char" || type == "wchar" || type == "dchar")
+            throw nullPrimitive(type, p);
+        const what = empty == EmptyText.textualNull ? "String \"null\" to Null value as" : "`null` to";
+        throw new MismatchedInputException("Cannot coerce " ~ what ~ " `" ~ javaTypeName(type) ~ "`" ~ hint,
+                type, p.currentLocation());
+    }
+    switch (type)
+    {
+    case "bool":
+        return Any.of(false);
+    case "float":
+        return Any.of(0.0f);
+    case "double", "real":
+        return Any.of(0.0);
+    case "char", "wchar", "dchar":
+        return Any.of(cast(dchar) 0);
+    default:
+        return boxIntegral(0, type, p);
+    }
 }
 
 private bool isPrimitive(string type) pure nothrow @nogc
