@@ -72,7 +72,18 @@ private ulong pick(Screen terminal)
     return parseDecimal(values[list.selected]);
 }
 
-private extern (C) void explicit_bzero(void*, size_t) @system nothrow @nogc;
+version (OSX)
+{
+    // Darwin has no explicit_bzero; C11 memset_s is its non-elidable wipe, as native/secret.c uses (ADR-024).
+    private extern (C) int memset_s(void*, size_t, int, size_t) @system nothrow @nogc;
+
+    private void explicit_bzero(void* data, size_t size) @system nothrow @nogc
+    {
+        cast(void) memset_s(data, size, 0, size);
+    }
+}
+else
+    private extern (C) void explicit_bzero(void*, size_t) @system nothrow @nogc;
 
 private ulong password(Screen terminal) @system
 {

@@ -5,12 +5,26 @@ import core.stdc.stdlib : getenv, qsort;
 import core.stdc.string : strlen;
 import core.sys.posix.arpa.inet : htonl, htons;
 import core.sys.posix.netinet.in_ : INADDR_LOOPBACK, IPPROTO_TCP, sockaddr_in;
-import core.sys.posix.sys.socket : AF_INET, MSG_NOSIGNAL, SOCK_STREAM, SOL_SOCKET, SO_RCVTIMEO,
-    SO_SNDTIMEO, connect, recv, send, setsockopt, sockaddr, socket;
+import core.sys.posix.sys.socket : AF_INET, SOCK_STREAM, SOL_SOCKET, SO_RCVTIMEO, SO_SNDTIMEO,
+    connect, recv, send, setsockopt, sockaddr, socket;
 import core.sys.posix.sys.time : timeval;
 import core.sys.posix.unistd : close;
 import core.time : MonoTime;
 import std.exception : enforce;
+
+version (OSX)
+{
+    // Darwin has no MSG_NOSIGNAL; each client socket carries SO_NOSIGPIPE instead (ADR-024).
+    import core.sys.posix.sys.socket : SO_NOSIGPIPE;
+
+    private enum sendFlags = 0;
+}
+else
+{
+    import core.sys.posix.sys.socket : MSG_NOSIGNAL;
+
+    private enum sendFlags = MSG_NOSIGNAL;
+}
 
 /// The server admits this many simultaneous persistent clients.
 enum connectionLimit = 1024;
@@ -46,6 +60,11 @@ private int connectPeer(ushort port)
     const timeout = timeval(5, 0);
     enforce(setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, timeout.sizeof) == 0
             && setsockopt(peer, SOL_SOCKET, SO_SNDTIMEO, &timeout, timeout.sizeof) == 0, "TCP timeout setup failed");
+    version (OSX)
+    {
+        const int enabled = 1;
+        enforce(setsockopt(peer, SOL_SOCKET, SO_NOSIGPIPE, &enabled, enabled.sizeof) == 0, "TCP SIGPIPE setup failed");
+    }
     sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
@@ -58,7 +77,7 @@ private void sendAll(int peer, scope const(ubyte)[] bytes)
 {
     while (bytes.length != 0)
     {
-        const count = send(peer, bytes.ptr, bytes.length, MSG_NOSIGNAL);
+        const count = send(peer, bytes.ptr, bytes.length, sendFlags);
         enforce(count > 0, "TCP send failed");
         bytes = bytes[count .. $];
     }

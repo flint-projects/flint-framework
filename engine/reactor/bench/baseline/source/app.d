@@ -3,12 +3,7 @@ module app;
 import core.atomic : atomicLoad, atomicStore;
 import core.stdc.stdio : printf;
 import core.stdc.errno : EAGAIN, ECANCELED, EINTR, errno;
-import core.sys.linux.sched : CPU_ISSET, CPU_SET, cpu_set_t, sched_getaffinity, sched_setaffinity;
-import core.sys.linux.epoll : EPOLLIN, EPOLLOUT, EPOLLRDHUP, EPOLL_CLOEXEC, EPOLL_CTL_ADD,
-    EPOLL_CTL_MOD, epoll_create1, epoll_ctl, epoll_event, epoll_wait;
-import core.sys.posix.fcntl : O_CLOEXEC, O_NONBLOCK;
-import core.sys.posix.sys.resource : RUSAGE_THREAD, getrusage, rusage;
-import core.sys.posix.sys.socket : MSG_NOSIGNAL, recv, send, sockaddr, socklen_t;
+import core.sys.posix.sys.socket : recv, send, sockaddr, socklen_t;
 import core.sys.posix.unistd : close;
 import core.thread.osthread : Thread;
 import core.time : MonoTime, msecs;
@@ -16,7 +11,98 @@ import probe_workload : cancellationMarker, connectionLimit, maxPayload, runWork
 import std.exception : enforce;
 import std.socket : InternetAddress, TcpSocket;
 
-private extern (C) int accept4(int descriptor, sockaddr* addr, socklen_t* len, int flags) nothrow @nogc;
+version (OSX)
+{
+    // The kqueue equivalent of the epoll provider baseline (ADR-024).
+    import core.sys.darwin.sys.event : EV_ADD, EV_DELETE, EVFILT_READ, EVFILT_WRITE, kevent64, kevent64_s, kqueue;
+    import core.sys.posix.fcntl : FD_CLOEXEC, F_GETFL, F_SETFD, F_SETFL, O_NONBLOCK, fcntl;
+    import core.sys.posix.pthread : pthread_self, pthread_t;
+    import core.sys.posix.sys.socket : SOL_SOCKET, SO_NOSIGPIPE, accept, setsockopt;
+    import core.sys.posix.time : timespec;
+
+    private enum sendFlags = 0;
+
+    private struct ThreadBasicInfo
+    {
+        int userSeconds, userMicros, systemSeconds, systemMicros;
+        int[6] rest;
+    }
+
+    private extern (C) nothrow @nogc
+    {
+        uint pthread_mach_thread_np(pthread_t thread);
+        int thread_info(uint thread, int flavor, ThreadBasicInfo* info, uint* count);
+    }
+
+    // Darwin has no CPU affinity API on Apple silicon.
+    private bool pinCurrentThread()
+    {
+        return false;
+    }
+
+    private struct Usage
+    {
+        long cpuMicros;
+        long voluntary;
+        long involuntary;
+    }
+
+    // Mach thread CPU time; Darwin exposes no per-thread context-switch counts.
+    private Usage threadUsage()
+    {
+        ThreadBasicInfo info;
+        uint count = ThreadBasicInfo.sizeof / int.sizeof;
+        enforce(thread_info(pthread_mach_thread_np(pthread_self()), 3, &info, &count) == 0, "thread usage unavailable");
+        const seconds = cast(long) info.userSeconds + info.systemSeconds;
+        return Usage(seconds * 1_000_000 + info.userMicros + info.systemMicros);
+    }
+}
+else
+{
+    import core.sys.linux.sched : CPU_ISSET, CPU_SET, cpu_set_t, sched_getaffinity, sched_setaffinity;
+    import core.sys.linux.epoll : EPOLLIN, EPOLLOUT, EPOLLRDHUP, EPOLL_CLOEXEC, EPOLL_CTL_ADD,
+        EPOLL_CTL_MOD, epoll_create1, epoll_ctl, epoll_event, epoll_wait;
+    import core.sys.posix.fcntl : O_CLOEXEC, O_NONBLOCK;
+    import core.sys.posix.sys.resource : RUSAGE_THREAD, getrusage, rusage;
+    import core.sys.posix.sys.socket : MSG_NOSIGNAL;
+
+    private enum sendFlags = MSG_NOSIGNAL;
+
+    private extern (C) int accept4(int descriptor, sockaddr* addr, socklen_t* len, int flags) nothrow @nogc;
+
+    private bool pinCurrentThread()
+    {
+        cpu_set_t allowed;
+        if (sched_getaffinity(0, allowed.sizeof, &allowed) != 0)
+            return false;
+        foreach (cpu; 0 .. cpu_set_t.sizeof * 8)
+        {
+            if (CPU_ISSET(cpu, &allowed))
+            {
+                cpu_set_t preferred;
+                CPU_SET(cpu, &preferred);
+                return sched_setaffinity(0, preferred.sizeof, &preferred) == 0;
+            }
+        }
+        return false;
+    }
+
+    private struct Usage
+    {
+        long cpuMicros;
+        long voluntary;
+        long involuntary;
+    }
+
+    private Usage threadUsage()
+    {
+        rusage usage;
+        enforce(getrusage(RUSAGE_THREAD, &usage) == 0, "thread usage unavailable");
+        return Usage((usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1_000_000
+                + usage.ru_utime.tv_usec + usage.ru_stime.tv_usec, usage.ru_nvcsw, usage.ru_nivcsw);
+    }
+}
+
 version (FlintNativeLiburing)
 {
     private extern (C) nothrow @nogc
@@ -32,23 +118,6 @@ version (FlintNativeLiburing)
 }
 
 private enum listenToken = 1UL;
-
-private bool pinCurrentThread()
-{
-    cpu_set_t allowed;
-    if (sched_getaffinity(0, allowed.sizeof, &allowed) != 0)
-        return false;
-    foreach (cpu; 0 .. cpu_set_t.sizeof * 8)
-    {
-        if (CPU_ISSET(cpu, &allowed))
-        {
-            cpu_set_t preferred;
-            CPU_SET(cpu, &preferred);
-            return sched_setaffinity(0, preferred.sizeof, &preferred) == 0;
-        }
-    }
-    return false;
-}
 
 private enum Phase
 {
@@ -88,9 +157,10 @@ private struct DirectServer
     void run()
     {
         const pinned = pinCurrentThread();
-        rusage before, after;
-        enforce(getrusage(RUSAGE_THREAD, &before) == 0, "thread usage unavailable");
-        version (FlintNativeLiburing)
+        const before = threadUsage();
+        version (OSX)
+            runKqueue();
+        else version (FlintNativeLiburing)
         {
             if (useUring())
                 runUring();
@@ -99,7 +169,7 @@ private struct DirectServer
         }
         else
             runEpoll();
-        enforce(getrusage(RUSAGE_THREAD, &after) == 0, "thread usage unavailable");
+        const after = threadUsage();
         uint outstanding;
         foreach (ref peer; peers)
         {
@@ -107,16 +177,17 @@ private struct DirectServer
                 ++outstanding;
         }
         enforce(outstanding == 0, "direct provider retained operations after shutdown");
-        const cpuMicros = (after.ru_utime.tv_sec - before.ru_utime.tv_sec + after.ru_stime.tv_sec
-                - before.ru_stime.tv_sec) * 1_000_000 + after.ru_utime.tv_usec
-            - before.ru_utime.tv_usec + after.ru_stime.tv_usec - before.ru_stime.tv_usec;
-        const backend = useUring() ? "ioUring" : "epoll";
+        const cpuMicros = after.cpuMicros - before.cpuMicros;
+        version (OSX)
+            const backend = "kqueue";
+        else
+            const backend = useUring() ? "ioUring" : "epoll";
         const pinnedText = pinned ? "true" : "false";
         printf("backend=%.*s pinned=%.*s worker_cpu_ns=%lld voluntary_switches=%ld involuntary_switches=%ld "
                 ~ "outstanding=%u\n", cast(int) backend.length,
                 backend.ptr, cast(int) pinnedText.length, pinnedText.ptr,
-                cast(long)(cpuMicros * 1_000), after.ru_nvcsw - before.ru_nvcsw,
-                after.ru_nivcsw - before.ru_nivcsw, outstanding);
+                cast(long)(cpuMicros * 1_000), cast(long)(after.voluntary - before.voluntary),
+                cast(long)(after.involuntary - before.involuntary), outstanding);
     }
 
     void stop()
@@ -185,83 +256,171 @@ private struct DirectServer
         }
     }
 
-    private void registerEpoll(int descriptor, int operation, ulong tag, uint flags)
+    version (OSX)
     {
-        epoll_event event;
-        event.events = flags;
-        event.data.u64 = tag;
-        enforce(epoll_ctl(poller, operation, descriptor, &event) == 0, "direct epoll registration failed");
-    }
-
-    private void runEpoll()
-    {
-        poller = epoll_create1(EPOLL_CLOEXEC);
-        enforce(poller >= 0, "direct epoll setup failed");
-        scope (exit)
-            close(poller);
-        registerEpoll(listener, EPOLL_CTL_ADD, listenToken, EPOLLIN);
-
-        epoll_event[64] events;
-        while (!atomicLoad(finished))
+        private void change(int descriptor, short filter, ushort flags, ulong tag)
         {
-            const ready = epoll_wait(poller, events.ptr, events.length, 5);
-            if (ready < 0 && errno == EINTR)
-                continue;
-            enforce(ready >= 0, "direct epoll wait failed");
-            foreach (ref event; events[0 .. ready])
-                handleEpoll(event.data.u64);
+            auto request = kevent64_s(cast(ulong) descriptor, filter, flags, 0, 0, tag);
+            enforce(kevent64(poller, &request, 1, null, 0, 0, null) == 0, "direct kqueue registration failed");
+        }
 
-            const now = MonoTime.currTime;
+        private void runKqueue()
+        {
+            poller = kqueue();
+            enforce(poller >= 0, "direct kqueue setup failed");
+            scope (exit)
+                close(poller);
+            change(listener, EVFILT_READ, EV_ADD, listenToken);
+
+            kevent64_s[64] events;
+            const wait = timespec(0, 5_000_000);
+            while (!atomicLoad(finished))
+            {
+                const ready = kevent64(poller, null, 0, events.ptr, cast(int) events.length, 0, &wait);
+                if (ready < 0 && errno == EINTR)
+                    continue;
+                enforce(ready >= 0, "direct kqueue wait failed");
+                foreach (ref event; events[0 .. ready])
+                    handleKqueue(event.udata);
+
+                const now = MonoTime.currTime;
+                foreach (ref peer; peers)
+                    if (peer.fd >= 0 && peer.phase == Phase.cancel && peer.cancelAt <= now)
+                        retire(peer);
+            }
             foreach (ref peer; peers)
-                if (peer.fd >= 0 && peer.phase == Phase.cancel && peer.cancelAt <= now)
+                if (peer.fd >= 0)
                     retire(peer);
         }
-        foreach (ref peer; peers)
-            if (peer.fd >= 0)
-                retire(peer);
-    }
 
-    private void handleEpoll(ulong tag)
-    {
-        if (tag == listenToken)
+        private void acceptKqueue()
         {
-            const fd = accept4(listener, null, null, O_NONBLOCK | O_CLOEXEC);
-            if (fd >= 0)
+            const fd = accept(listener, null, null);
+            if (fd < 0)
             {
-                const index = admit(fd);
-                if (index < peers.length)
-                    registerEpoll(fd, EPOLL_CTL_ADD, token(index), EPOLLIN | EPOLLRDHUP);
-            }
-            else
                 enforce(errno == EAGAIN || errno == EINTR, "direct accept failed");
-            return;
+                return;
+            }
+            const int enabled = 1;
+            enforce(fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) == 0, "direct accepted socket setup failed");
+            enforce(fcntl(fd, F_SETFD, FD_CLOEXEC) == 0, "direct accepted socket setup failed");
+            enforce(setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &enabled, enabled.sizeof) == 0,
+                    "direct accepted socket setup failed");
+            const index = admit(fd);
+            if (index < peers.length)
+                change(fd, EVFILT_READ, EV_ADD, token(index));
         }
 
-        const index = cast(uint) tag;
-        if (!matches(tag, index))
-            return;
-        auto peer = &peers[index];
-        if (peer.phase == Phase.cancel)
-            return;
-
-        const oldPhase = peer.phase;
-        const bytes = oldPhase == Phase.receive ? recv(peer.fd, peer.buffer.ptr, peer.buffer.length,
-                0) : send(peer.fd, peer.buffer.ptr + peer.emitted, peer.count - peer.emitted, MSG_NOSIGNAL);
-        if (bytes < 0 && (errno == EAGAIN || errno == EINTR))
-            return;
-        enforce(bytes >= 0, "direct nonblocking I/O failed");
-        progress(*peer, bytes);
-        if (peer.fd >= 0 && peer.phase != oldPhase)
+        private void handleKqueue(ulong tag)
         {
-            const flags = peer.phase == Phase.receive ? EPOLLIN | EPOLLRDHUP : EPOLLOUT;
-            if (peer.phase == Phase.cancel)
-            {
-                import core.sys.linux.epoll : EPOLL_CTL_DEL;
+            if (tag == listenToken)
+                return acceptKqueue();
 
-                enforce(epoll_ctl(poller, EPOLL_CTL_DEL, peer.fd, null) == 0, "direct epoll cancellation failed");
+            const index = cast(uint) tag;
+            if (!matches(tag, index))
+                return;
+            auto peer = &peers[index];
+            if (peer.phase == Phase.cancel)
+                return;
+
+            const oldPhase = peer.phase;
+            const bytes = oldPhase == Phase.receive ? recv(peer.fd, peer.buffer.ptr,
+                    peer.buffer.length, 0) : send(peer.fd, peer.buffer.ptr + peer.emitted,
+                    peer.count - peer.emitted, sendFlags);
+            if (bytes < 0 && (errno == EAGAIN || errno == EINTR))
+                return;
+            enforce(bytes >= 0, "direct nonblocking I/O failed");
+            progress(*peer, bytes);
+            if (peer.fd >= 0 && peer.phase != oldPhase)
+            {
+                // Drop the old direction's filter and arm the new one, as EPOLL_CTL_MOD does.
+                change(peer.fd, oldPhase == Phase.receive ? EVFILT_READ : EVFILT_WRITE, EV_DELETE, tag);
+                if (peer.phase != Phase.cancel)
+                    change(peer.fd, peer.phase == Phase.receive ? EVFILT_READ : EVFILT_WRITE, EV_ADD, tag);
             }
-            else
-                registerEpoll(peer.fd, EPOLL_CTL_MOD, tag, flags);
+        }
+    }
+    else
+    {
+        private void registerEpoll(int descriptor, int operation, ulong tag, uint flags)
+        {
+            epoll_event event;
+            event.events = flags;
+            event.data.u64 = tag;
+            enforce(epoll_ctl(poller, operation, descriptor, &event) == 0, "direct epoll registration failed");
+        }
+
+        private void runEpoll()
+        {
+            poller = epoll_create1(EPOLL_CLOEXEC);
+            enforce(poller >= 0, "direct epoll setup failed");
+            scope (exit)
+                close(poller);
+            registerEpoll(listener, EPOLL_CTL_ADD, listenToken, EPOLLIN);
+
+            epoll_event[64] events;
+            while (!atomicLoad(finished))
+            {
+                const ready = epoll_wait(poller, events.ptr, events.length, 5);
+                if (ready < 0 && errno == EINTR)
+                    continue;
+                enforce(ready >= 0, "direct epoll wait failed");
+                foreach (ref event; events[0 .. ready])
+                    handleEpoll(event.data.u64);
+
+                const now = MonoTime.currTime;
+                foreach (ref peer; peers)
+                    if (peer.fd >= 0 && peer.phase == Phase.cancel && peer.cancelAt <= now)
+                        retire(peer);
+            }
+            foreach (ref peer; peers)
+                if (peer.fd >= 0)
+                    retire(peer);
+        }
+
+        private void handleEpoll(ulong tag)
+        {
+            if (tag == listenToken)
+            {
+                const fd = accept4(listener, null, null, O_NONBLOCK | O_CLOEXEC);
+                if (fd >= 0)
+                {
+                    const index = admit(fd);
+                    if (index < peers.length)
+                        registerEpoll(fd, EPOLL_CTL_ADD, token(index), EPOLLIN | EPOLLRDHUP);
+                }
+                else
+                    enforce(errno == EAGAIN || errno == EINTR, "direct accept failed");
+                return;
+            }
+
+            const index = cast(uint) tag;
+            if (!matches(tag, index))
+                return;
+            auto peer = &peers[index];
+            if (peer.phase == Phase.cancel)
+                return;
+
+            const oldPhase = peer.phase;
+            const bytes = oldPhase == Phase.receive ? recv(peer.fd, peer.buffer.ptr,
+                    peer.buffer.length, 0) : send(peer.fd, peer.buffer.ptr + peer.emitted,
+                    peer.count - peer.emitted, MSG_NOSIGNAL);
+            if (bytes < 0 && (errno == EAGAIN || errno == EINTR))
+                return;
+            enforce(bytes >= 0, "direct nonblocking I/O failed");
+            progress(*peer, bytes);
+            if (peer.fd >= 0 && peer.phase != oldPhase)
+            {
+                const flags = peer.phase == Phase.receive ? EPOLLIN | EPOLLRDHUP : EPOLLOUT;
+                if (peer.phase == Phase.cancel)
+                {
+                    import core.sys.linux.epoll : EPOLL_CTL_DEL;
+
+                    enforce(epoll_ctl(poller, EPOLL_CTL_DEL, peer.fd, null) == 0, "direct epoll cancellation failed");
+                }
+                else
+                    registerEpoll(peer.fd, EPOLL_CTL_MOD, tag, flags);
+            }
         }
     }
 

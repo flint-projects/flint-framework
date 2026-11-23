@@ -1,7 +1,7 @@
 /// Benchmark-only typed bindings to libcurl 8.23.0's multi-socket provider.
 module curl_reference;
 
-import core.sys.posix.poll : POLLERR, POLLHUP, POLLIN, POLLOUT, poll, pollfd;
+import core.sys.posix.poll : POLLERR, POLLHUP, POLLIN, POLLOUT, nfds_t, poll, pollfd;
 import core.time : MonoTime;
 import http_workload : ObserveBytes;
 
@@ -207,7 +207,7 @@ struct Provider
         pollfd[400] ready;
         const size_t snapshot = count;
         ready[0 .. snapshot] = interests[0 .. snapshot];
-        const countReady = poll(ready.ptr, snapshot, cast(int)(wait < 5 ? wait : 5));
+        const countReady = poll(ready.ptr, cast(nfds_t) snapshot, cast(int)(wait < 5 ? wait : 5)); // uint on Darwin
         if (countReady < 0)
             return false;
         foreach (item; ready[0 .. snapshot])

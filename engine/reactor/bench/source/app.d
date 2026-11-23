@@ -110,7 +110,10 @@ int main()
     options.maxPendingIoPerCore = 2 * connectionLimit + 2;
     options.fiberPoolSize = 2;
     options.ioBufferBytes = maxPayload;
-    options.backend = useUring() ? Backend.ioUring : Backend.epoll;
+    version (OSX)
+        options.backend = Backend.kqueue; // macOS's readiness backend (ADR-024)
+    else
+        options.backend = useUring() ? Backend.ioUring : Backend.epoll;
 
     auto server = Reactor.create(options);
     enforce(server.ok, server.error.message);

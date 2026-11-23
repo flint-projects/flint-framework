@@ -118,28 +118,53 @@ private void report(string name, long elapsed, long median, long p99, ulong gc, 
 
 private shared ulong allocations;
 
-extern (C) private @system nothrow @nogc
+version (OSX)
 {
-    pragma(mangle, "__real_malloc") void* nativeMalloc(size_t size);
-    pragma(mangle, "__real_calloc") void* nativeCalloc(size_t count, size_t size);
-    pragma(mangle, "__real_realloc") void* nativeRealloc(void* pointer, size_t size);
+    // Apple's linker has no --wrap. libSystem calls malloc_logger, the hook Instruments uses, once
+    // for every allocation, reallocation and free in the process; allocations and reallocations
+    // carry MALLOC_LOG_TYPE_ALLOCATE (ADR-024).
+    private alias MallocLogger = extern (C) void function(uint type, size_t zone, size_t size,
+            size_t pointer, size_t result, uint skippedFrames) @system nothrow @nogc;
+    private extern (C) extern __gshared MallocLogger malloc_logger;
 
-    // Called only through the real C allocator ABI. No D object or callback escapes.
-    pragma(mangle, "__wrap_malloc") void* countMalloc(size_t size)
+    private extern (C) void countAllocation(uint type, size_t, size_t, size_t, size_t, uint) @system nothrow @nogc
     {
-        atomicOp!"+="(allocations, 1);
-        return nativeMalloc(size);
+        enum allocate = 2; // MALLOC_LOG_TYPE_ALLOCATE
+        if (type & allocate)
+            atomicOp!"+="(allocations, 1);
     }
 
-    pragma(mangle, "__wrap_calloc") void* countCalloc(size_t count, size_t size)
+    // SAFETY: Installs a counter that touches only one shared atomic and retains no pointer.
+    shared static this() @trusted
     {
-        atomicOp!"+="(allocations, 1);
-        return nativeCalloc(count, size);
+        malloc_logger = &countAllocation;
     }
-
-    pragma(mangle, "__wrap_realloc") void* countRealloc(void* pointer, size_t size)
+}
+else
+{
+    extern (C) private @system nothrow @nogc
     {
-        atomicOp!"+="(allocations, 1);
-        return nativeRealloc(pointer, size);
+        pragma(mangle, "__real_malloc") void* nativeMalloc(size_t size);
+        pragma(mangle, "__real_calloc") void* nativeCalloc(size_t count, size_t size);
+        pragma(mangle, "__real_realloc") void* nativeRealloc(void* pointer, size_t size);
+
+        // Called only through the real C allocator ABI. No D object or callback escapes.
+        pragma(mangle, "__wrap_malloc") void* countMalloc(size_t size)
+        {
+            atomicOp!"+="(allocations, 1);
+            return nativeMalloc(size);
+        }
+
+        pragma(mangle, "__wrap_calloc") void* countCalloc(size_t count, size_t size)
+        {
+            atomicOp!"+="(allocations, 1);
+            return nativeCalloc(count, size);
+        }
+
+        pragma(mangle, "__wrap_realloc") void* countRealloc(void* pointer, size_t size)
+        {
+            atomicOp!"+="(allocations, 1);
+            return nativeRealloc(pointer, size);
+        }
     }
 }
