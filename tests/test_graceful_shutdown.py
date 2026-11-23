@@ -57,6 +57,11 @@ def refused(port):
             return False
     except ConnectionRefusedError:
         return True
+    except TimeoutError:
+        # Windows retries a SYN to a closed localhost port for about 2 s instead of refusing it at once.
+        if sys.platform == 'win32':
+            return True
+        raise
 
 
 class Request(threading.Thread):
