@@ -1,7 +1,7 @@
 name "probe-prompt-baseline"
 targetType "executable"
 sourcePaths "source" "../harness"
-sourceFiles "../../../widgets/bench/harness/fake_display.d"
+sourceFiles "../../../engine-widgets/bench/harness/fake_display.d"
 importPaths "source" "../harness"
 targetPath "build"
 targetName "probe-prompt-baseline"
