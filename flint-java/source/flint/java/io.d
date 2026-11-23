@@ -410,7 +410,7 @@ class File
     /// The absolute path.
     string getAbsolutePath() const
     {
-        import std.path : absolutePath;
+        import flint.engine.aot.host : absolutePath;
 
         return absolutePath(path_);
     }
@@ -418,25 +418,25 @@ class File
     /// Whether the path exists.
     bool exists() const
     {
-        import std.file : exists;
+        import flint.engine.aot.host : fileFacts;
 
-        return path_.length != 0 && exists(path_);
+        return fileFacts(path_).exists;
     }
 
     /// Whether the path is a regular file.
     bool isFile() const
     {
-        import std.file : exists, isFile;
+        import flint.engine.aot.host : fileFacts;
 
-        return path_.length != 0 && exists(path_) && isFile(path_);
+        return fileFacts(path_).regular;
     }
 
     /// Whether the path is a directory.
     bool isDirectory() const
     {
-        import std.file : exists, isDir;
+        import flint.engine.aot.host : fileFacts;
 
-        return path_.length != 0 && exists(path_) && isDir(path_);
+        return fileFacts(path_).directory;
     }
 
     /// Whether the file can be read: it exists. (D offers no portable access check without opening the file.)
@@ -448,19 +448,19 @@ class File
     /// The size in bytes; 0 when it does not exist.
     long length() const
     {
-        import std.file : getSize;
+        import flint.engine.aot.host : fileFacts;
 
-        return isFile() ? cast(long) getSize(path_) : 0;
+        const facts = fileFacts(path_);
+        return facts.regular ? facts.size : 0;
     }
 
     /// Milliseconds since the epoch of the last modification; 0 when it does not exist.
     long lastModified() const
     {
-        import std.file : timeLastModified;
+        import flint.engine.aot.host : fileFacts, modifiedMillis;
 
-        if (!exists())
-            return 0;
-        return timeLastModified(path_).toUnixTime() * 1000L;
+        const facts = fileFacts(path_);
+        return facts.exists ? modifiedMillis(facts) : 0;
     }
 
     /// The path.
@@ -473,13 +473,17 @@ class File
 /// An `InputStream` over a file's bytes, read at construction.
 class FileInputStream : ByteArrayInputStream
 {
-    /// Open `file`. Throws `FileNotFoundException` when it is missing or not a regular file.
+    /// Open `file`. Throws `FileNotFoundException` when it is missing, not a regular file, or cannot be read.
     this(File file)
     {
-        import std.file : read;
+        import flint.engine.aot.host : describe, FileError, readFile;
 
         if (!file.isFile())
             throw new FileNotFoundException(file.getPath() ~ " (No such file or directory)");
-        super(cast(const(ubyte)[]) read(file.getPath()));
+        FileError error;
+        auto bytes = readFile(file.getPath(), error);
+        if (bytes is null)
+            throw new FileNotFoundException(file.getPath() ~ " (" ~ describe(error) ~ ")");
+        super(bytes);
     }
 }

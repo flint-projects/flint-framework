@@ -68,9 +68,9 @@ EmbeddedResourceProvider installedEmbeddedResources() nothrow @nogc
 /// The class path roots on the file system: `FLINT_CLASSPATH`, else `resources` and `src/main/resources`.
 string[] classPathRoots()
 {
-    import std.process : environment;
+    import flint.engine.aot.host : environmentVariable;
 
-    const configured = environment.get("FLINT_CLASSPATH", null);
+    const configured = environmentVariable("FLINT_CLASSPATH", null);
     if (configured is null)
         return ["resources", "src/main/resources"];
     string[] roots;

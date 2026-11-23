@@ -13,7 +13,9 @@ framework packages (`flint:beans`, `flint:context`, web-mvc, data) meet here. Ev
 | `flint.engine.aot.bean`, `condition`, `event`, `mapping`, `query` | the generated tables |
 | `flint.engine.aot.proxy` | `Invocation`, `AdviceChain`, the `Advisor` beans that build it, and `allocateProxy` |
 | `flint.engine.aot.registry` | `AotRegistry`, `installRegistry`, `installedRegistry` and the contract-version check |
-| `flint.engine.aot.sys.allocate` | the one `@trusted` function: druntime's `_d_newclass`, which allocates a class without running a constructor (Spring's Objenesis) |
+| `flint.engine.aot.sys.allocate` | druntime's `_d_newclass`, which allocates a class without running a constructor (Spring's Objenesis) |
+| `flint.engine.aot.host` | `package(flint)`, `@safe`: environment variables (`environmentVariable`, `environmentEntries`), one `stat` (`fileFacts`, `modifiedMillis`), `readFile`, `currentDirectory` and `absolutePath`, with std.process's, std.file's and std.path's results, for flint:java's `File`, `FileInputStream` and `Locale.getDefault` and flint:core's environment and class path |
+| `flint.engine.aot.sys.environment`, `sys.files` | the `@trusted` calls behind `host`: `getenv` and `environ` (`GetEnvironmentVariableW`, `GetEnvironmentStringsW`), `stat`, `open`/`read`/`close` and `getcwd` (their Windows counterparts), each copying into GC memory before it returns |
 
 Runtime extensions beyond section 4: `Descriptor.elementType` and `keyType` for collection element types,
 `Any.holds!T`, `Any.ofObject`, `Any.box!T`, `Advisor` and `DetachedExecutor`, and `propertyMatches`, the single
@@ -25,7 +27,10 @@ implementation of `@ConditionalOnProperty`'s rule.
 annotations two levels deep with `@AliasFor` mirrors and meta-aliases, Java Beans properties over classes and boxed
 structs, `Any` conversions and mismatches, the registry protocol, and a proxy built exactly as section 7 generates
 it, with advisor ordering, short-circuiting and Spring's self-invocation semantics. `allocateUninitialized` has a
-positive test (fields at their initial values, constructor not run) and negative tests (abstract class, null).
+positive test (fields at their initial values, constructor not run) and negative tests (abstract class, null). `sys.environment`, `sys.files` and `host` have positive and negative tests (unset and empty variables, names
+without their NUL, missing paths, a directory read as a file, a buffer too small for the current directory), which
+also run under the sanitize profile (LDC, `-fsanitize=address` and `-Xcc=-fsanitize=address,undefined`); their
+Windows and macOS branches are typechecked with `dmd -os=windows` and `-os=osx`, not executed.
 `tests/flint/core/annotation.d` stands in for flint:core's leaf annotation module in this package's tests only.
 
 ## Contract 2

@@ -2347,11 +2347,11 @@ struct Locale
     /// none gives `en_US`, as the JDK does.
     static Locale getDefault()
     {
-        import std.process : environment;
+        import flint.engine.aot.host : environmentVariable;
 
-        string posix = environment.get("LC_ALL", "");
+        string posix = environmentVariable("LC_ALL", "");
         if (!posix.length)
-            posix = environment.get("LANG", "");
+            posix = environmentVariable("LANG", "");
         return fromPosix(posix);
     }
 

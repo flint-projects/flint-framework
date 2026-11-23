@@ -1652,13 +1652,13 @@ abstract class AbstractEnvironment : ConfigurableEnvironment
     /// The process environment, or an empty map when `flint.getenv.ignore` is set.
     Map!(string, Any) getSystemEnvironment()
     {
-        import std.process : environment;
+        import flint.engine.aot.host : environmentEntries;
 
         auto result = new LinkedHashMap!(string, Any)();
         if (suppressGetenvAccess())
             return result;
-        foreach (key, value; environment.toAA())
-            result.put(key, Any.of(value));
+        foreach (entry; environmentEntries())
+            result.put(entry.name, Any.of(entry.value));
         return result;
     }
 
@@ -1669,7 +1669,7 @@ abstract class AbstractEnvironment : ConfigurableEnvironment
     +/
     protected bool suppressGetenvAccess()
     {
-        import std.process : environment;
+        import flint.engine.aot.host : environmentVariable;
         import flint.java.lang : Boolean;
 
         if (systemProperties !is null)
@@ -1681,7 +1681,7 @@ abstract class AbstractEnvironment : ConfigurableEnvironment
                     return Boolean.parseBoolean(value.toString());
             }
         }
-        return Boolean.parseBoolean(environment.get("FLINT_GETENV_IGNORE", null));
+        return Boolean.parseBoolean(environmentVariable("FLINT_GETENV_IGNORE", null));
     }
 
     /// Append `parent`'s sources and profiles.
