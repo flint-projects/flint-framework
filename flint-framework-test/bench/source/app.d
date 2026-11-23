@@ -24,8 +24,10 @@ private string digits(long value) pure nothrow
     return value < 10 ? [cast(char)('0' + value)] : digits(value / 10) ~ cast(char)('0' + value % 10);
 }
 
+/// The probe's controller.
 @RestController class PingController
 {
+    /// `GET /ping`.
     @GetMapping("/ping") string ping()
     {
         return "pong";

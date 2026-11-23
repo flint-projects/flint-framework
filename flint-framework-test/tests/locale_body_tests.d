@@ -105,7 +105,7 @@ unittest
 unittest
 {
     auto resolver = new AcceptHeaderLocaleResolver();
-    resolver.setDefaultLocaleFunction(delegate Locale(HttpServletRequest request) => Locale.UK);
+    resolver.setDefaultLocaleFunction(delegate Locale(HttpServletRequest) => Locale.UK);
     assert(resolver.resolveLocale(new MockHttpServletRequest()) == Locale.UK);
 }
 
@@ -127,15 +127,17 @@ private final class PageView : View
         return "text/html;charset=UTF-8";
     }
 
-    void render(LinkedHashMap!(string, Any) model, HttpServletRequest request, HttpServletResponse response)
+    void render(LinkedHashMap!(string, Any), HttpServletRequest, HttpServletResponse response)
     {
         response.setContentType(getContentType());
         response.getWriter().print("<p>page</p>");
     }
 }
 
+/// A controller rendering a view object.
 @Controller class PageController
 {
+    /// `GET /page`.
     @GetMapping("/page") ModelAndView page()
     {
         return new ModelAndView(new PageView);
@@ -161,8 +163,10 @@ struct Point
     string label; ///
 }
 
+/// A controller echoing a JSON body.
 @RestController class PointController
 {
+    /// `POST /points`.
     @PostMapping("/points") Point echo(@RequestBody Point point)
     {
         return Point(point.x * 2, point.label ~ "!");

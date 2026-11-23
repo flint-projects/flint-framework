@@ -25,7 +25,7 @@ class PetclinicLikeController
     @GetMapping("/pettypes/{petTypeId}")
     ResponseEntity getPetType(@PathVariable("petTypeId") int petTypeId)
     {
-        return ResponseEntity.ok("dog");
+        return ResponseEntity.ok(petTypeId == 1 ? "dog" : "cat");
     }
 
     ///

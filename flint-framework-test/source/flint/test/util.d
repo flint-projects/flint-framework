@@ -184,7 +184,6 @@ struct JsonPathExpectationsHelper
     /// Asserts the value at the path is a boolean.
     void assertValueIsBoolean(string content)
     {
-        bool definite;
         auto value = definiteValue(content);
         AssertionErrors.assertTrue(
                 "Expected a boolean at JSON path \"" ~ expression ~ "\" but found: " ~ value.toString(),
