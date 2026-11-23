@@ -86,7 +86,7 @@ DispatcherServlet dispatcherServlet()
     foreach (converter; converters)
         if (auto json = cast(JacksonJsonHttpMessageConverter) converter)
             foreach (descriptor; descriptors)
-                json.getMapper().registerDescriptor(descriptor);
+                json.getMapper().descriptors().add(descriptor);
     support.setMessageConverters(converters);
     return new DispatcherServlet(support.build());
 }

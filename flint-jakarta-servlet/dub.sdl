@@ -5,7 +5,8 @@ targetType "library"
 sourcePaths "source"
 importPaths "source"
 dflags "-preview=dip1000"
-dependency "p1-interim" path="../p1-interim"
+dependency "flint:java" path="../.."
+dependency "flint:engine-aot" path="../.."
 
 configuration "library" {
     targetType "library"

@@ -16,7 +16,6 @@ import flint.http : HttpHeaders, HttpMethod, HttpStatus;
 import flint.http.server : ServletServerHttpRequest, ServletServerHttpResponse;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
 import flint.java.lang : IllegalArgumentException;
-import flint.util : equalsIgnoreCase;
 import flint.web.util.pattern : PathPattern, PathPatternParser;
 import std.typecons : Nullable, nullable;
 
@@ -632,11 +631,26 @@ class UrlBasedCorsConfigurationSource : CorsConfigurationSource
         // dfmt off
         if (contextPath.length != 0 && path.length >= contextPath.length
                 && path[0 .. contextPath.length] == contextPath)
-         // dfmt on
+          // dfmt on
         path = path[contextPath.length .. $];
         foreach (entry; entries)
             if (entry.pattern.matches(path))
                 return entry.config;
         return null;
     }
+}
+
+/// Java's `String.equalsIgnoreCase` for ASCII header and origin text.
+private bool equalsIgnoreCase(scope const(char)[] a, scope const(char)[] b) pure nothrow @nogc
+{
+    if (a.length != b.length)
+        return false;
+    foreach (index, c; a)
+    {
+        const x = c >= 'A' && c <= 'Z' ? cast(char)(c + 32) : c;
+        const y = b[index] >= 'A' && b[index] <= 'Z' ? cast(char)(b[index] + 32) : b[index];
+        if (x != y)
+            return false;
+    }
+    return true;
 }

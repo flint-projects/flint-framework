@@ -222,7 +222,7 @@ final class StandaloneMockMvcBuilder
         foreach (converter; converters)
             if (auto json = cast(JacksonJsonHttpMessageConverter) converter)
                 foreach (descriptor; descriptors)
-                    json.getMapper().registerDescriptor(descriptor);
+                    json.getMapper().descriptors().add(descriptor);
         support.setMessageConverters(converters);
         auto servlet = new TestDispatcherServlet(support.build());
         auto mockMvc = new MockMvc(servlet, filters);

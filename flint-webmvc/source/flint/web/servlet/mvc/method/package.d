@@ -86,8 +86,6 @@ private struct NameValueExpression
 
     bool matchHeader(HttpServletRequest request)
     {
-        import flint.util : equalsIgnoreCase;
-
         bool isMatch;
         if (hasValue)
         {
@@ -150,7 +148,6 @@ final class RequestMappingInfo
         foreach (h; headers)
         {
             auto e = NameValueExpression.parse(h);
-            import flint.util : equalsIgnoreCase;
 
             if (equalsIgnoreCase(e.name, "Accept") && !e.isNegated && e.hasValue)
                 foreach (t; MediaType.parseMediaTypes(e.value))
@@ -520,7 +517,7 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
             if (existing.info.toString() == info.toString() && existing.handlerMethod !is handlerMethod)// dfmt off
                 throw new IllegalStateException("Ambiguous mapping. Cannot map '" ~ handlerMethod.getBeanName()
                         ~ "' method \n" ~ handlerMethod.toString() ~ "\nto " ~ info
-                 // dfmt on
+                  // dfmt on
                     .toString() ~ ": There is already '" ~ existing.handlerMethod.getBeanName()
                     ~ "' bean method\n" ~ existing.handlerMethod.toString() ~ " mapped.");
         registrations ~= Registration(info, handlerMethod);
@@ -691,4 +688,19 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     /// The handler for an unmapped OPTIONS request; supplied by the annotation-based subclass.
     protected abstract HandlerMethod createOptionsHandler(string[] declaredMethods,
             MediaType[] acceptPatch, MediaType[] acceptQuery);
+}
+
+/// Java's `String.equalsIgnoreCase` for ASCII header text.
+private bool equalsIgnoreCase(scope const(char)[] a, scope const(char)[] b) pure nothrow @nogc
+{
+    if (a.length != b.length)
+        return false;
+    foreach (index, c; a)
+    {
+        const x = c >= 'A' && c <= 'Z' ? cast(char)(c + 32) : c;
+        const y = b[index] >= 'A' && b[index] <= 'Z' ? cast(char)(b[index] + 32) : b[index];
+        if (x != y)
+            return false;
+    }
+    return true;
 }

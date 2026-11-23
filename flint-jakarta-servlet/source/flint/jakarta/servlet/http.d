@@ -67,8 +67,6 @@ class Cookie
     /// Sets `Domain` (lowercased).
     void setDomain(string domain) pure nothrow
     {
-        import flint.util : toLowerAscii;
-
         setAttribute("Domain", domain is null ? null : toLowerAscii(domain));
     }
 
@@ -128,8 +126,6 @@ class Cookie
     /// Sets an attribute; `null` removes it.
     void setAttribute(string name, string value) pure nothrow
     {
-        import flint.util : equalsIgnoreCase;
-
         foreach (i, existing; attributeOrder)
         {
             if (equalsIgnoreCase(existing, name))
@@ -153,8 +149,6 @@ class Cookie
     /// An attribute, ignoring case, or `null`.
     string getAttribute(string name) const pure nothrow
     {
-        import flint.util : equalsIgnoreCase;
-
         foreach (existing; attributeOrder)
             if (equalsIgnoreCase(existing, name))
                 return attributes[existing];
@@ -510,4 +504,34 @@ abstract class HttpFilter : GenericFilter
     {
         chain.doFilter(req, res);
     }
+}
+
+private string toLowerAscii(string text) pure nothrow
+{
+    foreach (index, c; text)
+    {
+        if (c >= 'A' && c <= 'Z')
+        {
+            auto lowered = text.dup;
+            foreach (ref d; lowered[index .. $])
+                if (d >= 'A' && d <= 'Z')
+                    d += 32;
+            return lowered.idup;
+        }
+    }
+    return text;
+}
+
+private bool equalsIgnoreCase(scope const(char)[] a, scope const(char)[] b) pure nothrow @nogc
+{
+    if (a.length != b.length)
+        return false;
+    foreach (index, c; a)
+    {
+        const x = c >= 'A' && c <= 'Z' ? cast(char)(c + 32) : c;
+        const y = b[index] >= 'A' && b[index] <= 'Z' ? cast(char)(b[index] + 32) : b[index];
+        if (x != y)
+            return false;
+    }
+    return true;
 }

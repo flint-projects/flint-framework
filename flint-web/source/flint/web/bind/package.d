@@ -12,7 +12,8 @@ Modified by the Flint authors: translated to D under the rulebook. They skip bac
 +/
 module flint.web.bind;
 
-import flint.core : MethodParameter, javaTypeName;
+import flint.core : MethodParameter;
+import flint.web.bind.support : javaTypeName;
 import flint.engine.aot.any : Any;
 import flint.http : HttpStatus, HttpStatusCode, ProblemDetail;
 import flint.jakarta.servlet : ServletException;
@@ -150,7 +151,7 @@ class MissingServletRequestParameterException : MissingRequestValueException
                 /// `MissingPathVariableException`: a URI template variable is missing (500, a server-side mistake).
                 class MissingPathVariableException : MissingRequestValueException
                 {
-                    private string variableName; private MethodParameter parameter; ///
+                    private string variableName; private MethodParameter parameter;  ///
                     this(string variableName, MethodParameter parameter, bool missingAfterConversion = false)
                     {
                         super("", missingAfterConversion, null, [Any.of(variableName)]); this.variableName
@@ -179,7 +180,7 @@ class MissingServletRequestParameterException : MissingRequestValueException
                                 /// `MissingRequestHeaderException`.
                                 class MissingRequestHeaderException : MissingRequestValueException
                                 {
-                                    private string headerName; private MethodParameter parameter; ///
+                                    private string headerName; private MethodParameter parameter;  ///
                                     this(string headerName, MethodParameter parameter,
                                             bool missingAfterConversion = false)
                                     {

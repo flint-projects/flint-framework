@@ -19,7 +19,6 @@ import flint.jakarta.servlet : DispatcherType, RequestDispatcher, ServletContext
 import flint.jakarta.servlet.http : Cookie, HttpServletRequest, HttpServletResponse;
 import flint.java.io : PrintWriter, Writer;
 import flint.java.lang : IllegalStateException;
-import flint.util : equalsIgnoreCase;
 
 @safe:
 
@@ -974,4 +973,19 @@ class MockHttpServletResponse : HttpServletResponse
         else
             headers ~= Pair(name, [value]);
     }
+}
+
+/// Java's `String.equalsIgnoreCase` for ASCII header names.
+private bool equalsIgnoreCase(scope const(char)[] a, scope const(char)[] b) pure nothrow @nogc
+{
+    if (a.length != b.length)
+        return false;
+    foreach (index, c; a)
+    {
+        const x = c >= 'A' && c <= 'Z' ? cast(char)(c + 32) : c;
+        const y = b[index] >= 'A' && b[index] <= 'Z' ? cast(char)(b[index] + 32) : b[index];
+        if (x != y)
+            return false;
+    }
+    return true;
 }

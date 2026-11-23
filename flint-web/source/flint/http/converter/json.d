@@ -18,7 +18,7 @@ import flint.engine.aot.any : Any;
 import flint.http : HttpInputMessage, HttpOutputMessage, MediaType, ProblemDetail;
 import flint.http.converter : AbstractHttpMessageConverter, HttpMessageNotReadableException,
     HttpMessageNotWritableException;
-import flint.jackson.databind : JsonGenerator, ObjectMapper;
+import flint.jackson.databind : JsonMapper, ObjectMapper;
 
 @safe:
 
@@ -30,7 +30,7 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
     /// With a default mapper.
     this()
     {
-        this(new ObjectMapper);
+        this(new JsonMapper);
     }
 
     /// With `mapper` (Spring Boot passes its auto-configured `JsonMapper`).
@@ -38,7 +38,6 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
     {
         super(MediaType.APPLICATION_JSON, MediaType("application", "*+json"));
         this.mapper = mapper;
-        mapper.addCustomWriter("flint.http.ProblemDetail", &writeProblemDetail);
     }
 
     /// The mapper.
@@ -49,7 +48,8 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
 
     protected override bool supports(string typeName)
     {
-        return mapper.canSerialize(typeName) || typeName == "flint.engine.aot.any.Any";
+        return typeName == "flint.engine.aot.any.Any" || typeName == "flint.http.ProblemDetail"
+            || mapper.descriptors().find(typeName) !is null;
     }
 
     protected override Any readInternal(string typeName, HttpInputMessage inputMessage)
@@ -62,45 +62,37 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
     {
         string json;
         try
-            json = mapper.writeValueAsString(value);
+            json = value.holds!ProblemDetail
+                ? problemDetailJson(value.get!ProblemDetail) : mapper.writeValueAsString(value);
         catch (Exception e)
             throw new HttpMessageNotWritableException("Could not write JSON: " ~ e.msg, e);
         outputMessage.writeBody(cast(const(ubyte)[]) json);
     }
 
-    private void writeProblemDetail(ref Any value, JsonGenerator generator)
+    /// `ProblemDetailJacksonMixin`: `@JsonInclude(NON_EMPTY)`, Jackson 3's name order for the bean properties
+    /// (detail, instance, status, title, type), then the `properties` map as `@JsonAnyGetter`. Each value is
+    /// written by the mapper, so escaping and numbers are Jackson's.
+    private string problemDetailJson(ProblemDetail detail)
     {
-        auto detail = value.get!ProblemDetail;
-        generator.writeStartObject();
-        if (detail.getDetail().length != 0)
+        string json = "{";
+        void member(string name, string encoded)
         {
-            generator.writeName("detail");
-            generator.writeString(detail.getDetail());
+            json ~= (json.length > 1 ? "," : "") ~ mapper.writeValueAsString(Any.of(name)) ~ ":" ~ encoded;
         }
+
+        if (detail.getDetail().length != 0)
+            member("detail", mapper.writeValueAsString(Any.of(detail.getDetail())));
         if (auto instance = detail.getInstance())
             if (instance.toString().length != 0)
-            {
-                generator.writeName("instance");
-                generator.writeString(instance.toString());
-            }
-        generator.writeName("status");
-        generator.writeNumber(cast(long) detail.getStatus());
+                member("instance", mapper.writeValueAsString(Any.of(instance.toString())));
+        member("status", mapper.writeValueAsString(Any.of(cast(long) detail.getStatus())));
         if (detail.getTitle().length != 0)
-        {
-            generator.writeName("title");
-            generator.writeString(detail.getTitle());
-        }
+            member("title", mapper.writeValueAsString(Any.of(detail.getTitle())));
         if (auto type = detail.getType())
             if (type.toString().length != 0)
-            {
-                generator.writeName("type");
-                generator.writeString(type.toString());
-            }
+                member("type", mapper.writeValueAsString(Any.of(type.toString())));
         foreach (name; detail.getPropertyNames())
-        {
-            generator.writeName(name);
-            generator.writePOJO(detail.getProperty(name));
-        }
-        generator.writeEndObject();
+            member(name, mapper.writeValueAsString(detail.getProperty(name)));
+        return json ~ "}";
     }
 }

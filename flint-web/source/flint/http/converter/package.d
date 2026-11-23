@@ -274,7 +274,7 @@ class ByteArrayHttpMessageConverter : AbstractHttpMessageConverter
 class HttpMessageConversionException : NestedRuntimeException
 {
     ///
-    this(string message, Throwable cause = null, string file = __FILE__, size_t line = __LINE__) pure nothrow @nogc
+    this(string message, Throwable cause = null, string file = __FILE__, size_t line = __LINE__) pure nothrow
     {
         super(message, cause, file, line);
     }
@@ -287,7 +287,7 @@ class HttpMessageNotReadableException : HttpMessageConversionException
 
     ///
     this(string message, Throwable cause, HttpInputMessage httpInputMessage, string file = __FILE__,
-            size_t line = __LINE__) pure nothrow @nogc
+            size_t line = __LINE__) pure nothrow
     {
         super(message, cause, file, line);
         this.httpInputMessage = httpInputMessage;
@@ -304,7 +304,7 @@ class HttpMessageNotReadableException : HttpMessageConversionException
 class HttpMessageNotWritableException : HttpMessageConversionException
 {
     ///
-    this(string message, Throwable cause = null, string file = __FILE__, size_t line = __LINE__) pure nothrow @nogc
+    this(string message, Throwable cause = null, string file = __FILE__, size_t line = __LINE__) pure nothrow
     {
         super(message, cause, file, line);
     }

@@ -326,13 +326,13 @@ class ModelAndView
     }
 
     /// Whether there is neither a view nor a model.
-    bool isEmpty() const pure nothrow @nogc
+    bool isEmpty()
     {
         return view is null && viewName is null && (model is null || model.isEmpty());
     }
 
     /// Whether `clear()` emptied this instance.
-    bool wasCleared() const pure nothrow @nogc
+    bool wasCleared()
     {
         return cleared && isEmpty();
     }

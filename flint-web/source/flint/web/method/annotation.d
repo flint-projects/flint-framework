@@ -16,7 +16,9 @@ Modified by the Flint authors: annotations are read from Flint AOT's merged anno
 +/
 module flint.web.method.annotation;
 
-import flint.core : ConversionFailedException, MethodParameter, javaTypeName;
+import flint.core : MethodParameter;
+import flint.core.convert : ConversionFailedException;
+import flint.web.bind.support : javaTypeName;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.mapping : ArgumentKind, ExceptionHandlerSpec;
 import flint.jakarta.servlet.http : Cookie, HttpServletRequest;
