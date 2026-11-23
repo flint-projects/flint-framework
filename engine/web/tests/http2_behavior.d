@@ -47,11 +47,14 @@ private struct Exchange
 private Exchange curl(ushort port, string method, string path)
 {
     import std.conv : to;
-    import std.process : execute;
+    import std.process : environment, execute;
     import std.string : indexOf;
 
+    // FLINT_TEST_CURL names the client where the system's lacks HTTP/2: Windows ships one without it, and
+    // CreateProcess searches System32 before PATH (ADR-026).
     auto arguments = [
-        "curl", "--silent", "--show-error", "--http2-prior-knowledge", "--max-time", "5", "--include"
+        environment.get("FLINT_TEST_CURL", "curl"), "--silent", "--show-error",
+        "--http2-prior-knowledge", "--max-time", "5", "--include"
     ];
     arguments ~= method == "HEAD" ? ["--head"] : ["--request", method];
     arguments ~= "http://127.0.0.1:" ~ port.to!string ~ path;
