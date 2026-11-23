@@ -677,19 +677,30 @@ Error registerAdvice(A)(ref Server server, ref A advice)
 int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init,
         scope Error delegate(ref Server) @safe configure = null)
 {
+    const served = serve(app, options, configure);
+    return served.code == Status.ok || served.code == Status.cancelled ? 0 : 1;
+}
+
+/// Serve `app` like `runApplication`, returning why serving stopped: `Error.init` or `cancelled` after an orderly
+/// stop, otherwise the failure with its message, such as a listener that could not bind (ADR-028 section 7).
+Error serve(App)(ref App app, ServerOptions options = ServerOptions.init,
+        scope Error delegate(ref Server) @safe configure = null)
+{
     static assert(applicationRouteCount!App() != 0, "HTTP application requires explicit controller fields");
     static assert(adviceCount!App() <= 1, "HTTP application has more than one @ControllerAdvice");
 
     Server server;
-    if (server.start(options).code != Status.ok)
-        return 1;
+    const started = server.start(options);
+    if (started.code != Status.ok)
+        return started;
     scope (exit)
         server.shutdown(Deadline.afterMillis(5_000).monotonicNanoseconds);
 
     static if (isController!App())
     {
-        if (registerController(server, app).code != Status.ok)
-            return 1;
+        const registered = registerController(server, app);
+        if (registered.code != Status.ok)
+            return registered;
     }
     else
     {
@@ -697,28 +708,33 @@ int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init,
         {
             static if (isController!Field())
             {
-                if (registerController(server, app.tupleof[position]).code != Status.ok)
-                    return 1;
+                {
+                    const registered = registerController(server, app.tupleof[position]);
+                    if (registered.code != Status.ok)
+                        return registered;
+                }
             }
             static if (isAdvice!Field())
             {
-                if (registerAdvice(server, app.tupleof[position]).code != Status.ok)
-                    return 1;
+                {
+                    const registered = registerAdvice(server, app.tupleof[position]);
+                    if (registered.code != Status.ok)
+                        return registered;
+                }
             }
         }
     }
-
     if (configure !is null)
     {
         const configured = configure(server);
         if (configured.code != Status.ok)
-            return 1;
+            return configured;
     }
     Context cancellation;
     for (;;)
     {
         const error = server.poll(cancellation);
         if (error.code != Status.ok)
-            return error.code == Status.cancelled ? 0 : 1;
+            return error;
     }
 }

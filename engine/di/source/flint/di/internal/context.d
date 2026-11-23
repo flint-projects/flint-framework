@@ -230,8 +230,8 @@ struct AppContext(Beans...)
         Error failure;
         try
             failure = startOwned();
-        catch (Exception)
-            failure = Error(Status.unavailable, "DI constructor or startup hook raised an exception");
+        catch (Exception exception)
+            failure = Error(Status.unavailable, "DI constructor or startup hook raised an exception: " ~ exception.msg);
 
         if (failure.code != Status.ok)
         {

@@ -175,9 +175,28 @@ version (Posix)
         return digit;
     }
 
+    /// Bind and listen, retrying for up to a second while the address is in use. A listener that a just-exited
+    /// process still owns through its io_uring teardown, which the kernel finishes after the process is reaped,
+    /// holds the port briefly; a restarted service (`flint watch`, a supervisor) must not fail on it.
+    package(flint.reactor) Result!Socket bindListener(string host, ushort port, uint backlog) nothrow @nogc
+    {
+        import core.thread.osthread : Thread;
+        import core.time : msecs;
+
+        enum attempts = 40;
+        foreach (attempt; 0 .. attempts)
+        {
+            auto bound = bindOnce(host, port, backlog);
+            if (bound.ok() || bound.error.code != Status.conflict || port == 0 || attempt + 1 == attempts)
+                return bound;
+            Thread.sleep(25.msecs);
+        }
+        assert(0);
+    }
+
     // SAFETY: Host and service are NUL-terminated owned locals. Resolver output is freed after bind copies it.
     // Each newly owned socket is closed on every failure path. Only a listening descriptor escapes.
-    package(flint.reactor) Result!Socket bindListener(string host, ushort port, uint backlog) @trusted nothrow @nogc
+    private Result!Socket bindOnce(string host, ushort port, uint backlog) @trusted nothrow @nogc
     {
         char[254] node;
         if (!copyNode(host, node) || backlog == 0 || backlog > int.max)

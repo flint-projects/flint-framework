@@ -1,7 +1,8 @@
 /// Explicit REST controllers and bounded native web transport.
 module flint.web;
 
-public import flint.web.internal.controllers : ServerCustomizer, registerAdvice, registerController, runApplication;
+public import flint.web.internal.controllers : ServerCustomizer, registerAdvice, registerController,
+    runApplication, serve;
 public import flint.web.internal.openapi : openApiDocument;
 public import flint.web.runtime : Server;
 public import flint.web.stream : StreamField, StreamHandler, StreamMode, StreamRoute, StreamToken;
