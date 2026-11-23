@@ -86,6 +86,8 @@ class Request(threading.Thread):
             client.close()
 
 
+@unittest.skipIf(sys.platform == 'win32', 'os.kill on Windows is TerminateProcess, not a graceful stop; a graceful stop '
+                 'needs CTRL_BREAK to a CREATE_NEW_PROCESS_GROUP child (ADR-026, Python suite on Windows)')
 class GracefulShutdownTests(unittest.TestCase):
     def start(self, grace_ms):
         port = free_port()
