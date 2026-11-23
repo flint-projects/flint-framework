@@ -457,9 +457,10 @@ unittest
 {
     foreach (text; ["0", "-1", "+2", "15.0", ".5", "5.", "-000000000.22", "1e3", "2.5E-4", "1E+2"])
         assert(bigDecimalSyntax(text), text);
-    foreach (text; [
-            "", "15l", "15f", "1d", "NaN", "Infinity", ".", "-", "1e", "1e+", "1.2.3", "0x10", "1 2"
-        ])
+    static immutable string[] invalid = [
+        "", "15l", "15f", "1d", "NaN", "Infinity", ".", "-", "1e", "1e+", "1.2.3", "0x10", "1 2"
+    ];
+    foreach (text; invalid)
         assert(!bigDecimalSyntax(text), text);
 }
 
