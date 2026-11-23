@@ -236,15 +236,19 @@ struct MessageFormatter
 
     private static string renderScalar(Any value)
     {
+        import flint.engine.aot.text : utf8;
         import flint.serde.java_number : javaDoubleString;
-        import std.conv : to;
 
         if (value.holds!string())
             return value.get!string();
         if (value.holds!bool())
             return value.get!bool() ? "true" : "false";
         if (value.holds!dchar())
-            return [value.get!dchar()].to!string;
+        {
+            // An invalid code point renders as U+FFFD; to!string threw a UTFException.
+            const text = utf8(value.get!dchar());
+            return text is null ? "\uFFFD" : text;
+        }
         if (value.holds!long() || value.holds!ulong())
             return value.toString();
         if (value.holds!double())
@@ -262,7 +266,13 @@ struct MessageFormatter
         static if (is(U == float))
             return javaFloatString(value);
         else static if (is(U == enum))
-            return value.to!string;
+        {
+            // The constant's name, as to!string gave it, without instantiating std.format for each enum type.
+            foreach (member; __traits(allMembers, U))
+                if (value == __traits(getMember, U, member))
+                    return member;
+            return "";
+        }
         else static if (is(U == class) || is(U == interface))
         {
             import flint.engine.aot.objects : objectToString;

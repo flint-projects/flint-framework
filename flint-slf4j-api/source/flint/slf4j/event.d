@@ -61,8 +61,8 @@ int toInt(Level level) pure nothrow @nogc
 /// The level with integer value `levelInt`.
 Level intToLevel(int levelInt) pure
 {
+    import flint.engine.aot.text : decimal;
     import flint.java.lang : IllegalArgumentException;
-    import std.conv : to;
 
     switch (levelInt)
     {
@@ -77,7 +77,7 @@ Level intToLevel(int levelInt) pure
     case EventConstants.ERROR_INT:
         return Level.ERROR;
     default:
-        throw new IllegalArgumentException("Level integer [" ~ levelInt.to!string ~ "] not recognized.");
+        throw new IllegalArgumentException("Level integer [" ~ decimal(cast(long) levelInt) ~ "] not recognized.");
     }
 }
 
@@ -297,10 +297,9 @@ class DefaultLoggingEvent : LoggingEvent
 /// Milliseconds since the Unix epoch, as `System.currentTimeMillis()`.
 long currentTimeMillis() nothrow
 {
-    import std.datetime.systime : Clock;
+    import flint.engine.aot.clock : systemMillis = currentTimeMillis;
 
-    enum long unixEpochInHnsecs = 621_355_968_000_000_000;
-    return (Clock.currStdTime - unixEpochInHnsecs) / 10_000;
+    return systemMillis();
 }
 
 /// The name SLF4J events carry for the current thread: "main" on the main thread, else "thread-<id>".
