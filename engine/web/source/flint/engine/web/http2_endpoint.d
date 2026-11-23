@@ -28,7 +28,10 @@ interface Http2Endpoint
 }
 
 /// Creates the HTTP/2 runtime for a server.
-alias Http2Factory = Http2Endpoint function(ServerOptions options, RouteTable routes, Context root, Context drain) @safe;
+// dfmt off
+alias Http2Factory = Http2Endpoint function(ServerOptions options, RouteTable routes, Context root,
+        Context drain) @safe;
+// dfmt on
 
 private shared Http2Factory installedHttp2;
 
