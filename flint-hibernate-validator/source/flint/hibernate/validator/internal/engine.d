@@ -501,6 +501,8 @@ private struct Run
 
     void cascade(ref Any value, PathImpl at, string declaredType)
     {
+        if (cascadeDescribed(value, at))
+            return;
         if (auto collection = cast(RawCollection) value.asObject())
         {
             foreach (i, element; collection.toAnyArray())
@@ -521,6 +523,47 @@ private struct Run
         validateBean(value, at, declaredType);
     }
 
+    // Arrays and associative arrays cascade into their elements, Optional into its value, through the descriptor
+    // thunks; Hibernate's value extractors for arrays, Map values and Optional.
+    bool cascadeDescribed(ref Any value, PathImpl at)
+    {
+        auto d = described(value);
+        if (d is null)
+            return false;
+        if (d.unwrap !is null)
+        {
+            auto inner = d.unwrap(value);
+            if (!inner.isNull())
+                validateBean(inner, at, d.elementType);
+        }
+        else if (d.length !is null && d.element !is null && d.kind == TypeKind.array)
+        {
+            foreach (i; 0 .. d.length(value))
+            {
+                auto element = d.element(value, i);
+                if (!element.isNull())
+                    validateBean(element, at.inIterable(cast(int) i, Any.init), d.elementType);
+            }
+        }
+        else if (d.toKeys !is null && d.toValues !is null)
+        {
+            auto keys = d.toKeys(value);
+            auto values = d.toValues(value);
+            foreach (i, ref element; values)
+                if (!element.isNull())
+                    validateBean(element, at.inIterable(-1, keys[i]), d.elementType);
+        }
+        else
+            return false;
+        return true;
+    }
+
+    const(Descriptor) described(ref Any value)
+    {
+        return factory.descriptors is null || value.typeName().length == 0
+            ? null : factory.descriptors.find(value.typeName());
+    }
+
     void checkConstraints(Any leaf, ref Any value, scope const(MergedAnnotation)[] annotations, PathImpl at)
     {
         foreach (ref a; annotations)
@@ -528,7 +571,7 @@ private struct Run
             if (!isBuiltin(a.type))
                 continue;
             auto constraint = read(a.type, a.value);
-            if (isValid(constraint, value, factory.patterns, at.toString()))
+            if (isValid(constraint, value, factory.patterns, at.toString(), described(value)))
                 continue;
             auto descriptor = new ConstraintDescriptorImpl(constraint);
             const message = factory.interpolator.interpolate(constraint.message,

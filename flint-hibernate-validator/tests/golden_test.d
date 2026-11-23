@@ -10,7 +10,7 @@ import flint.jakarta.validation : ConstraintViolation, Valid, Validation, Valida
 import flint.jakarta.validation.constraints;
 import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset,
     ZonedDateTime;
-import flint.java.util : ArrayList, List;
+import flint.java.util : ArrayList, List, Optional;
 
 @safe:
 
@@ -64,10 +64,21 @@ private final class Owner
     @Past ZonedDateTime okPast = ZonedDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
     @Future LocalDate okFuture = LocalDate.of(3000, 1, 1);
     @PastOrPresent Instant okNow = Instant.parse("2020-01-01T00:00:00Z");
+    @Size(min : 4) int[] scores = [1, 2, 3];
+    @NotEmpty string[] aliases = [];
+    @Size(max : 1) int[string] limits;
+    @Size(min : 1, max : 3) long[] okArray = [7];
+    @Valid Pet[] petArray;
+    @Valid Optional!Pet maybePet;
+    @Valid Pet[string] petsByName;
     @Valid List!Pet pets;
 
     this()
     {
+        limits = ["a": 1, "b": 2];
+        petArray = [new Pet("Rex", null)];
+        maybePet = Optional!Pet.of(new Pet("", "dog"));
+        petsByName = ["tom": new Pet("Tom", null)];
         tags = new ArrayList!string();
         nicknames = new ArrayList!string();
         nicknames.add("a");
@@ -85,6 +96,11 @@ private string valueOf(Any value)
     import flint.engine.aot.objects : objectToString;
     import flint.serde.java_number : javaDoubleString;
 
+    // A D array is never null (`[]` is null): it prints as Arrays.toString does.
+    if (value.holds!(int[])())
+        return list(value.get!(int[])());
+    if (value.holds!(string[])())
+        return list(value.get!(string[])());
     if (value.isNull())
         return "null";
     if (auto o = value.asObject())
@@ -95,6 +111,17 @@ private string valueOf(Any value)
         return value.get!bool() ? "true" : "false";
     if (value.holds!long())
         return value.toString();
+    if (value.holds!(int[string])())
+    {
+        import std.algorithm.sorting : sort;
+        import std.conv : to;
+
+        auto map = value.get!(int[string])();
+        string text = "{";
+        foreach (k; map.keys.sort)
+            text ~= (text.length > 1 ? ", " : "") ~ k ~ "=" ~ map[k].to!string;
+        return text ~ "}";
+    }
     static foreach (T; imported!"std.meta".AliasSeq!(Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime,
             ZonedDateTime))
         if (value.holds!T())
@@ -102,11 +129,28 @@ private string valueOf(Any value)
     return javaDoubleString(value.get!double());
 }
 
+// Arrays.toString.
+private string list(T)(const(T)[] items)
+{
+    import std.conv : to;
+
+    string text = "[";
+    foreach (i, item; items)
+        text ~= (i ? ", " : "") ~ item.to!string;
+    return text ~ "]";
+}
+
 private Validator validator()
 {
     auto table = DescriptorTable.withBuiltins();
     table.add(descriptorOf!Owner());
     table.add(descriptorOf!Pet());
+    foreach (d; [
+            descriptorOf!(int[])(), descriptorOf!(string[])(), descriptorOf!(int[string])(),
+            descriptorOf!(long[])(), descriptorOf!(Pet[])(), descriptorOf!(Optional!Pet)(),
+            descriptorOf!(Pet[string])()
+        ])
+        table.add(d);
     auto configuration = cast(HibernateValidatorConfiguration) Validation.byDefaultProvider();
     assert(configuration !is null, "Hibernate Validator registers itself as the default provider");
     return configuration.descriptors(table).buildValidatorFactory().getValidator();

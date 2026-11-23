@@ -22,6 +22,7 @@
 module flint.hibernate.validator.internal.constraintvalidators;
 
 import flint.engine.aot.any : Any;
+import flint.engine.aot.descriptor : Descriptor;
 import flint.engine.aot.name : typeNameOf;
 import flint.hibernate.validator.internal.el : ElValue;
 import flint.jakarta.validation : UnexpectedTypeException;
@@ -165,24 +166,25 @@ final class PatternCache
 }
 
 /// Run the check of constraint `c` on `value`; `propertyPath` names the element in an UnexpectedTypeException.
-bool isValid(ref const BuiltinConstraint c, ref Any value, PatternCache patterns, string propertyPath)
+/// `described` is the value's descriptor, through which arrays and associative arrays report their size.
+bool isValid(ref const BuiltinConstraint c, ref Any value, PatternCache patterns, string propertyPath,
+        const(Descriptor) described = null)
 {
     const simple = simpleName(c.annotationType);
     switch (simple)
     {
     case "NotNull":
-        return !value.isNull();
     case "Null":
-        return value.isNull();
+        return isNullConstraintMet(simple == "Null", value);
     case "AssertTrue":
     case "AssertFalse":
         return checkAssert(c, value, simple == "AssertTrue", propertyPath);
     case "NotBlank":
         return checkNotBlank(c, value, propertyPath);
     case "NotEmpty":
-        return !value.isNull() && size(c, value, propertyPath) > 0;
+        return (!value.isNull() || isArray(value)) && size(c, value, propertyPath, described) > 0;
     case "Size":
-        return checkSize(c, value, propertyPath);
+        return checkSize(c, value, propertyPath, described);
     case "Pattern":
         return checkPattern(c, value, patterns, propertyPath);
     case "Email":
@@ -190,6 +192,13 @@ bool isValid(ref const BuiltinConstraint c, ref Any value, PatternCache patterns
     default:
         return checkNumber(c, simple, value, propertyPath);
     }
+}
+
+// NotNullValidator and NullValidator; a D array is never null.
+private bool isNullConstraintMet(bool wantNull, ref Any value) pure nothrow @nogc
+{
+    const isNull = value.isNull() && !isArray(value);
+    return wantNull == isNull;
 }
 
 private bool checkAssert(ref const BuiltinConstraint c, ref Any value, bool expected, string propertyPath)
@@ -210,11 +219,11 @@ private bool checkNotBlank(ref const BuiltinConstraint c, ref Any value, string 
     return !isBlank(value.get!string());
 }
 
-private bool checkSize(ref const BuiltinConstraint c, ref Any value, string propertyPath)
+private bool checkSize(ref const BuiltinConstraint c, ref Any value, string propertyPath, const(Descriptor) described)
 {
-    if (value.isNull())
+    if (value.isNull() && !isArray(value))
         return true;
-    const n = size(c, value, propertyPath);
+    const n = size(c, value, propertyPath, described);
     return n >= attribute(c, "min").number && n <= attribute(c, "max").number;
 }
 
@@ -440,7 +449,8 @@ private long[2] countDigits(string text)
     return [integerDigits < 0 ? 0 : integerDigits, fractionDigits < 0 ? 0 : fractionDigits];
 }
 
-private size_t size(ref const BuiltinConstraint c, ref Any value, string propertyPath)
+// SizeValidatorForCharSequence, ForCollection, ForMap and ForArray.
+private size_t size(ref const BuiltinConstraint c, ref Any value, string propertyPath, const(Descriptor) described)
 {
     if (value.holds!string())
         return utf16Length(value.get!string());
@@ -448,7 +458,20 @@ private size_t size(ref const BuiltinConstraint c, ref Any value, string propert
         return collection.size();
     if (auto map = cast(RawMap) value.asObject())
         return map.keysAsAny().length;
+    if (isArray(value) && value.isNull())
+        return 0;
+    if (described !is null && described.length !is null)
+        return described.length(value);
+    if (described !is null && described.toKeys !is null)
+        return described.toKeys(value).length;
     return unexpected(c, value, propertyPath) ? 0 : 0;
+}
+
+/// Whether `value` is a D array. D's `[]` is null, so a null array counts as an empty one, not as null.
+bool isArray(ref const Any value) pure nothrow @nogc
+{
+    const type = value.typeName();
+    return type.length > 2 && type[$ - 2 .. $] == "[]";
 }
 
 /// Java's `String.length()`: UTF-16 code units (rulebook R14).

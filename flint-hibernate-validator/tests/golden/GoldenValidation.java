@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Valid;
 import jakarta.validation.Validation;
@@ -54,7 +56,23 @@ public class GoldenValidation {
         @Past public ZonedDateTime okPast = ZonedDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
         @Future public LocalDate okFuture = LocalDate.of(3000, 1, 1);
         @PastOrPresent public Instant okNow = Instant.parse("2020-01-01T00:00:00Z");
+        @Size(min = 4) public int[] scores = {1, 2, 3};
+        @NotEmpty public String[] aliases = {};
+        @Size(max = 1) public Map<String, Integer> limits = new java.util.LinkedHashMap<>(Map.of("a", 1));
+        { limits.put("b", 2); }
+        @Size(min = 1, max = 3) public long[] okArray = {7};
+        @Valid public Pet[] petArray = {new Pet("Rex", null)};
+        @Valid public Optional<Pet> maybePet = Optional.of(new Pet("", "dog"));
+        @Valid public Map<String, Pet> petsByName = Map.of("tom", new Pet("Tom", null));
         @Valid public List<Pet> pets = new ArrayList<>(List.of(new Pet("  ", null), new Pet("Leo", "cat")));
+    }
+
+    // String.valueOf, with arrays as Arrays.toString prints them (their own toString is an identity hash).
+    static String text(Object value) {
+        if (value instanceof int[] a) return java.util.Arrays.toString(a);
+        if (value instanceof long[] a) return java.util.Arrays.toString(a);
+        if (value instanceof Object[] a) return java.util.Arrays.toString(a);
+        return String.valueOf(value);
     }
 
     public static void main(String[] args) throws Exception {
@@ -62,7 +80,7 @@ public class GoldenValidation {
         List<String> lines = new ArrayList<>();
         for (ConstraintViolation<Owner> v : validator.validate(new Owner())) {
             lines.add(v.getPropertyPath() + "\t" + v.getMessage() + "\t" + v.getMessageTemplate() + "\t"
-                    + String.valueOf(v.getInvalidValue()));
+                    + text(v.getInvalidValue()));
         }
         lines.sort(null);
         Files.writeString(Path.of(args[0]), String.join("\n", lines) + "\n", StandardCharsets.UTF_8);
