@@ -19,7 +19,7 @@ import flint.jakarta.servlet : ServletException;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
 import flint.web : ErrorResponse, skipBacktrace;
 import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView;
-import flint.web.servlet.handler : AbstractHandlerMapping, lookupPath;
+import flint.web.servlet.handler : AbstractHandlerMapping, lookupPath, parsedLookupPath;
 import flint.web.util.pattern : PathPattern, PathPatternParser;
 
 @safe:
@@ -122,9 +122,10 @@ class SimpleUrlHandlerMapping : AbstractHandlerMapping
     protected override Object getHandlerInternal(HttpServletRequest request)
     {
         const path = lookupPath(request);
+        const parsed = parsedLookupPath(request);
         foreach (entry; entries)
         {
-            if (auto info = entry.pattern.matchAndExtract(path))
+            if (auto info = entry.pattern.matchAndExtract(parsed))
             {
                 request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE,
                         Any.of(entry.pattern.getPatternString()));

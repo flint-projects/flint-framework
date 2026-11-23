@@ -28,7 +28,7 @@ import flint.web.context.request : ServletWebRequest;
 import flint.web.method : HandlerMethod;
 import flint.web.servlet : HandlerMapping;
 import flint.web.cors : CorsConfiguration;
-import flint.web.servlet.handler : AbstractHandlerMapping, lookupPath;
+import flint.web.servlet.handler : AbstractHandlerMapping, lookupPath, parsedLookupPath;
 import flint.web.util.pattern : PathMatchInfo, PathPattern, PathPatternParser;
 import std.typecons : Nullable, nullable;
 
@@ -254,7 +254,7 @@ final class RequestMappingInfo
 
     package(flint) PathPattern[] matchPatterns(HttpServletRequest request)
     {
-        const path = lookupPath(request);
+        const path = parsedLookupPath(request);
         PathPattern[] matched;
         foreach (p; patterns)
             if (p.matches(path))
@@ -348,6 +348,22 @@ final class RequestMappingInfo
         return matched.length == 0 ? Matched!MediaTypeExpression.init : found(matched);
     }
 
+    /// The request attribute caching the accepted media types while a handler mapping matches
+    /// (`ProducesRequestCondition.MEDIA_TYPES_ATTRIBUTE`).
+    package(flint) enum string mediaTypesAttribute = "org.springframework.web.servlet.mvc.condition."
+        ~ "ProducesRequestCondition.MEDIA_TYPES";
+
+    // ProducesRequestCondition.getAcceptedMediaTypes: resolved once per lookup, not once per mapping.
+    private static MediaType[] getAcceptedMediaTypes(HttpServletRequest request)
+    {
+        auto cached = request.getAttribute(mediaTypesAttribute);
+        if (!cached.isNull())
+            return cached.get!(MediaType[]);
+        auto result = new ContentNegotiationManager().resolveMediaTypes(new ServletWebRequest(request));
+        request.setAttribute(mediaTypesAttribute, Any.of(result));
+        return result;
+    }
+
     // ProducesRequestCondition.getMatchingCondition
     package(flint) Matched!MediaTypeExpression matchProduces(HttpServletRequest request)
     {
@@ -355,7 +371,7 @@ final class RequestMappingInfo
             return found(produces);
         MediaType[] acceptedMediaTypes;
         try
-            acceptedMediaTypes = new ContentNegotiationManager().resolveMediaTypes(new ServletWebRequest(request));
+            acceptedMediaTypes = getAcceptedMediaTypes(request);
         catch (HttpMediaTypeNotAcceptableException)
             return found(produces);
         MediaTypeExpression[] matched;
@@ -425,7 +441,7 @@ final class RequestMappingInfo
             return 0;
         MediaType[] acceptedMediaTypes;
         try
-            acceptedMediaTypes = new ContentNegotiationManager().resolveMediaTypes(new ServletWebRequest(request));
+            acceptedMediaTypes = getAcceptedMediaTypes(request);
         catch (HttpMediaTypeNotAcceptableException)
             return 0;
         auto mine = producesToCompare();
@@ -540,6 +556,7 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     }
 
     private Registration[] registrations;
+    private size_t[][string] directPathRegistrations;
     private CorsConfiguration[HandlerMethod] corsLookup;
 
     /// Registers `handlerMethod` under `info` with its CORS configuration (or `null`).
@@ -580,6 +597,10 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
             message ~= existing.handlerMethod.toString() ~ " mapped.";
             throw new IllegalStateException(message);
         }
+        // MappingRegistry.pathLookup: a mapping is also found by each of its plain (direct) paths.
+        foreach (pattern; info.getPatterns())
+            if (!pattern.hasPatternSyntax())
+                directPathRegistrations[pattern.getPatternString()] ~= registrations.length;
         registrations ~= Registration(info, handlerMethod);
     }
 
@@ -595,6 +616,8 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     protected override Object getHandlerInternal(HttpServletRequest request)
     {
         request.removeAttribute(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
+        scope (exit)
+            request.removeAttribute(RequestMappingInfo.mediaTypesAttribute);
         const path = lookupPath(request);
         request.setAttribute(HandlerMapping.LOOKUP_PATH, Any.of(path));
         return lookupHandlerMethod(path, request);
@@ -610,16 +633,15 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
         }
 
         Match[] matches;
-        // Direct path matches first, then every mapping (Spring's directPathMappings shortcut).
-        foreach (r; registrations)
-            if (r.info.hasDirectPaths())
-                if (auto matched = r.info.getMatchingCondition(request))
-                    matches ~= Match(matched, r.handlerMethod);
+        // The mappings with this exact path first (MappingRegistry.getMappingsByDirectPath), then every mapping.
+        if (auto direct = lookupPath in directPathRegistrations)
+            foreach (index; *direct)
+                if (auto matched = registrations[index].info.getMatchingCondition(request))
+                    matches ~= Match(matched, registrations[index].handlerMethod);
         if (matches.length == 0)
             foreach (r; registrations)
-                if (!r.info.hasDirectPaths())
-                    if (auto matched = r.info.getMatchingCondition(request))
-                        matches ~= Match(matched, r.handlerMethod);
+                if (auto matched = r.info.getMatchingCondition(request))
+                    matches ~= Match(matched, r.handlerMethod);
         if (matches.length == 0)
         {
             RequestMappingInfo[] infos;
@@ -656,7 +678,8 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     {
         auto pattern = info.getPatterns()[0];
         request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, Any.of(pattern.getPatternString()));
-        auto matchInfo = pattern.matchAndExtract(lookupPath);
+        const parsed = parsedLookupPath(request);
+        auto matchInfo = pattern.matchAndExtract(parsed);
         string[2][] variables = matchInfo is null ? null : matchInfo.getUriVariables();
         request.setAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE, Any.of(variables));
         auto producible = info.getProducibleMediaTypes();

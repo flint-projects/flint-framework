@@ -128,25 +128,39 @@ final class PathPattern
     /// Whether `path` (an encoded request path, without query) matches.
     bool matches(string path) const
     {
-        string[] names, values;
-        return match(path, false, names, values);
+        const parsed = PathContainer.parsePath(path);
+        return matches(parsed);
+    }
+
+    /// Whether the parsed `path` matches; a request parses its path once for every pattern
+    /// (`ServletRequestPathUtils.parseAndCache`).
+    package(flint) bool matches(scope const ref PathContainer path) const
+    {
+        string[][2] captured;
+        return match(path, false, captured);
     }
 
     /// The URI variables when `path` matches, else `null` (R5).
     PathMatchInfo* matchAndExtract(string path) const
     {
-        string[] names, values;
-        if (!match(path, true, names, values))
+        const parsed = PathContainer.parsePath(path);
+        return matchAndExtract(parsed);
+    }
+
+    /// ditto
+    package(flint) PathMatchInfo* matchAndExtract(scope const ref PathContainer path) const
+    {
+        string[][2] captured;
+        if (!match(path, true, captured))
             return null;
         auto info = new PathMatchInfo;
-        info.names = names;
-        info.values = values;
+        info.names = captured[0];
+        info.values = captured[1];
         return info;
     }
 
-    private bool match(string path, bool extract, ref string[] names, ref string[] values) const
+    private bool match(scope const ref PathContainer segments, bool extract, ref string[][2] captured) const
     {
-        const segments = PathContainer.parsePath(path);
         if (elements.length == 0)
         {
             // "" and "/" match only an empty path or a lone separator.
@@ -158,8 +172,8 @@ final class PathPattern
             {
                 if (extract && elements[0].kind == ElementKind.captureSegments)
                 {
-                    names ~= elements[0].text;
-                    values ~= "";
+                    captured[0] ~= elements[0].text;
+                    captured[1] ~= "";
                 }
                 return true;
             }
@@ -182,8 +196,8 @@ final class PathPattern
                     return false;
                 if (extract)
                 {
-                    names ~= element.text;
-                    values ~= segments.segments[i];
+                    captured[0] ~= element.text;
+                    captured[1] ~= segments.segments[i];
                 }
                 i++;
                 break;
@@ -200,8 +214,8 @@ final class PathPattern
                     string rest;
                     foreach (segment; segments.segments[i .. $])
                         rest ~= "/" ~ segment;
-                    names ~= element.text;
-                    values ~= rest;
+                    captured[0] ~= element.text;
+                    captured[1] ~= rest;
                 }
                 return true;
             }

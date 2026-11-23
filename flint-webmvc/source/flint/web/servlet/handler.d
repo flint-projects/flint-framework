@@ -17,7 +17,7 @@ import flint.web.cors : CorsConfiguration, CorsConfigurationSource, CorsProcesso
 import flint.web.servlet : HandlerExceptionResolver, HandlerExecutionChain, HandlerInterceptor,
     HandlerMapping, ModelAndView;
 import flint.web.servlet.resource : HttpRequestHandler;
-import flint.web.util.pattern : PathPattern, PathPatternParser;
+import flint.web.util.pattern : PathContainer, PathPattern, PathPatternParser;
 
 @safe:
 
@@ -48,7 +48,7 @@ final class MappedInterceptor : HandlerInterceptor
     /// Whether the interceptor applies to `request`.
     bool matches(HttpServletRequest request)
     {
-        const path = lookupPath(request);
+        const path = parsedLookupPath(request);
         foreach (pattern; excludePatterns)
             if (pattern.matches(path))
                 return false;
@@ -88,6 +88,29 @@ string lookupPath(HttpServletRequest request)
     if (contextPath.length != 0 && uri.length >= contextPath.length && uri[0 .. contextPath.length] == contextPath)
         return uri[contextPath.length .. $];
     return uri;
+}
+
+/// The request attribute holding the parsed lookup path (Spring's `ServletRequestPathUtils.PATH_ATTRIBUTE`).
+package(flint) enum string pathAttribute = "org.springframework.web.util.ServletRequestPathUtils.PATH";
+
+/++
+The lookup path parsed into segments, once per request (Spring's `ServletRequestPathUtils.parseAndCache`): every
+pattern of every mapping matches the same parse. The parse is kept under `pathAttribute` and reused while the
+request's lookup path is unchanged, so a forward or include, which changes it, parses its own.
++/
+package(flint) PathContainer parsedLookupPath(HttpServletRequest request)
+{
+    const path = lookupPath(request);
+    auto cached = request.getAttribute(pathAttribute);
+    if (!cached.isNull() && cached.holds!PathContainer)
+    {
+        auto parsed = cached.get!PathContainer;
+        if (parsed.raw is path || parsed.raw == path)
+            return parsed;
+    }
+    auto parsed = PathContainer.parsePath(path);
+    request.setAttribute(pathAttribute, Any.of(parsed));
+    return parsed;
 }
 
 /// `AbstractHandlerMapping`: interceptors and ordering around `getHandlerInternal`.
