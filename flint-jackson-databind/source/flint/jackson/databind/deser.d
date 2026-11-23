@@ -229,8 +229,9 @@ Any defaultFor(MapperConfig config, string type)
     case "char", "wchar", "dchar":
         return Any.of(dchar.init);
     default:
+        // A wrapper (Nullable!T for Java's Integer, Optional!T) takes its null or empty value.
         const d = config.descriptor(type);
-        return d !is null && d.kind == TypeKind.struct_ && d.create !is null ? d.create() : Any.init;
+        return d is null ? Any.init : nullValue(d);
     }
 }
 
