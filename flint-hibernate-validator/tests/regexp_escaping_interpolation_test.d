@@ -28,17 +28,11 @@ private final class PatternWithCharactersUsedForInterpolationEntity
     }
 }
 
-// Gap: `{1,160}` needs more than the 256 states of Flint's run-time pattern automaton, so the validator reports the
-// pattern as unsupported (HV000032) instead of matching it; java.util.regex semantics for run-time patterns are
-// planned in docs/spring/phase1/third-party.md.
-version (FlintRuntimePatternLimits)
+@("RegexpEscapingInterpolationTest.regexpShouldBeEscapedBeforeBeingInjectedIntoMessageDuringInterpolation")
+unittest
 {
-    @("RegexpEscapingInterpolationTest.regexpShouldBeEscapedBeforeBeingInjectedIntoMessageDuringInterpolation")
-    unittest
-    {
-        auto validator = validatorFor!PatternWithCharactersUsedForInterpolationEntity();
-        auto violations = validator.validate(new PatternWithCharactersUsedForInterpolationEntity("test"));
-        assertOnlyViolationMessages(violations, violationOf(typeNameOf!Pattern,
-                "must match \"" ~ REGEXP_CONTAINING_SPECIAL_CHARACTERS ~ "\""));
-    }
+    auto validator = validatorFor!PatternWithCharactersUsedForInterpolationEntity();
+    auto violations = validator.validate(new PatternWithCharactersUsedForInterpolationEntity("test"));
+    assertOnlyViolationMessages(violations, violationOf(typeNameOf!Pattern,
+            "must match \"" ~ REGEXP_CONTAINING_SPECIAL_CHARACTERS ~ "\""));
 }

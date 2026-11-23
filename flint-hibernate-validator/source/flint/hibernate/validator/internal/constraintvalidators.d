@@ -32,7 +32,8 @@ import flint.jakarta.validation.constraints : AssertFalse, AssertTrue, DecimalMa
     NotNull, Null, Past, PastOrPresent, Pattern, Positive, PositiveOrZero, Size;
 import flint.java.time : Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZonedDateTime;
 import flint.java.util : RawCollection, RawMap;
-import flint.validate.patterns : RuntimePattern, compileRuntimePattern;
+import flint.hibernate.validator.internal.regex : Regex, RegexBudgetException, RegexSyntaxException,
+    RegexUnsupportedException, compileRegex;
 
 @safe:
 
@@ -180,27 +181,50 @@ private ElValue attribute(ref const BuiltinConstraint c, string name) pure nothr
     return ElValue.init;
 }
 
+/// A `@Pattern` (or `@Email` regexp) compiled once: the program, or why it does not compile.
+struct CompiledPattern
+{
+    /// The program, when `problem` is null.
+    Regex regex;
+    /// HV000022's cause for a malformed expression, or the engine's message for an unsupported one.
+    string problem;
+    /// Whether `problem` is a syntax error (Hibernate's HV000022) rather than a missing engine feature.
+    bool malformed;
+}
+
 /// Compiled patterns, shared by a validator factory and so by every reactor thread.
 final class PatternCache
 {
     // Copy-on-write: a published table is never changed, so lookups take no lock; a miss compiles and publishes a
     // larger copy under the monitor.
-    private RuntimePattern[string] patterns;
+    private CompiledPattern[string] patterns;
 
-    /// The compiled pattern for `regexp`, compiling it once.
-    RuntimePattern get(string regexp)
+    /// The compiled pattern for `regexp` with `java.util.regex.Pattern` flag bits `flags`, compiling it once.
+    CompiledPattern get(string regexp, int flags = 0)
     {
+        import flint.engine.aot.text : decimal;
+
+        const key = decimal(flags) ~ "/" ~ regexp;
         // A single word read of a table published after a fence (RCU-style publication).
         auto published = patterns;
-        if (auto found = regexp in published)
+        if (auto found = key in published)
             return *found;
-        auto compiled = compileRuntimePattern(regexp);
+        CompiledPattern compiled;
+        try
+            compiled.regex = compileRegex(regexp, flags);
+        catch (RegexSyntaxException e)
+        {
+            compiled.problem = e.msg;
+            compiled.malformed = true;
+        }
+        catch (RegexUnsupportedException e)
+            compiled.problem = e.msg;
         synchronized (this)
         {
-            if (auto raced = regexp in patterns)
+            if (auto raced = key in patterns)
                 return *raced;
             auto grown = patterns.dup;
-            grown[regexp] = compiled;
+            grown[key] = compiled;
             imported!"core.atomic".atomicFence(); // the pattern and the table are complete before publication
             patterns = grown;
         }
@@ -277,7 +301,32 @@ private bool checkPattern(ref const BuiltinConstraint c, ref Any value, PatternC
         return true;
     if (!value.holds!string())
         return unexpected(c, value, propertyPath);
-    return patterns.get(attribute(c, "regexp").text).matches(cast(const(ubyte)[]) value.get!string());
+    return matchesPattern(patterns.get(attribute(c, "regexp").text, patternFlags(c)), value.get!string());
+}
+
+// PatternValidator: `pattern.matcher(value).matches()`. A match that runs out of steps is an exception inside
+// isValid (HV000028), where Java's would keep backtracking.
+private bool matchesPattern(CompiledPattern pattern, string text)
+{
+    try
+        return pattern.regex.matches(text);
+    catch (RegexBudgetException e)
+        throw new ValidationException("HV000028: Unexpected exception during isValid call.", e);
+}
+
+// The `java.util.regex.Pattern` bits of `@Pattern.flags` (or `@Email.flags`).
+private int patternFlags(ref const BuiltinConstraint c)
+{
+    import flint.jakarta.validation.constraints : Email, Pattern;
+
+    int bits;
+    if (c.annotation.holds!Pattern())
+        foreach (flag; c.annotation.get!Pattern().flags)
+            bits |= flag;
+    else if (c.annotation.holds!Email())
+                foreach (flag; c.annotation.get!Email().flags)
+                    bits |= flag;
+    return bits;
 }
 
 // The identifier after the last dot.
@@ -299,7 +348,7 @@ private bool checkEmail(ref const BuiltinConstraint c, ref Any value, PatternCac
     if (!isValidEmail(text))
         return false;
     const extra = attribute(c, "regexp").text;
-    return extra == ".*" || patterns.get(extra).matches(cast(const(ubyte)[]) text);
+    return extra == ".*" || matchesPattern(patterns.get(extra, patternFlags(c)), text);
 }
 
 private bool checkNumber(ref const BuiltinConstraint c, string simple, ref Any value, string propertyPath)
@@ -588,10 +637,9 @@ private void initialize(ref const BuiltinConstraint c, string simple, ref Any va
             ? "HV000021: The length cannot be negative." : null;
         break;
     case "Pattern":
-        const error = patterns.get(attribute(c, "regexp").text).error;
-        if (error !is null)
-            problem = engineLimit(error) ? "Flint's run-time pattern engine does not support this java.util.regex"
-                ~ " pattern yet: " ~ error : "HV000022: Invalid regular expression.";
+        const compiled = patterns.get(attribute(c, "regexp").text, patternFlags(c));
+        if (compiled.problem !is null)
+            problem = compiled.malformed ? "HV000022: Invalid regular expression." : compiled.problem;
         break;
     default:
         return;
@@ -599,18 +647,6 @@ private void initialize(ref const BuiltinConstraint c, string simple, ref Any va
     if (problem !is null)
         throw new ValidationException("HV000032: Unable to initialize " ~ validatorClass(simple,
                 value) ~ ".", new IllegalArgumentException(problem));
-}
-
-// Whether a run-time pattern error is a limit of Flint's automaton (size, look-around, back-references, non-ASCII
-// literals, Unicode properties other than \p{L}) rather than a java.util.regex syntax error.
-private bool engineLimit(string error) pure nothrow @nogc
-{
-    static immutable string[] limits = ["exceeds", "unsupported", "ASCII", "only \\p{L}"];
-    foreach (limit; limits)
-        foreach (i; 0 .. error.length >= limit.length ? error.length - limit.length + 1 : 0)
-            if (error[i .. i + limit.length] == limit)
-                return true;
-    return false;
 }
 
 // The name of the Hibernate validator class that would have been chosen for `value`.

@@ -1,0 +1,367 @@
+abc	0	abc	true
+abc	0	ab	false
+abc	0	abcd	false
+abc	0		false
+abc	0	ABC	false
+a.c	0	abc	true
+a.c	0	a\nc	false
+a.c	0	a\rc	false
+a.c	0	ac	false
+a.c	0	a c	false
+a.c	0	aéc	true
+a.c	0	a😀c	true
+a.c	32	a\nc	true
+a.c	32	a\rc	true
+a.c	1	a\rc	true
+a.c	1	a\nc	false
+cat|dog|	0	cat	true
+cat|dog|	0	dog	true
+cat|dog|	0		true
+cat|dog|	0	cats	false
+(a|ab)(c|bcd)	0	abcd	true
+(a|ab)(c|bcd)	0	abc	true
+(a|ab)(c|bcd)	0	acd	false
+[abc]+	0	abccba	true
+[abc]+	0	abd	false
+[abc]+	0		false
+[^abc]	0	d	true
+[^abc]	0	a	false
+[^abc]	0	\n	true
+[^abc]	0	é	true
+[a-z0-9_-]+	0	a-b_9	true
+[a-z0-9_-]+	0	A	false
+[a-z0-9_-]+	0	a-	true
+[-a]	0	-	true
+[-a]	0	a	true
+[-a]	0	b	false
+[a-]	0	-	true
+[a-]	0	a	true
+[]a]	0	]	true
+[]a]	0	a	true
+[^]a]	0	b	true
+[^]a]	0	]	false
+[a-z&&[^aeiou]]+	0	bcd	true
+[a-z&&[^aeiou]]+	0	bad	false
+[a-z&&[^aeiou]]+	0		false
+[a-z&&[def]]	0	e	true
+[a-z&&[def]]	0	a	false
+[a-c[x-z]]	0	b	true
+[a-c[x-z]]	0	y	true
+[a-c[x-z]]	0	m	false
+[\\w&&[^\\d]]+	0	abc_	true
+[\\w&&[^\\d]]+	0	ab1	false
+[\\[\\]\\\\]+	0	[]\\	true
+[\\[\\]\\\\]+	0	a	false
+[a-c&&b-d]	0	b	true
+[a-c&&b-d]	0	c	true
+[a-c&&b-d]	0	a	false
+[a-c&&b-d]	0	d	false
+[\\x41-\\x43]	0	B	true
+[\\x41-\\x43]	0	D	false
+[\\u00e0-\\u00ff]	0	é	true
+[\\u00e0-\\u00ff]	0	e	false
+[é]	0	é	true
+[é]	0	e	false
+[z-a]	0		error
+[a	0		error
+[]	0		error
+[^]	0		error
+\\d+	0	0123456789	true
+\\d+	0	١	false
+\\d+	0	a	false
+\\D	0	a	true
+\\D	0	1	false
+\\s	0	 	true
+\\s	0	\t	true
+\\s	0	\n	true
+\\s	0	\u000b	true
+\\s	0	\u000c	true
+\\s	0	\r	true
+\\s	0	 	false
+\\s	0	a	false
+\\S+	0	ab	true
+\\S+	0	a b	false
+\\w+	0	aZ_9	true
+\\w+	0	é	false
+\\w+	0	-	false
+\\W	0	-	true
+\\W	0	a	false
+\\W	0	é	true
+\\h	0	 	true
+\\h	0	\t	true
+\\h	0	 	true
+\\h	0	 	true
+\\h	0	\n	false
+\\H	0	a	true
+\\H	0	 	false
+\\v	0	\n	true
+\\v	0	\u000b	true
+\\v	0	 	true
+\\v	0	 	false
+\\V	0	a	true
+\\V	0	\n	false
+\\R	0	\n	true
+\\R	0	\r\n	true
+\\R	0	\r	true
+\\R	0		true
+\\R	0	a	false
+a\\Rb	0	a\r\nb	true
+a\\Rb	0	a\nb	true
+\\p{Lower}+	0	abc	true
+\\p{Lower}+	0	aBc	false
+\\p{Lower}+	0	é	false
+\\p{Upper}	0	A	true
+\\p{Upper}	0	a	false
+\\p{Upper}	0	É	false
+\\p{Alpha}+	0	aZ	true
+\\p{Alpha}+	0	a1	false
+\\p{Digit}	0	5	true
+\\p{Digit}	0	a	false
+\\p{Alnum}+	0	a1Z	true
+\\p{Alnum}+	0	a-	false
+\\p{Punct}+	0	!"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~	true
+\\p{Punct}+	0	a	false
+\\p{Space}	0	 	true
+\\p{Space}	0	\u000b	true
+\\p{Space}	0	a	false
+\\p{XDigit}+	0	0aF	true
+\\p{XDigit}+	0	g	false
+\\p{ASCII}+	0	a~	true
+\\p{ASCII}+	0	é	false
+\\p{Blank}	0	 	true
+\\p{Blank}	0	\t	true
+\\p{Blank}	0	\n	false
+\\p{Cntrl}	0	\u0001	true
+\\p{Cntrl}	0	\u007f	true
+\\p{Cntrl}	0	a	false
+\\p{Graph}+	0	a!	true
+\\p{Graph}+	0	a b	false
+\\p{Print}+	0	a b	true
+\\p{Print}+	0	a\tb	false
+\\p{L}+	0	abcÉé漢字	true
+\\p{L}+	0	a1	false
+\\pL	0	x	true
+\\pL	0	1	false
+\\p{IsL}	0	ß	true
+\\p{IsL}	0	1	false
+\\p{IsLetter}	0	ж	true
+\\p{IsLetter}	0	!	false
+\\P{L}	0	1	true
+\\P{L}	0	a	false
+[\\p{L}\\d]+	0	ab12é	true
+[\\p{L}\\d]+	0	ab-	false
+[^\\p{L}]	0	1	true
+[^\\p{L}]	0	a	false
+\\p{Foo}	0		error
+\\p{L	0		error
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0	George	true
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0	Jean-Luc	true
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0	O'Neil Jr.	true
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0	Mc Donald	true
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0	Al--x	false
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0		false
+^[\\p{L}]+([ '-][\\p{L}]+){0,2}\\.?$	0	Jo1	false
+^[0-9]{10}$	0	6085551023	true
+^[0-9]{10}$	0	608555102	false
+^[0-9]{10}$	0	60855510234	false
+^[0-9]{10}$	0	608555102a	false
+^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$	0	a.b@c.org	true
+^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$	0	a@b	true
+^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$	0	a b@c	false
+^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$	0	@c	false
+^\\d{4}-\\d{2}-\\d{2}$	0	2013-01-01	true
+^\\d{4}-\\d{2}-\\d{2}$	0	2013-1-01	false
+[{0-9]{1,160}$	0	123	true
+[{0-9]{1,160}$	0	{1	true
+[{0-9]{1,160}$	0	test	false
+[{0-9]{1,160}$	0		false
+[0-9]{1,300}	0	12345678901234567890	true
+[0-9]{1,300}	0		false
+a*	0		true
+a*	0	aaaa	true
+a*	0	b	false
+a+	0		false
+a+	0	a	true
+a+	0	aa	true
+a?b	0	b	true
+a?b	0	ab	true
+a?b	0	aab	false
+a{3}	0	aaa	true
+a{3}	0	aa	false
+a{3}	0	aaaa	false
+a{2,}	0	a	false
+a{2,}	0	aa	true
+a{2,}	0	aaaaaa	true
+a{2,3}	0	a	false
+a{2,3}	0	aa	true
+a{2,3}	0	aaa	true
+a{2,3}	0	aaaa	false
+a{0}b	0	b	true
+a{0}b	0	ab	false
+(ab){2}	0	abab	true
+(ab){2}	0	ab	false
+a*?b	0	aaab	true
+a+?	0	aaa	true
+a*+a	0	aaa	false
+a++b	0	aab	true
+(a|b)*+b	0	abab	false
+a?+a	0	a	false
+a?+a	0	aa	true
+a{2,3}?a	0	aaa	true
+a{2,3}?a	0	aaaa	true
+a{2,3}+a	0	aaa	false
+a{2,3}+a	0	aaaa	true
+(a*)*	0	aaa	true
+(a*)*	0		true
+(a?)+b	0	b	true
+(a?)+b	0	aab	true
+(a*)+$	0	aaaa	true
+(a*)+$	0	aaab	false
+x{1,2}{3}	0	xxx	false
+x{1,2}{3}	0	xxxxxx	false
+x{1,2}{3}	0	xxxxxxx	false
+a{2,1}	0		error
+a{	0		error
+a{1	0		error
+a{,2}	0		error
+*a	0		error
+a**	0		error
+a{1}{2}	0	aa	false
+{1}	0	a	false
+x{999999999999}	0		error
+(a)(b)\\2\\1	0	abba	true
+(a)(b)\\2\\1	0	abab	false
+(a)\\2	0	aa	false
+(?<first>a)(?<second>b)\\k<second>\\k<first>	0	abba	true
+(?<first>a)(?<second>b)\\k<second>\\k<first>	0	abab	false
+\\k<nope>	0		error
+(?<1a>a)	0		error
+(?:ab)+	0	abab	true
+(?:ab)+	0	aba	false
+(?>a+)b	0	aab	true
+(?>a*)a	0	aaa	false
+((a)|b)+	0	ab	true
+((a)|b)+	0	abab	true
+(a)|\\1	0	a	true
+(a)|\\1	0		false
+(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)\\10	0	01234567899	true
+(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)\\10	0	01234567890	false
+(a)\\11	0	a1	false
+(a)\\11	0	aa1	true
+(	0		error
+)	0		error
+(?	0		error
+(?<n>a)(?<n>b)	0		error
+(?i)(a)\\1	0	aA	true
+(?i)(a)\\1	0	Aa	true
+(?=a)a	0	a	true
+(?=a)a	0	b	false
+(?!a)\\w	0	b	true
+(?!a)\\w	0	a	false
+a(?=b)\\w	0	ab	true
+a(?=b)\\w	0	ac	false
+\\w+(?<=x)	0	abx	true
+\\w+(?<=x)	0	abc	false
+\\w(?<!a)b	0	cb	true
+\\w(?<!a)b	0	ab	false
+(?<=ab|abc)d	0	d	false
+.*(?<=ab|xyz)	0	zzab	true
+.*(?<=ab|xyz)	0	zzxyz	true
+.*(?<=ab|xyz)	0	zzaa	false
+(?<=a+)b	0	ab	false
+(?<=a*)b	0	b	true
+(?<=a{1,3})b	0	b	false
+^(?=.*\\d)(?=.*[a-z])(?=.*[A-Z]).{8,}$	0	Passw0rdX	true
+^(?=.*\\d)(?=.*[a-z])(?=.*[A-Z]).{8,}$	0	password1	false
+^(?=.*\\d)(?=.*[a-z])(?=.*[A-Z]).{8,}$	0	PASSWORD1a	true
+^(?=.*\\d)(?=.*[a-z])(?=.*[A-Z]).{8,}$	0	Pa1	false
+^(?!.*\\.\\.)[a-z.]+$	0	a.b.c	true
+^(?!.*\\.\\.)[a-z.]+$	0	a..b	false
+(?=(\\w))\\1	0	a	true
+(?=(\\w))\\1	0	ab	false
+(?<!^)x	0	ax	false
+(?<!^)x	0	x	false
+^(?:(?!ab).)*$	0	aacb	true
+^(?:(?!ab).)*$	0	xaby	false
+(?<=(a))b\\1	0	aba	false
+(?<=(a))b\\1	0	abb	false
+^abc$	0	abc	true
+^abc$	0	abc\n	false
+abc$	0	abc	true
+abc$	0	abc\n	false
+^a$\\n^b$	8	a\nb	true
+^a$\\n^b$	8	ab	false
+a$	8	a	true
+(?m)^a$\\n^b$	0	a\nb	true
+\\Aab\\z	0	ab	true
+ab\\Z	0	ab	true
+ab\\Z	0	ab\n	false
+ab\\Z\\n	0	ab\n	true
+\\bfoo\\b	0	foo	true
+.*\\bfoo\\b.*	0	a foo b	true
+.*\\bfoo\\b.*	0	afoob	false
+.*\\bfoo\\b.*	0	é foo	true
+.*\\bfoo\\b.*	0	éfoo	true
+.*\\Bfoo.*	0	afoo	true
+.*\\Bfoo.*	0	a foo	false
+\\Gab	0	ab	true
+abc	2	ABC	true
+abc	2	aBc	true
+abc	2	abd	false
+[a-c]+	2	ABC	true
+[a-c]+	2	AbD	false
+é	2	É	false
+é	2	é	true
+é	66	É	true
+(?i)abc	0	ABC	true
+a(?i)bc	0	aBC	true
+a(?i)bc	0	ABC	false
+a(?i:b)c	0	aBc	true
+a(?i:b)c	0	aBC	false
+(?i)a(?-i)b	0	Ab	true
+(?i)a(?-i)b	0	AB	false
+(?s).	0	\n	true
+(?x) a b # comment\n c	0	abc	true
+(?x) a b # comment\n c	0	a b c	false
+a b	4	ab	true
+a b	4	a b	false
+[a b]+	4	ab	true
+[a b]+	4	a b	false
+a\\ b	4	a b	true
+(?d).	0	\r	true
+(?d).	0	\n	false
+(?q)a	0		error
+(?i-s:a.)	0	A\n	false
+(?i-s:a.)	0	Ab	true
+(?u)é	0	é	true
+(?U)\\w	0	é	true
+(?U)\\w	0	a	true
+\\t\\n\\r\\f\\a\\e	0	\t\n\r\u000c\u0007\u001b	true
+\\x41\\x{1F600}\\u0042	0	A😀B	true
+\\0101	0	A	true
+\\0377	0	ÿ	true
+\\0400	0	 0	true
+\\cA\\c@	0	\u0001\u0000	true
+\\Qa.b*\\E+	0	a.b*	true
+\\Qa.b*\\E+	0	a.b**	true
+\\Qa.b*\\E+	0	axbb	false
+\\Qa.b	0	a.b	true
+a\\.b	0	a.b	true
+a\\.b	0	axb	false
+\\$\\^\\{\\}\\(\\)\\|\\?\\*\\+	0	$^{}()|?*+	true
+\\y	0		error
+\\	0		error
+\\x4	0		error
+\\u004	0		error
+\\N{LATIN SMALL LETTER A}	0	a	true
+é+	0	éé	true
+é+	0	e	false
+😀{2}	0	😀😀	true
+😀{2}	0	😀	false
+[😀-😂]	0	😁	true
+[😀-😂]	0	😃	false
+a\\u0300	0	à	true
+(a+)+b	0	aaaaaaaaaaaaaaaaaaab	true
+(a+)+b	0	aaaaaaaaaaaaaaa	false
+(x+x+)+y	0	xxxxxxxxxxy	true
+(x+x+)+y	0	xxxxxxxxxx	false
