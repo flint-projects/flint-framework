@@ -127,6 +127,7 @@ final class StandaloneMockMvcBuilder
     private ResultMatcher[] globalMatchers;
     private ResultHandler[] globalHandlers;
     private int[string] adviceOrder;
+    private imported!"flint.validation".Validator validator;
 
     package(flint) this()
     {
@@ -158,6 +159,13 @@ final class StandaloneMockMvcBuilder
     StandaloneMockMvcBuilder addInterceptors(HandlerInterceptor[] interceptors...)
     {
         this.interceptors ~= interceptors;
+        return this;
+    }
+
+    /// The validator for `@Valid` and `@Validated` arguments (Spring's `setValidator`).
+    StandaloneMockMvcBuilder setValidator(imported!"flint.validation".Validator validator) pure nothrow @nogc
+    {
+        this.validator = validator;
         return this;
     }
 
@@ -216,6 +224,8 @@ final class StandaloneMockMvcBuilder
         ];
         auto support = new WebMvcConfigurationSupport(mappings, exceptionHandlers, beanFactory, configurerList, table);
         support.setAdviceOrder(adviceOrder);
+        if (validator !is null)
+            support.setValidator(validator);
         HttpMessageConverter[] converters = messageConverters;
         if (converters is null)
             converters = support.getMessageConverters();

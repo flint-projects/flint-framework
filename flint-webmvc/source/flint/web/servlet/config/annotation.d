@@ -273,6 +273,7 @@ class WebMvcConfigurationSupport
     private ViewResolver[] viewResolvers;
     private int[string] adviceOrder;
     private LocaleResolver localeResolver;
+    private imported!"flint.validation".Validator validator;
 
     /// Over Flint AOT's tables, the bean factory and the application's configurers.
     this(AotHandlerMapping[] mappings, ExceptionHandlerSpec[] exceptionHandlers,
@@ -289,6 +290,15 @@ class WebMvcConfigurationSupport
     WebMvcConfigurationSupport setMessageConverters(HttpMessageConverter[] converters) pure nothrow @nogc
     {
         this.converters = converters;
+        return this;
+    }
+
+    /// The `mvcValidator` bean: the validator of `@Valid` and `@Validated` arguments. Boot's
+    /// `WebMvcAutoConfiguration` passes the application's `LocalValidatorFactoryBean`; without one, arguments are
+    /// not validated (Spring's `NoOpValidator`).
+    WebMvcConfigurationSupport setValidator(imported!"flint.validation".Validator validator) pure nothrow @nogc
+    {
+        this.validator = validator;
         return this;
     }
 
@@ -372,6 +382,8 @@ class WebMvcConfigurationSupport
             configurer.addReturnValueHandlers(customHandlers);
         }
         auto adapter = new RequestMappingHandlerAdapter(getMessageConverters(), null, customResolvers, customHandlers);
+        if (validator !is null)
+            adapter.setValidator(validator, descriptors);
 
         HandlerExceptionResolver[] resolvers;
         foreach (configurer; configurers)

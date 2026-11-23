@@ -21,7 +21,7 @@ module flint.web.servlet.mvc.method.annotation;
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.bean : BeanFactory;
-import flint.engine.aot.descriptor : MergedAnnotation;
+import flint.engine.aot.descriptor : DescriptorTable, MergedAnnotation;
 import flint.engine.aot.mapping : AotHandlerMapping = HandlerMapping, ArgumentKind, ArgumentSpec,
     ExceptionHandlerSpec, HandlerArguments;
 import flint.http : HttpEntity, HttpHeaders, HttpMethod, HttpStatus, HttpStatusCode, MediaType,
@@ -48,6 +48,7 @@ import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView;
 import flint.web.servlet.handler : AbstractHandlerExceptionResolver;
 import flint.web.cors : CorsConfiguration;
 import flint.web.servlet.mvc.method : RequestMappingInfo, RequestMappingInfoHandlerMapping;
+import flint.validation : Validator;
 
 @safe:
 
@@ -459,10 +460,21 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
 /// `RequestResponseBodyMethodProcessor`: `@RequestBody` arguments and `@ResponseBody` return values.
 class RequestResponseBodyMethodProcessor : AbstractMessageConverterMethodProcessor
 {
+    private Validator validator;
+    private DescriptorTable descriptors;
+
     ///
     this(HttpMessageConverter[] converters, ContentNegotiationManager manager = null)
     {
         super(converters, manager);
+    }
+
+    /// The validator for `@Valid` and `@Validated` arguments, with the descriptors its binding results read
+    /// properties through (Spring keeps it in the web binding initializer).
+    package(flint) void setValidator(Validator validator, DescriptorTable descriptors) pure nothrow @nogc
+    {
+        this.validator = validator;
+        this.descriptors = descriptors;
     }
 
     bool supportsParameter(MethodParameter parameter)
@@ -483,7 +495,42 @@ class RequestResponseBodyMethodProcessor : AbstractMessageConverterMethodProcess
         if (arg.isNull() && parameter.getArgumentSpec().required && !parameter.isOptional())
             throw new HttpMessageNotReadableException("Required request body is missing: " ~ parameter.getExecutable(),
                     null, new ServletServerHttpRequest(webRequest.getNativeRequest()));
+        if (!arg.isNull())
+            validateIfApplicable(arg, parameter);
         return arg;
+    }
+
+    /// Spring's `validateIfApplicable` and `isBindExceptionRequired`: a `@Valid` or `@Validated` argument is
+    /// validated into a `BeanPropertyBindingResult` named as `Conventions` names the parameter, and errors throw
+    /// `MethodArgumentNotValidException`.
+    protected void validateIfApplicable(Any arg, MethodParameter parameter)
+    {
+        import flint.validation : BeanPropertyBindingResult;
+        import flint.web.bind : MethodArgumentNotValidException;
+
+        if (validator is null || !parameter.getArgumentSpec().validate)
+            return;
+        auto result = new BeanPropertyBindingResult(arg,
+                variableNameOf(parameter.getNestedParameterType()), descriptors);
+        validator.validate(arg, result);
+        if (result.hasErrors())
+            throw new MethodArgumentNotValidException(parameter, result);
+    }
+
+    /// `Conventions.getVariableNameForParameter` for a single value: the simple type name, uncapitalized unless
+    /// it starts with two capitals (`OwnerDto` → `ownerDto`, `URLData` → `URLData`).
+    package(flint) static string variableNameOf(string typeName) pure nothrow
+    {
+        size_t start;
+        foreach (index, c; typeName)
+            if (c == '.')
+                start = index + 1;
+        const simple = typeName[start .. $];
+        if (simple.length == 0 || simple[0] < 'A' || simple[0] > 'Z')
+            return simple;
+        if (simple.length > 1 && simple[1] >= 'A' && simple[1] <= 'Z')
+            return simple;
+        return cast(char)(simple[0] + 32) ~ simple[1 .. $];
     }
 
     void handleReturnValue(Any returnValue, MethodParameter returnType,
@@ -798,6 +845,13 @@ class RequestMappingHandlerAdapter : HandlerAdapter
     package(flint) RequestResponseBodyMethodProcessor getResponseBodyHandler() pure nothrow @nogc
     {
         return handlers.responseBody;
+    }
+
+    /// The validator for `@Valid` arguments (Spring's `ConfigurableWebBindingInitializer.setValidator`), with
+    /// the descriptor table its binding results read properties through.
+    void setValidator(Validator validator, DescriptorTable descriptors = null)
+    {
+        handlers.responseBody.setValidator(validator, descriptors);
     }
 
     package(flint) WebDataBinderFactory getBinderFactory() pure nothrow @nogc
