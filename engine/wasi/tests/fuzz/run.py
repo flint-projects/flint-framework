@@ -15,13 +15,15 @@ def main():
     if args.seconds < 0:
         parser.error("--seconds must be nonnegative")
     root = Path(__file__).resolve().parents[4]
-    shim = root / "native" / "ffi"
+    package = Path(__file__).resolve().parents[2]
+    shim = package / "native" / "ffi"
+    shared = next(p for p in (package.parents[1] / "native" / "framework" / "include", package.parents[1] / "native" / "include") if p.is_dir())
     archive = args.prefix / "lib" / "libwasmtime.a"
     command = [
         os.environ.get("CC", "cc"), "-std=c11", "-g", "-O1", "-Wall", "-Wextra", "-Werror",
         "-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-no-pie",
         "-DFLINT_HAS_WASMTIME=1", "-DFLINT_HAS_WASMTIME_EXTENSIONS=1",
-        "-I" + str(args.prefix / "include"), "-I" + str(shim), str(shim / "flint_wasi.c"),
+        "-I" + str(args.prefix / "include"), "-I" + str(shim), "-I" + str(shared), str(shim / "flint_wasi.c"),
         str(Path(__file__).with_name("native.c")), str(archive), "-lpthread", "-ldl", "-lm", "-lrt",
         "-lutil", "-o", str(args.output),
     ]

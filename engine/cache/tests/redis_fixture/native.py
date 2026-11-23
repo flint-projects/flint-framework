@@ -31,12 +31,13 @@ def main():
     cli.add_argument("--cc", default="cc")
     args = cli.parse_args()
     fixture = Path(__file__).resolve().parent
-    ffi = fixture.parents[3] / "native" / "ffi"
+    ffi = fixture.parents[1] / "native" / "ffi"
+    shared = next(p for p in (fixture.parents[1].parents[1] / "native" / "framework" / "include", fixture.parents[1].parents[1] / "native" / "include") if p.is_dir())
     args.output.parent.mkdir(parents=True, exist_ok=True)
     command = [
         args.cc, "-O1", "-g", "-no-pie", "-std=c11", "-Wall", "-Wextra", "-Werror",
         "-DFLINT_HAS_HIREDIS=1", "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
-        f"-I{ffi}", f"-I{args.prefix / 'include'}", ffi / "flint_cache.c", fixture / "native.c",
+        f"-I{ffi}", f"-I{shared}", f"-I{args.prefix / 'include'}", ffi / "flint_cache.c", fixture / "native.c",
         *verified_archives(args.prefix), "-Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc", "-pthread", "-ldl", "-lm", "-o", args.output,
     ]
     print(shlex.join(map(str, command)), flush=True)

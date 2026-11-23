@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the SQL C shim boundary corpus (native/ffi/sql_native_test.c) with ASan and UBSan and run it.
+"""Build the SQL C shim boundary corpus (native/ffi/sql_native_test.c, beside this package) with ASan and UBSan and run it.
 
 The corpus covers the 16-lease/256-waiter queue cap, waiter withdrawal, stale lease generations,
 invalid UTF-8 and NUL inputs, value lengths 0..256 and around 1 KiB/1 MiB, and retirement of an
@@ -32,11 +32,15 @@ def main():
     parser.add_argument("--output", type=Path, required=True, help="scratch directory for the binary")
     parser.add_argument("--cc", default=os.environ.get("CC", "cc"))
     args = parser.parse_args()
-    source = Path(__file__).resolve().parents[3] / "native" / "ffi"
+    package = Path(__file__).resolve().parents[1]
+    source = package / "native" / "ffi"
+    # The engines' shared headers: native/framework/include in the monorepo, native/include in flint-framework.
+    shared = next(path for path in (package.parents[1] / "native" / "framework" / "include",
+                                    package.parents[1] / "native" / "include") if path.is_dir())
     args.output.mkdir(parents=True, exist_ok=True)
     binary = args.output / "sql_native_test_asan"
     command = [args.cc, "-std=c11", "-g", "-O1", "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
-               "-DFLINT_HAS_SQLITE=1", "-DFLINT_HAS_LIBPQ=1", f"-I{source}", f"-I{args.prefix / 'include'}",
+               "-DFLINT_HAS_SQLITE=1", "-DFLINT_HAS_LIBPQ=1", f"-I{source}", f"-I{shared}", f"-I{args.prefix / 'include'}",
                str(source / "sql_native_test.c"), *(str(source / name) for name in SHIMS),
                *(str(args.prefix / name) for name in ARCHIVES), str(zlib(args.prefix)),
                "-lpthread", "-ldl", "-lm", "-o", str(binary)]

@@ -16,7 +16,7 @@ def main():
     library_path = args.prefix.resolve() / "lib"
     root = Path(__file__).resolve().parents[4]
     test = Path(__file__).resolve().parent
-    ffi = root / "native" / "ffi"
+    ffi = Path(__file__).resolve().parents[2] / "native" / "ffi"
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     command = [
