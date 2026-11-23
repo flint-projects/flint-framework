@@ -73,3 +73,33 @@ unittest
     }
     assert(cast(string) mapper.writeValueAsBytes(Any.of(Greeting(7, "x"))) == `{"id":7,"content":"x"}`);
 }
+
+private final class OwnerFields
+{
+    string firstName;
+    string city;
+}
+
+@("a read allocates only the user's objects: the bean and its strings, nothing of Jackson's own")
+unittest
+{
+    auto table = DescriptorTable.withBuiltins();
+    table.add(descriptorOf!OwnerFields());
+    auto mapper = JsonMapper.builder().descriptors(table).build();
+    const(ubyte)[] json = cast(const(ubyte)[]) `{"firstName":"Ada","city":"London"}`;
+    const name = descriptorOf!OwnerFields().name;
+    foreach (i; 0 .. 10)
+        mapper.readValue(json, name);
+
+    // What the user's objects cost: the bean and copies of its two values.
+    auto before = GC.stats().allocatedInCurrentThread;
+    auto bean = new OwnerFields();
+    bean.firstName = "Ada".idup;
+    bean.city = "London".idup;
+    const own = GC.stats().allocatedInCurrentThread - before;
+
+    before = GC.stats().allocatedInCurrentThread;
+    const read = mapper.readValue(json, name).get!OwnerFields();
+    assert(GC.stats().allocatedInCurrentThread - before == own);
+    assert(read.firstName == "Ada" && read.city == "London");
+}

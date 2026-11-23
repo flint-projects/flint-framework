@@ -218,6 +218,78 @@ final class JsonFactory
         return new UTF8JsonGenerator(writeCtxt is null ? ObjectWriteContext.empty() : writeCtxt, this, sink);
     }
 
+    // Recycled parsers, as the generators below: a parser keeps its context chain and scratch buffer.
+    private UTF8StreamJsonParser[16] _recycledParsers;
+
+    // A parser for the mapper's own reads, which never let it escape: recycled when the pool has one.
+    package(flint.jackson) UTF8StreamJsonParser acquireParser(ObjectReadContext readCtxt, const(ubyte)[] content)
+    {
+        import core.atomic : atomicLoad, cas;
+
+        auto context = readCtxt is null ? ObjectReadContext.empty() : readCtxt;
+        foreach (ref slot; _recycledParsers)
+        {
+            auto p = atomicLoad(slot);
+            if (p !is null && cas(&slot, p, cast(UTF8StreamJsonParser) null))
+            {
+                p.reuse(context, content);
+                return p;
+            }
+        }
+        return new UTF8StreamJsonParser(context, this, content);
+    }
+
+    // Give back a parser from `acquireParser` after its read; dropped when the pool is full.
+    package(flint.jackson) void releaseParser(UTF8StreamJsonParser p)
+    {
+        import core.atomic : atomicLoad, cas;
+
+        p.forget();
+        foreach (ref slot; _recycledParsers)
+            if (atomicLoad(slot) is null && cas(&slot, cast(UTF8StreamJsonParser) null, p))
+                return;
+    }
+
+    // Property names, interned (Jackson's symbol canonicalizer): open addressing over slots claimed with
+    // compare-and-swap, never resized, so readers on every thread need no lock. A name that finds no slot within a
+    // short probe is copied instead, so a document with many distinct names cannot grow the table.
+    // A slot holds an object, not the string itself, so claiming one is a single-word compare-and-swap.
+    private static final class InternedName
+    {
+        string text;
+
+        this(string text) pure nothrow @nogc
+        {
+            this.text = text;
+        }
+    }
+
+    private InternedName[1024] _names;
+
+    package(flint.jackson) string internName(scope const(char)[] text)
+    {
+        import core.atomic : atomicLoad, cas;
+
+        uint hash = 2_166_136_261;
+        foreach (c; text)
+            hash = (hash ^ c) * 16_777_619;
+        foreach (probe; 0 .. 8)
+        {
+            auto slot = &_names[(hash + probe) % _names.length];
+            auto known = atomicLoad(*slot);
+            if (known is null)
+            {
+                auto name = new InternedName(text.idup);
+                if (cas(slot, cast(InternedName) null, name))
+                    return name.text;
+                known = atomicLoad(*slot);
+            }
+            if (known.text == text)
+                return known.text;
+        }
+        return text.idup;
+    }
+
     // Recycled generators: a bounded pool of slots taken and returned with compare-and-swap, so reactor threads
     // never wait on each other (Jackson's BoundedPool recycles BufferRecyclers the same way; Flint keeps no
     // thread-local state, so the factory owns the pool). A slot holds a generator, buffer and context chain included.
@@ -1095,6 +1167,19 @@ final class JsonReadContext : TokenStreamContext
         return new JsonReadContext(TYPE_ROOT, null, 0, 0);
     }
 
+    // A recycled parser's root context, as new; the children are kept and forget the names and values they held.
+    package(flint.jackson) void resetRoot() pure nothrow @nogc
+    {
+        _type = TYPE_ROOT;
+        _index = -1;
+        _startOffset = 0;
+        for (auto c = this; c !is null; c = c._child)
+        {
+            c._currentName = null;
+            c._currentValue = null;
+        }
+    }
+
     private JsonReadContext child(int type, size_t offset) pure nothrow
     {
         if (_child is null)
@@ -1180,17 +1265,42 @@ class UTF8StreamJsonParser : JsonParser
     private double _numberDouble;
     private bool _numberParsed;
 
+    // Escaped text decodes here before its one copy; kept across documents by a recycled parser.
+    private char[] _scratch;
+
     /// A parser over `content`, which it borrows until it is closed.
     this(ObjectReadContext readCtxt, JsonFactory factory, const(ubyte)[] content)
     {
-        _objectReadContext = readCtxt;
         _factory = factory;
         _constraints = factory.streamReadConstraints();
-        _input = content;
         _streamReadContext = JsonReadContext.createRootContext();
+        reuse(readCtxt, content);
+    }
+
+    // Start over on `content`, keeping the context chain and the scratch buffer (a recycled parser).
+    package(flint.jackson) void reuse(ObjectReadContext readCtxt, const(ubyte)[] content)
+    {
+        _objectReadContext = readCtxt;
+        _input = content;
+        _inputPtr = 0;
+        _streamReadContext.resetRoot();
+        _currToken = JsonToken.NOT_AVAILABLE;
+        _closed = false;
+        _textCache = null;
+        _textCached = false;
+        _numberParsed = false;
         // A UTF-8 byte order mark is skipped, as Jackson's bootstrapper does.
         if (content.length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF)
             _inputPtr = 3;
+    }
+
+    // Drop what a finished read referenced (its document, context and decoded text), so the pool keeps none of it.
+    package(flint.jackson) void forget() pure nothrow @nogc
+    {
+        _objectReadContext = null;
+        _input = null;
+        _textCache = null;
+        _streamReadContext.resetRoot();
     }
 
     override bool isEnabled(StreamReadFeature f)
@@ -1330,7 +1440,7 @@ class UTF8StreamJsonParser : JsonParser
         skipWhitespace();
         if (_inputPtr == _input.length)
             throw eofIn("an Object value");
-        _streamReadContext.setCurrentName(decode(token));
+        _streamReadContext.setCurrentName(name(token));
         return JsonToken.PROPERTY_NAME;
     }
 
@@ -1448,14 +1558,29 @@ class UTF8StreamJsonParser : JsonParser
             && _input[offset + 1] <= '9';
     }
 
-    private string decode(JsonTextToken token)
+    // The text of a string token, unescaped: a slice of the input, or of the scratch buffer when it has escapes.
+    private const(char)[] text(JsonTextToken token)
     {
         if (token.length == token.end - token.start)
-            return (cast(const(char)[]) _input[token.start .. token.end]).idup;
-        auto output = new char[token.length];
+            return cast(const(char)[]) _input[token.start .. token.end];
+        if (_scratch.length < token.length)
+            _scratch.length = token.length < 64 ? 64 : token.length;
+        auto output = _scratch[0 .. token.length];
         if (!copyJsonText(_input, token, cast(ubyte[]) output))
             throw readError("Invalid JSON string");
-        return output.idup;
+        return output;
+    }
+
+    // A string value, owned by the caller: the value becomes part of the user's object.
+    private string decode(JsonTextToken token)
+    {
+        return text(token).idup;
+    }
+
+    // A property name: the factory's interned copy, so a name the mapper has seen costs no allocation.
+    private string name(JsonTextToken token)
+    {
+        return _factory.internName(text(token));
     }
 
     override string getString()

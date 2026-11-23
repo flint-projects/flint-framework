@@ -463,10 +463,12 @@ class ObjectMapper
         _config = config;
         _compactContext = new MapperWriteContext(false);
         _indentedContext = new MapperWriteContext(true);
+        _readContext = ObjectReadContext.empty();
     }
 
     private ObjectWriteContext _compactContext;
     private ObjectWriteContext _indentedContext;
+    private ObjectReadContext _readContext;
 
     /// The defaults: Jackson 3.1.8's features, the default JSON factory and node factory.
     static MapperConfig defaultConfig()
@@ -691,11 +693,13 @@ class ObjectMapper
         import flint.jackson.databind.deser : verifyNoTrailingTokens;
         import flint.jackson.databind.exc : MismatchedInputException;
 
-        auto p = _config.factory.createParser(ObjectReadContext.empty(), content);
+        // A recycled parser, given back after a read that succeeds; one that fails is dropped with its exception.
+        auto p = _config.factory.acquireParser(_readContext, content);
         if (p.nextToken() == JsonToken.NOT_AVAILABLE)
             throw new MismatchedInputException("No content to map due to end-of-input", type, p.currentLocation());
         auto value = readValue(p, type);
         verifyNoTrailingTokens(_config, p, type);
+        _config.factory.releaseParser(p);
         return value;
     }
 

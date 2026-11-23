@@ -104,7 +104,10 @@ private Any readStructured(MapperConfig config, JsonParser p, const Descriptor d
     if (d.kind != TypeKind.struct_ && d.kind != TypeKind.class_ && d.kind != TypeKind.interface_)
         throw new InvalidDefinitionException(
                 "Cannot deserialize `" ~ d.name ~ "` until its descriptor carries element access", d.name);
-    auto container = d.create !is null ? d.create() : existing;
+    // Only a container is created up front: a bean is created once, by readBean or its creator.
+    import flint.java.util.descriptors : isListLike, isMapLike;
+
+    auto container = (isListLike(d) || isMapLike(d)) && d.create !is null ? d.create() : existing;
     if (auto o = container.asObject())
     {
         if (auto collection = cast(RawCollection) o)
@@ -240,28 +243,36 @@ Any defaultFor(MapperConfig config, string type)
     }
 }
 
+// A scalar read, by value: `found` is false for a type that is no JDK scalar.
 private struct Scalar
 {
+    bool found;
     Any value;
+
+    bool opCast(T : bool)() const pure nothrow @nogc
+    {
+        return found;
+    }
 }
 
-// The JDK scalars of NumberDeserializers, StringDeserializer and BooleanDeserializer; null for other types.
-private Scalar* readScalar(MapperConfig config, JsonParser p, string type, JsonToken t)
+// The JDK scalars of NumberDeserializers, StringDeserializer and BooleanDeserializer; not found for other types.
+private Scalar readScalar(MapperConfig config, JsonParser p, string type, JsonToken t)
 {
     if (auto empty = readEmptyScalar(config, p, type, t))
         return empty;
     switch (type)
     {
     case "string":
-        return new Scalar(readString(p, t, type));
+        return Scalar(true, readString(p, t, type));
     case "bool":
-        return new Scalar(Any.of(readBoolean(config, p, t)));
+        return Scalar(true, Any.of(readBoolean(config, p, t)));
     case "byte", "short", "int", "long", "ubyte", "ushort", "uint":
-        return new Scalar(readIntegral(config, p, t, type));
+        return Scalar(true,
+                readIntegral(config, p, t, type));
     case "float":
-        return new Scalar(Any.of(cast(float) readFloating(config, p, t, type)));
+        return Scalar(true, Any.of(cast(float) readFloating(config, p, t, type)));
     case "double", "real":
-        return new Scalar(Any.of(readFloating(config, p, t, type)));
+        return Scalar(true, Any.of(readFloating(config, p, t, type)));
     case "char", "wchar", "dchar":
         auto text = readString(p, t, type);
         import flint.engine.aot.text : codePointCount, decodeUtf8;
@@ -271,9 +282,9 @@ private Scalar* readScalar(MapperConfig config, JsonParser p, string type, JsonT
             throw new InvalidFormatException("Cannot deserialize value of type `char` from String \"" ~ s
                     ~ "\": expected either Integer value code or 1-character String", s, type, p.currentLocation());
         size_t next;
-        return new Scalar(Any.of(decodeUtf8(s, next)));
+        return Scalar(true, Any.of(decodeUtf8(s, next)));
     default:
-        return null;
+        return Scalar.init;
     }
 }
 
@@ -331,12 +342,12 @@ private MismatchedInputException nullPrimitive(string type, JsonParser p)
 }
 
 // An empty, blank or textual-null String for a primitive, or null.
-private Scalar* readEmptyScalar(MapperConfig config, JsonParser p, string type, JsonToken t)
+private Scalar readEmptyScalar(MapperConfig config, JsonParser p, string type, JsonToken t)
 {
     if (t != JsonToken.VALUE_STRING || !isPrimitive(type))
-        return null;
+        return Scalar.init;
     const empty = emptyScalarText(type, p.getString());
-    return empty == EmptyText.none ? null : new Scalar(emptyForPrimitive(config, p, type, empty));
+    return empty == EmptyText.none ? Scalar.init : Scalar(true, emptyForPrimitive(config, p, type, empty));
 }
 
 // How a String reads for a JDK scalar under Jackson's default coercion: "" (and, except for char, a String of
