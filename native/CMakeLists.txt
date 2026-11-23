@@ -38,13 +38,15 @@ target_include_directories(${flint_ffi} PRIVATE "${CMAKE_INSTALL_PREFIX}/include
 if(NOT MSVC)
   target_compile_options(${flint_ffi} PRIVATE -ffunction-sections -fdata-sections)
 else()
-  # MSVC: C11 atomics are opt-in, and /Gy is its per-function sectioning.
-  target_compile_options(${flint_ffi} PRIVATE /experimental:c11atomics /Gy)
+  # MSVC: C11 atomics are opt-in, and /Gy is its per-function sectioning. Flint's own C builds with level-4 warnings as
+  # errors and the MSVC hardening set: Control Flow Guard, buffer security checks and the SDL checks (ADR-026).
+  # C4200 flags C99 flexible array members, which are standard C.
+  target_compile_options(${flint_ffi} PRIVATE /experimental:c11atomics /Gy /W4 /WX /guard:cf /GS /sdl /wd4200)
 endif()
 # The providers are static archives. Their Windows headers declare DLL imports unless told otherwise.
 if(WIN32)
   target_compile_definitions(${flint_ffi} PRIVATE UTF8PROC_STATIC CURL_STATICLIB NGHTTP2_STATICLIB YAML_DECLARE_STATIC
-    LIBARCHIVE_STATIC SODIUM_STATIC)
+    LIBARCHIVE_STATIC SODIUM_STATIC LIBRDKAFKA_STATICLIB)
 endif()
 # The shims request POSIX.1-2008, which hides Darwin's own declarations (SO_NOSIGPIPE, F_SETNOSIGPIPE,
 # statfs's f_fstypename). Darwin keeps them visible alongside the POSIX set (ADR-024).
@@ -98,7 +100,7 @@ foreach(PAIR IN ITEMS
 endforeach()
 
 flint_engine_file(flint_desktop.h FLINT_DESKTOP_H)
-if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND EXISTS "${CMAKE_INSTALL_PREFIX}/include/SDL3/SDL.h"
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE OR WIN32) AND EXISTS "${CMAKE_INSTALL_PREFIX}/include/SDL3/SDL.h"
     AND FLINT_DESKTOP_H)
   target_compile_definitions(flint_ffi_framework PRIVATE FLINT_HAS_SDL3=1)
   install(FILES "${FLINT_DESKTOP_H}" DESTINATION include)
@@ -138,7 +140,7 @@ endif()
 
 if(EXISTS "${CMAKE_INSTALL_PREFIX}/include/llhttp.h" AND EXISTS "${CMAKE_INSTALL_PREFIX}/include/zlib.h")
   find_library(FLINT_LLHTTP NAMES llhttp llhttp_static PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH REQUIRED)
-  find_library(FLINT_ZLIB NAMES z zlibstatic zlib PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH REQUIRED)
+  find_library(FLINT_ZLIB NAMES z zlibstatic zlib zs libzs PATHS "${CMAKE_INSTALL_PREFIX}/lib" "${CMAKE_INSTALL_PREFIX}/lib64" NO_DEFAULT_PATH REQUIRED)
   add_executable(flint_native_library_test native_library_test.c)
   target_compile_definitions(flint_native_library_test PRIVATE FLINT_SMOKE_MAIN=1)
   target_include_directories(flint_native_library_test PRIVATE "${CMAKE_INSTALL_PREFIX}/include")
@@ -175,7 +177,7 @@ if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND EXISTS "${CMAKE_INSTALL_PRE
 endif()
 
 flint_engine_file(flint_mail.h FLINT_MAIL_H)
-if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND FLINT_MAIL_H AND
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE OR WIN32) AND FLINT_MAIL_H AND
     EXISTS "${CMAKE_INSTALL_PREFIX}/include/curl/curl.h")
   install(FILES "${FLINT_MAIL_H}" DESTINATION include)
   # Isolated pinned-ABI control. Static linking retains it only in the reference executable.

@@ -62,6 +62,15 @@ else version (OSX)
     else version (FlintNativeBrotli)
         version = FlintCodecNative;
 }
+else version (Windows)
+{
+    version (FlintNativeZlib)
+        version = FlintCodecNative; // ADR-026
+    else version (FlintNativeZstd)
+        version = FlintCodecNative;
+    else version (FlintNativeBrotli)
+        version = FlintCodecNative;
+}
 
 package(flint.engine.codec) Error nativeError(NativeStatus status)
 {

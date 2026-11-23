@@ -1,14 +1,19 @@
 #define _GNU_SOURCE
 #include "flint_desktop.h"
 
-#if defined(__linux__) || defined(__APPLE__)
-#include <pthread.h>
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread mutexes on Win32 (ADR-026) */
+#include <tlhelp32.h>
+#else
+#include <pthread.h>
 #if defined(__linux__)
 #include <sys/syscall.h>
 #endif
 #include <unistd.h>
+#endif
 
 typedef struct packet {
     uint32_t kind;
@@ -27,8 +32,43 @@ typedef struct desktop_queue {
 static pthread_mutex_t registry_lock = PTHREAD_MUTEX_INITIALIZER;
 static desktop_queue *registry[FLINT_DESKTOP_WINDOWS];
 
+#if defined(_WIN32)
+/* Windows names no main thread; the process's first thread is the one created earliest (ADR-026). */
+static DWORD first_thread;
+
+static BOOL CALLBACK find_first_thread(PINIT_ONCE once, PVOID parameter, PVOID *context) {
+    (void)once;
+    (void)parameter;
+    (void)context;
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return TRUE;
+    THREADENTRY32 entry = {.dwSize = sizeof(entry)};
+    ULONGLONG earliest = ~0ULL;
+    for (BOOL more = Thread32First(snapshot, &entry); more; more = Thread32Next(snapshot, &entry)) {
+        if (entry.th32OwnerProcessID != GetCurrentProcessId()) continue;
+        const HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
+        if (!thread) continue;
+        FILETIME created, exited, kernel, user;
+        if (GetThreadTimes(thread, &created, &exited, &kernel, &user)) {
+            const ULONGLONG start = ((ULONGLONG)created.dwHighDateTime << 32) | created.dwLowDateTime;
+            if (start < earliest) {
+                earliest = start;
+                first_thread = entry.th32ThreadID;
+            }
+        }
+        CloseHandle(thread);
+    }
+    CloseHandle(snapshot);
+    return TRUE;
+}
+#endif
+
 int flint_desktop_main_thread(void) {
-#if defined(__APPLE__)
+#if defined(_WIN32)
+    static INIT_ONCE found = INIT_ONCE_STATIC_INIT;
+    InitOnceExecuteOnce(&found, find_first_thread, NULL, NULL);
+    return first_thread != 0 && GetCurrentThreadId() == first_thread;
+#elif defined(__APPLE__)
     /* AppKit, and so SDL's Cocoa driver, runs only on the process's first thread (ADR-024). */
     return pthread_main_np() != 0;
 #else

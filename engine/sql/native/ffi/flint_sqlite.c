@@ -2,18 +2,24 @@
 #include "flint_sql_private.h"
 #include "flint_clock.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_SQLITE)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_SQLITE)
 
 #include <errno.h>
 #if defined(__linux__)
 #include <linux/magic.h>
 #endif
 #include <math.h>
-#include <pthread.h>
 #include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread and strcasecmp on Win32 (ADR-026) */
+#include "flint_wake.h"
+#else
+#include <pthread.h>
 #include <strings.h>
+#include <unistd.h>
 #if defined(__APPLE__)
 #include <sys/mount.h>
 #include "flint_wake.h"
@@ -21,8 +27,7 @@
 #include <sys/eventfd.h>
 #include <sys/vfs.h>
 #endif
-#include <time.h>
-#include <unistd.h>
+#endif
 
 typedef struct {
     char *sql;
@@ -45,7 +50,7 @@ struct flint_sqlite_connection {
     unsigned capacity;
     unsigned progress;
     int wake;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     int wake_writer;
 #endif
     int flags;
@@ -225,7 +230,7 @@ static sqlite3_stmt *prepare(flint_sqlite_connection *connection, const flint_sq
     return statement;
 }
 
-static int bind(sqlite3_stmt *statement, int index, const flint_sql_parameter *parameter)
+static int bind_parameter(sqlite3_stmt *statement, int index, const flint_sql_parameter *parameter)
 {
     const flint_sql_cell *cell = &parameter->cell;
     switch (cell->kind) {
@@ -249,7 +254,7 @@ static int bind_all(sqlite3_stmt *statement, const flint_sql_operation *operatio
     if ((size_t)sqlite3_bind_parameter_count(statement) != operation->parameter_count)
         return SQLITE_RANGE;
     for (size_t index = 0; index < operation->parameter_count; ++index) {
-        int result = bind(statement, (int)index + 1, &operation->params[index]);
+        int result = bind_parameter(statement, (int)index + 1, &operation->params[index]);
         if (result != SQLITE_OK)
             return result;
     }
@@ -258,7 +263,7 @@ static int bind_all(sqlite3_stmt *statement, const flint_sql_operation *operatio
 
 static void notify(flint_sqlite_connection *connection)
 {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_signal(connection->wake_writer);
 #else
     uint64_t signal = 1;
@@ -440,7 +445,7 @@ static void destroy(flint_sqlite_connection *connection)
         evict(&connection->cache[index]);
     sqlite3_close(connection->database);
     flint_sql_operation_free(connection->orphan);
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_close(connection->wake, connection->wake_writer);
 #else
     close(connection->wake);
@@ -454,6 +459,22 @@ static void destroy(flint_sqlite_connection *connection)
     flint_sql_retired(receipt);
 }
 
+#if defined(_WIN32)
+/* A fixed or RAM disk formatted NTFS or ReFS; network shares and removable media do not qualify (ADR-026). */
+static int local_database(sqlite3 *database, const char *schema)
+{
+    const char *path = sqlite3_db_filename(database, schema ? schema : "main");
+    wchar_t wide[MAX_PATH], root[MAX_PATH], filesystem[MAX_PATH];
+    if (!path || !path[0] || !MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, MAX_PATH)
+        || !GetVolumePathNameW(wide, root, MAX_PATH))
+        return 0;
+    const UINT drive = GetDriveTypeW(root);
+    if ((drive != DRIVE_FIXED && drive != DRIVE_RAMDISK)
+        || !GetVolumeInformationW(root, NULL, 0, NULL, NULL, NULL, filesystem, MAX_PATH))
+        return 0;
+    return wcscmp(filesystem, L"NTFS") == 0 || wcscmp(filesystem, L"ReFS") == 0;
+}
+#else
 static int local_database(sqlite3 *database, const char *schema)
 {
     const char *path = sqlite3_db_filename(database, schema ? schema : "main");
@@ -474,6 +495,7 @@ static int local_database(sqlite3 *database, const char *schema)
     }
 #endif
 }
+#endif
 
 static int permit_sql(void *context, int action, const char *first, const char *second,
                        const char *schema, const char *origin)
@@ -540,7 +562,7 @@ static flint_sqlite_connection *start_worker(const char *path, unsigned prepared
     connection->cache = prepared ? calloc(prepared, sizeof(connection->cache[0])) : NULL;
     if (!connection->path || (prepared && !connection->cache))
         goto fail_memory;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     if (flint_wake_open(&connection->wake, &connection->wake_writer))
         goto fail_memory;
 #else
@@ -569,7 +591,7 @@ fail_cond:
 fail_mutex:
     pthread_mutex_destroy(&connection->lock);
 fail_fd:
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_close(connection->wake, connection->wake_writer);
 #else
     close(connection->wake);
@@ -608,7 +630,7 @@ int flint_sqlite_drive(flint_sqlite_connection *connection, flint_sql_operation 
 {
     (void)operation;
     pthread_mutex_lock(&connection->lock);
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_drain(connection->wake);
 #else
     uint64_t count;

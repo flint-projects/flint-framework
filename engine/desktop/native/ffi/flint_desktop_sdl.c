@@ -1,6 +1,6 @@
 #include "flint_desktop.h"
 
-#if FLINT_HAS_SDL3 && (defined(__linux__) || defined(__APPLE__))
+#if FLINT_HAS_SDL3 && (defined(__linux__) || defined(__APPLE__) || defined(_WIN32))
 #include <SDL3/SDL.h>
 #include <stdlib.h>
 #include <string.h>

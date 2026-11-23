@@ -74,6 +74,10 @@ else version (OSX)
 {
     version (FlintNativeHiredis) version = FlintRedisLinux; // ADR-024
 }
+else version (Windows)
+{
+    version (FlintNativeHiredis) version = FlintRedisLinux; // ADR-026
+}
 
 version (FlintRedisLinux)
     private enum linked = true;

@@ -41,6 +41,11 @@ else version (OSX)
     version (FlintNativeOpenssl) version = FlintSecurityOpenSSL; // ADR-024
     version (FlintNativeLibsodium) version = FlintSecuritySodium;
 }
+else version (Windows)
+{
+    version (FlintNativeOpenssl) version = FlintSecurityOpenSSL; // ADR-026
+    version (FlintNativeLibsodium) version = FlintSecuritySodium;
+}
 version (FlintSecurityOpenSSL)
     private enum hasCrypto = true;
 else

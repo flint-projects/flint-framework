@@ -10,6 +10,15 @@
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
 #endif
+#if defined(_WIN32)
+/* Windows' libarchive keeps names in UTF-16 and archive_entry_pathname_utf8 converts them independently of the C
+   locale, so no thread locale is switched (ADR-026). */
+typedef void *locale_t;
+#define LC_CTYPE_MASK 0
+#define newlocale(mask, name, base) ((locale_t) 0)
+#define uselocale(locale) ((locale_t) 0)
+#define freelocale(locale) ((void) 0)
+#endif
 
 enum {
     ZIP = 0, TAR = 1,
@@ -245,9 +254,15 @@ flint_archive *flint_archive_reader_new(int format, flint_archive_read_cb read,
     state->max_output = max_output_bytes;
     state->native = archive_read_new();
     if (state->native) {
-        const int result = format == ZIP
+        int result = format == ZIP
             ? archive_read_support_format_zip_seekable(state->native)
             : archive_read_support_format_tar(state->native);
+#if defined(_WIN32)
+        /* Header names are UTF-8, as the private C.UTF-8 locale makes them on POSIX: without this, Windows reads
+           them in the ANSI code page, where every byte is valid (ADR-026). */
+        if (result == ARCHIVE_OK && archive_read_set_options(state->native, "hdrcharset=UTF-8") != ARCHIVE_OK)
+            result = ARCHIVE_FATAL;
+#endif
         if (result == ARCHIVE_OK) return state;
     }
     flint_archive_abort(state);
@@ -287,8 +302,12 @@ flint_archive *flint_archive_writer_new(int format, flint_archive_write_cb write
     state->max_output = 1024ULL * 1024 * 1024;
     state->native = archive_write_new();
     if (state->native) {
-        const int setup = format == ZIP ? archive_write_set_format_zip(state->native)
+        int setup = format == ZIP ? archive_write_set_format_zip(state->native)
             : archive_write_set_format_pax_restricted(state->native);
+#if defined(_WIN32)
+        if (setup == ARCHIVE_OK && archive_write_set_options(state->native, "hdrcharset=UTF-8") != ARCHIVE_OK)
+            setup = ARCHIVE_FATAL;
+#endif
         if (setup == ARCHIVE_OK && archive_write_set_bytes_in_last_block(state->native, 1) == ARCHIVE_OK) {
             enter(state);
             const int opened = archive_write_open(state->native, state, NULL, write_bytes, NULL);

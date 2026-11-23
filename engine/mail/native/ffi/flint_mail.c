@@ -2,15 +2,19 @@
 #include "flint_mail.h"
 #include "flint_clock.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_CURL)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_CURL)
 
 #include <curl/curl.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <time.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread_once and strcasecmp (ADR-026) */
+#else
+#include <pthread.h>
+#include <strings.h>
+#endif
 
 enum {
     MAIL_OK, MAIL_ARGUMENT, MAIL_MEMORY, MAIL_CANCELLED, MAIL_TIMEOUT, MAIL_NOT_FOUND, MAIL_CONFLICT,

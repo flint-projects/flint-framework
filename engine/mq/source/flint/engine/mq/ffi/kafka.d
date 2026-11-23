@@ -54,6 +54,7 @@ extern (C) private @system nothrow @nogc
 
 version (linux) version (FlintNativeLibrdkafka) version = FlintKafkaOnLinux;
 version (OSX) version (FlintNativeLibrdkafka) version = FlintKafkaOnLinux; // ADR-024
+version (Windows) version (FlintNativeLibrdkafka) version = FlintKafkaOnLinux; // ADR-026
 version (FlintKafkaOnLinux)
     private enum available = true;
 else

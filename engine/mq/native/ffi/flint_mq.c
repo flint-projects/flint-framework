@@ -2,9 +2,13 @@
 #include "flint_mq.h"
 #include "flint_clock.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBRDKAFKA)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_LIBRDKAFKA)
 #include <librdkafka/rdkafka.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread and nanosleep on Win32 (ADR-026) */
+#else
 #include <pthread.h>
+#endif
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -3,8 +3,7 @@ module flint.engine.desktop.ffi.webkit;
 
 import core.stdc.config : c_ulong;
 import core.stdc.stdlib : calloc, free, getenv;
-import core.sys.posix.stdlib : setenv;
-import core.sys.posix.unistd : F_OK, access;
+
 import flint.arena : Error, Status;
 import flint.engine.desktop.ipc : appOrigin, assetPath, bridgeScript, frameLimit, mediaType,
     originOf, parseFrame, rejectScript, startsWith;
@@ -12,6 +11,13 @@ import flint.engine.desktop.types : Asset, WindowOptions;
 
 @safe:
 nothrow @nogc:
+
+// WebKitGTK is a Linux backend; Windows has no POSIX environment or access calls (ADR-026).
+version (Posix)
+{
+    import core.sys.posix.stdlib : setenv;
+    import core.sys.posix.unistd : F_OK, access;
+}
 
 version (FlintNativeWebkitgtk)  : private struct GtkWidget;
 private struct GObject;

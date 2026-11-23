@@ -1,13 +1,17 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_sql_private.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && (defined(FLINT_HAS_SQLITE) || defined(FLINT_HAS_LIBPQ))
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && (defined(FLINT_HAS_SQLITE) || defined(FLINT_HAS_LIBPQ))
 
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread on Win32 (ADR-026) */
+#else
 #include <poll.h>
 #include <pthread.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -758,6 +762,19 @@ int flint_sql_poll(int fd, unsigned interest, unsigned millis)
 {
     if (millis > INT_MAX)
         return FLINT_SQL_INVALID;
+#if defined(_WIN32)
+    /* WSAPoll rejects an empty set, so a wait without a socket sleeps; libpq's descriptor is a SOCKET (ADR-026). */
+    if (fd < 0) {
+        Sleep(millis);
+        return FLINT_SQL_OK;
+    }
+    WSAPOLLFD watch = {(SOCKET) (intptr_t) fd, 0, 0};
+    if (interest & FLINT_SQL_READ)
+        watch.events |= POLLRDNORM;
+    if (interest & FLINT_SQL_WRITE)
+        watch.events |= POLLWRNORM;
+    return WSAPoll(&watch, 1, (int) millis) >= 0 ? FLINT_SQL_OK : FLINT_SQL_IO;
+#else
     struct pollfd watch = {fd, 0, 0};
     if (interest & FLINT_SQL_READ)
         watch.events |= POLLIN;
@@ -765,6 +782,7 @@ int flint_sql_poll(int fd, unsigned interest, unsigned millis)
         watch.events |= POLLOUT;
     int ready = poll(fd < 0 ? NULL : &watch, fd < 0 ? 0 : 1, (int)millis);
     return ready >= 0 || errno == EINTR ? FLINT_SQL_OK : FLINT_SQL_IO;
+#endif
 }
 
 #endif

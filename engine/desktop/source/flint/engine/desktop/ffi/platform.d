@@ -81,6 +81,10 @@ else version (OSX)
     else version (FlintNativeWkwebview)
         version = FlintDesktopQueues;
 }
+else version (Windows)
+{
+    version (FlintNativeSdl3) version = FlintDesktopQueues; // the SDL canvas backend (ADR-026)
+}
 
 /// Stable native status mapping.
 package(flint.engine.desktop) Error desktopError(int code)

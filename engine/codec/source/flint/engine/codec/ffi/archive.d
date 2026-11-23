@@ -36,6 +36,10 @@ else version (OSX)
 {
     version (FlintNativeLibarchive) version = FlintArchiveNative; // ADR-024
 }
+else version (Windows)
+{
+    version (FlintNativeLibarchive) version = FlintArchiveNative; // ADR-026
+}
 
 package(flint.engine.codec) enum archivePathLimit = 4096;
 package(flint.engine.codec) enum archiveEntryLimit = 10_000;

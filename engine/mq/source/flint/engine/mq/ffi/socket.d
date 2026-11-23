@@ -16,7 +16,7 @@ version (FlintMqPosix)
     private import core.sys.posix.time : nanosleep, timespec;
 }
 
-// SAFETY: The bounded POSIX wait uses a stack timespec with no callback or retained pointer.
+// SAFETY: The bounded wait (nanosleep, or Sleep on Windows) uses a stack timespec at most, with no retained pointer.
 package(flint.engine.mq) Error pauseSocket() @trusted nothrow @nogc
 {
     version (FlintMqPosix)
@@ -25,11 +25,19 @@ package(flint.engine.mq) Error pauseSocket() @trusted nothrow @nogc
         nanosleep(&next, null);
         return Error.init;
     }
+    else version (Windows)
+    {
+        import core.sys.windows.winbase : Sleep;
+
+        Sleep(1); // ADR-026
+        return Error.init;
+    }
     else
         return Error(Status.unsupported, "native broker polling unavailable");
 }
 
 version (FlintMqPosix) version (FlintNativeLibrdkafka) version = FlintMqOnLinux;
+version (Windows) version (FlintNativeLibrdkafka) version = FlintMqOnLinux; // the socket shim builds on Windows (ADR-026)
 
 private struct NativeSocket;
 

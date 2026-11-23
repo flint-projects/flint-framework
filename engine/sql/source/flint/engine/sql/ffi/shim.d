@@ -19,6 +19,13 @@ else version (OSX)
     else version (FlintNativeLibpq)
         version = FlintSqlNative;
 }
+else version (Windows)
+{
+    version (FlintNativeSqlite)
+        version = FlintSqlNative; // ADR-026
+    else version (FlintNativeLibpq)
+        version = FlintSqlNative;
+}
 
 package(flint.engine.sql) struct Identity
 {

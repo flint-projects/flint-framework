@@ -2,32 +2,38 @@
 #include "flint_cache.h"
 #include "flint_clock.h"
 
-#if defined(FLINT_HAS_HIREDIS) && (defined(__linux__) || defined(__APPLE__))
+#if defined(FLINT_HAS_HIREDIS) && (defined(__linux__) || defined(__APPLE__) || defined(_WIN32))
 
-#include <arpa/inet.h>
 #include <errno.h>
-#include <hiredis/async.h>
-#include <hiredis/hiredis_ssl.h>
-#include <hiredis/sds.h>
 #include <inttypes.h>
-#include <netdb.h>
-#include <openssl/crypto.h>
-#include <openssl/ssl.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#if defined(_WIN32)
+/* Winsock raises no SIGPIPE, so no signal mask is kept; the mailbox is flint_wake's socket pair (ADR-026). */
+#include "flint_port.h"
+#include "flint_wake.h"
+#else
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <pthread.h>
+#include <signal.h>
 #include <strings.h>
-#if defined(__APPLE__)
+#include <unistd.h>
+#if defined(__APPLE__) || defined(_WIN32)
 #include "flint_wake.h"
 #else
 #include <sys/eventfd.h>
 #endif
-#include <time.h>
-#include <unistd.h>
+#endif
+#include <hiredis/async.h>
+#include <hiredis/hiredis_ssl.h>
+#include <hiredis/sds.h>
+#include <openssl/crypto.h>
+#include <openssl/ssl.h>
 
 enum {
     TICKET_BITS = 10,
@@ -75,7 +81,7 @@ struct flint_redis_connection {
     enum connection_state state;
     int failure;
     int wake_fd;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     int wake_writer;
 #endif
     uint64_t generation;
@@ -97,7 +103,9 @@ struct flint_redis_connection {
     SSL_CTX *tls_context;
     SSL *tls_session;
     pthread_t owner;
+#if !defined(_WIN32)
     sigset_t previous_mask;
+#endif
     bool owner_known, timer_pending, pipe_mask_saved;
     unsigned interest, awaiting;
     uint64_t timer;
@@ -214,8 +222,8 @@ static int read_host(endpoint *target, const char *start, const char *end)
         return FLINT_REDIS_ARGUMENT;
     target->port = (uint16_t)port;
 
-    struct in_addr v4;
-    struct in6_addr v6;
+    struct in_addr v4 = {0};
+    struct in6_addr v6 = {0};
     const bool is4 = !bracketed && inet_pton(AF_INET, target->host, &v4) == 1;
     const bool is6 = bracketed && inet_pton(AF_INET6, target->host, &v6) == 1;
     target->ip_literal = is4 || is6;
@@ -342,7 +350,7 @@ int flint_redis_create(const flint_redis_options *options, flint_redis_connectio
     if (!connection)
         return FLINT_REDIS_MEMORY;
     connection->wake_fd = -1;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     connection->wake_writer = -1;
 #endif
     int status = read_url(&connection->address, options->url, options->url_length);
@@ -358,7 +366,7 @@ int flint_redis_create(const flint_redis_options *options, flint_redis_connectio
 
     connection->payload_limit = options->payload_limit;
     connection->slots = calloc(MAX_PENDING, sizeof(*connection->slots));
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     if (flint_wake_open(&connection->wake_fd, &connection->wake_writer))
         connection->wake_fd = connection->wake_writer = -1;
 #else
@@ -423,7 +431,7 @@ static void notify(flint_redis_connection *connection)
 static void signal_owner(const flint_redis_connection *connection)
 {
     if (connection->wake_fd >= 0) {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
         flint_wake_signal(connection->wake_writer);
 #else
         while (eventfd_write(connection->wake_fd, 1) < 0 && errno == EINTR) {
@@ -980,11 +988,13 @@ int flint_redis_attach(flint_redis_connection *connection)
         return FLINT_REDIS_CANCELLED;
     connection->owner = pthread_self();
     connection->owner_known = true;
+#if !defined(_WIN32)
     sigset_t blocked;
     if (sigemptyset(&blocked) != 0 || sigaddset(&blocked, SIGPIPE) != 0
             || pthread_sigmask(SIG_BLOCK, &blocked, &connection->previous_mask) != 0)
         return FLINT_REDIS_IO;
     connection->pipe_mask_saved = true;
+#endif
 
     const struct timeval connect_limit = {.tv_sec = 5};
     const struct timeval command_limit = {.tv_sec = 10};
@@ -1254,7 +1264,7 @@ int flint_redis_watch_now(flint_redis_connection *connection, flint_redis_watch 
     if (!on_owner(connection) || !out || !connection->client)
         return FLINT_REDIS_CONFLICT;
     out->wake_fd = connection->wake_fd;
-    out->socket_fd = connection->client->c.fd;
+    out->socket_fd = (int)connection->client->c.fd;
     out->events = connection->interest;
     return FLINT_REDIS_OK;
 }
@@ -1282,7 +1292,7 @@ int flint_redis_pump(flint_redis_connection *connection)
     const int status = service_status(connection);
     if (status)
         return status;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_drain(connection->wake_fd);
 #else
     eventfd_t signals;
@@ -1369,6 +1379,9 @@ static void restore_pipe_mask(flint_redis_connection *connection)
 {
     if (!connection->pipe_mask_saved || !on_owner(connection))
         return;
+#if defined(_WIN32)
+    connection->pipe_mask_saved = false;
+#else
 #if !defined(__APPLE__)
     if (!sigismember(&connection->previous_mask, SIGPIPE)) {
         sigset_t generated;
@@ -1381,6 +1394,7 @@ static void restore_pipe_mask(flint_redis_connection *connection)
 #endif
     pthread_sigmask(SIG_SETMASK, &connection->previous_mask, NULL);
     connection->pipe_mask_saved = false;
+#endif
 }
 
 void flint_redis_finish(flint_redis_connection *connection, int reason)
@@ -1405,7 +1419,7 @@ void flint_redis_finish(flint_redis_connection *connection, int reason)
 
     pthread_mutex_lock(&connection->lock);
     if (connection->wake_fd >= 0) {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
         flint_wake_close(connection->wake_fd, connection->wake_writer);
         connection->wake_writer = -1;
 #else

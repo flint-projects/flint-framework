@@ -1,9 +1,81 @@
 #ifndef FLINT_WAKE_H
 #define FLINT_WAKE_H
 
-/* Darwin's replacement for the eventfd wake-ups the shims use (ADR-024). Linux keeps eventfd;
+/* Darwin's replacement for the eventfd wake-ups the shims use (ADR-024), and Windows' (ADR-026). Linux keeps eventfd;
    nothing here is compiled there. */
-#if defined(__APPLE__)
+#if defined(_WIN32)
+
+#include "flint_port.h"
+
+/* A connected loopback TCP pair in place of an eventfd (ADR-026): the read end is a nonblocking SOCKET the reactor
+   watches with WSAPoll, the write end stays private to the signalling side. A full buffer already holds a pending
+   wake-up, so a signal that cannot be sent loses nothing. The SOCKET values travel as int descriptors. */
+static inline void flint_wake_start_winsock(void)
+{
+    WSADATA data;
+    (void) WSAStartup(MAKEWORD(2, 2), &data); /* Process-lifetime reference; a failure surfaces as socket()'s. */
+}
+
+static inline int flint_wake_open(int *reader, int *writer)
+{
+    static pthread_once_t winsock = PTHREAD_ONCE_INIT;
+    pthread_once(&winsock, flint_wake_start_winsock);
+    *reader = *writer = -1;
+    const SOCKET listener = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
+    if (listener == INVALID_SOCKET)
+        return -1;
+    struct sockaddr_in address = {0};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    int length = (int) sizeof(address);
+    SOCKET sender = INVALID_SOCKET, receiver = INVALID_SOCKET;
+    if (bind(listener, (struct sockaddr *) &address, length) == 0 && listen(listener, 1) == 0
+        && getsockname(listener, (struct sockaddr *) &address, &length) == 0) {
+        sender = WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
+        if (sender != INVALID_SOCKET && connect(sender, (struct sockaddr *) &address, length) == 0)
+            receiver = accept(listener, NULL, NULL);
+    }
+    closesocket(listener);
+    u_long nonblocking = 1;
+    const int enabled = 1;
+    if (receiver == INVALID_SOCKET || ioctlsocket(receiver, FIONBIO, &nonblocking) != 0
+        || ioctlsocket(sender, FIONBIO, &nonblocking) != 0
+        || setsockopt(sender, IPPROTO_TCP, TCP_NODELAY, (const char *) &enabled, sizeof(enabled)) != 0) {
+        if (sender != INVALID_SOCKET)
+            closesocket(sender);
+        if (receiver != INVALID_SOCKET)
+            closesocket(receiver);
+        return -1;
+    }
+    *reader = (int) receiver;
+    *writer = (int) sender;
+    return 0;
+}
+
+static inline void flint_wake_signal(int writer)
+{
+    const char wake = 1;
+    if (writer >= 0)
+        (void) send((SOCKET) writer, &wake, 1, 0);
+}
+
+/* Consume every pending signal, as one eventfd read resets the counter. */
+static inline void flint_wake_drain(int reader)
+{
+    char signals[64];
+    while (reader >= 0 && recv((SOCKET) reader, signals, (int) sizeof(signals), 0) > 0) {
+    }
+}
+
+static inline void flint_wake_close(int reader, int writer)
+{
+    if (reader >= 0)
+        closesocket((SOCKET) reader);
+    if (writer >= 0 && writer != reader)
+        closesocket((SOCKET) writer);
+}
+
+#elif defined(__APPLE__)
 
 #include <errno.h>
 #include <fcntl.h>

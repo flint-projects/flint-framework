@@ -1,20 +1,65 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_mq_socket.h"
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(_WIN32)
 #include "flint_mq.h"
+#include <errno.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#if defined(_WIN32)
+/* Winsock (ADR-026): SOCKETs made nonblocking with FIONBIO, WSAGetLastError for EAGAIN and EINPROGRESS, closesocket,
+   and WSAPoll. Winsock raises no SIGPIPE. */
+#include "flint_port.h"
+typedef SOCKET socket_handle;
+#define NO_SOCKET INVALID_SOCKET
+static bool blocked(void)
+{
+    const int error = WSAGetLastError();
+    return error == WSAEWOULDBLOCK || error == WSAEINPROGRESS || error == WSAEINTR;
+}
+static void close_socket(socket_handle fd)
+{
+    closesocket(fd);
+}
+static pthread_once_t winsock = PTHREAD_ONCE_INIT;
+static void start_winsock(void)
+{
+    WSADATA data;
+    (void)WSAStartup(MAKEWORD(2, 2), &data); /* Process-lifetime reference; a failure surfaces as WSASocketW's. */
+}
+static socket_handle stream_socket(int family)
+{
+    pthread_once(&winsock, start_winsock);
+    const socket_handle fd = WSASocketW(family, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+    u_long nonblocking = 1;
+    if (fd != NO_SOCKET && ioctlsocket(fd, FIONBIO, &nonblocking) != 0) {
+        closesocket(fd);
+        return NO_SOCKET;
+    }
+    return fd;
+}
+#else
 #include "flint_socket.h"
 #include <arpa/inet.h>
-#include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
+typedef int socket_handle;
+#define NO_SOCKET (-1)
+static bool blocked(void)
+{
+    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR || errno == EINPROGRESS;
+}
+static void close_socket(socket_handle fd)
+{
+    close(fd);
+}
+#endif
 
 #ifdef FLINT_HAS_OPENSSL
 #include <openssl/err.h>
@@ -23,7 +68,7 @@
 #endif
 
 struct flint_mq_socket {
-    int fd;
+    socket_handle fd;
     struct addrinfo *addresses;
     struct addrinfo *remaining;
     bool connected;
@@ -40,23 +85,25 @@ static int start_next(flint_mq_socket *transport)
     while (transport->remaining) {
         struct addrinfo *address = transport->remaining;
         transport->remaining = address->ai_next;
-#if defined(__APPLE__)
-        const int fd = flint_stream_socket(address->ai_family);
+#if defined(_WIN32)
+        const socket_handle fd = stream_socket(address->ai_family);
+#elif defined(__APPLE__)
+        const socket_handle fd = flint_stream_socket(address->ai_family);
 #else
-        const int fd = socket(address->ai_family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        const socket_handle fd = socket(address->ai_family, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 #endif
-        if (fd < 0)
+        if (fd == NO_SOCKET)
             continue;
         /* Broker commands are small request/response frames; do not wait for delayed ACKs. */
         const int one = 1;
-        (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
-        const int status = connect(fd, address->ai_addr, address->ai_addrlen);
-        if (status == 0 || errno == EINPROGRESS) {
+        (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const void *)&one, sizeof one);
+        const int status = connect(fd, address->ai_addr, (int)address->ai_addrlen);
+        if (status == 0 || blocked()) {
             transport->fd = fd;
             transport->connected = status == 0;
             return FLINT_MQ_OK;
         }
-        close(fd);
+        close_socket(fd);
     }
     return FLINT_MQ_IO;
 }
@@ -77,7 +124,7 @@ int flint_mq_socket_open(const char *host, uint16_t port, flint_mq_socket **outp
         freeaddrinfo(addresses);
         return FLINT_MQ_MEMORY;
     }
-    transport->fd = -1;
+    transport->fd = NO_SOCKET;
     transport->addresses = transport->remaining = addresses;
     const int started = start_next(transport);
     if (started != FLINT_MQ_OK) {
@@ -96,33 +143,40 @@ int flint_mq_socket_connected(flint_mq_socket *transport)
         return FLINT_MQ_OK;
     struct pollfd ready = { .fd = transport->fd, .events = POLLOUT };
     const int result = poll(&ready, 1, 0);
-    if (!result || (result < 0 && errno == EINTR))
+    if (!result || (result < 0 && blocked()))
         return FLINT_MQ_UNAVAILABLE;
     int error;
     socklen_t bytes = sizeof(error);
-    if (result > 0 && getsockopt(transport->fd, SOL_SOCKET, SO_ERROR, &error, &bytes) == 0 && !error) {
+    if (result > 0 && getsockopt(transport->fd, SOL_SOCKET, SO_ERROR, (void *)&error, &bytes) == 0 && !error) {
         transport->connected = true;
         return FLINT_MQ_OK;
     }
-    close(transport->fd);
-    transport->fd = -1;
+    close_socket(transport->fd);
+    transport->fd = NO_SOCKET;
     const int started = start_next(transport);
     return started == FLINT_MQ_OK && !transport->connected ? FLINT_MQ_UNAVAILABLE : started;
 }
 
 static int read_network(flint_mq_socket *transport, uint8_t *data, size_t capacity, size_t *received)
 {
+#if defined(_WIN32)
+    /* The socket is nonblocking; recv takes an int length. */
+    const int result = recv(transport->fd, (char *)data, capacity > INT_MAX ? INT_MAX : (int)capacity, 0);
+#else
     const ssize_t result = recv(transport->fd, data, capacity, MSG_DONTWAIT);
+#endif
     if (result >= 0) {
         *received = (size_t)result;
         return FLINT_MQ_OK;
     }
-    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR ? FLINT_MQ_UNAVAILABLE : FLINT_MQ_IO;
+    return blocked() ? FLINT_MQ_UNAVAILABLE : FLINT_MQ_IO;
 }
 
 static int write_network(flint_mq_socket *transport, const uint8_t *data, size_t length, size_t *written)
 {
-#if defined(__APPLE__)
+#if defined(_WIN32)
+    const int result = send(transport->fd, (const char *)data, length > INT_MAX ? INT_MAX : (int)length, 0);
+#elif defined(__APPLE__)
     /* The socket carries SO_NOSIGPIPE (flint_stream_socket); Darwin has no MSG_NOSIGNAL. */
     const ssize_t result = send(transport->fd, data, length, MSG_DONTWAIT);
 #else
@@ -132,7 +186,7 @@ static int write_network(flint_mq_socket *transport, const uint8_t *data, size_t
         *written = (size_t)result;
         return FLINT_MQ_OK;
     }
-    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR ? FLINT_MQ_UNAVAILABLE : FLINT_MQ_IO;
+    return blocked() ? FLINT_MQ_UNAVAILABLE : FLINT_MQ_IO;
 }
 
 #ifdef FLINT_HAS_OPENSSL
@@ -304,8 +358,8 @@ void flint_mq_socket_close(flint_mq_socket *transport)
     SSL_free(transport->tls);
     SSL_CTX_free(transport->identity);
 #endif
-    if (transport->fd >= 0)
-        close(transport->fd);
+    if (transport->fd != NO_SOCKET)
+        close_socket(transport->fd);
     freeaddrinfo(transport->addresses);
     free(transport);
 }

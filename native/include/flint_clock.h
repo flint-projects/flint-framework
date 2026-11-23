@@ -3,6 +3,10 @@
 
 #include <time.h>
 
+#if defined(_WIN32)
+#include "flint_port.h" /* clock_gettime and CLOCK_MONOTONIC on QueryPerformanceCounter, as MonoTime reads (ADR-026) */
+#endif
+
 /* The clock D's MonoTime reads, so a deadline passed across the boundary means the same instant on
    both sides. Linux: CLOCK_MONOTONIC. Darwin: mach_absolute_time, which CLOCK_UPTIME_RAW reports;
    Darwin's CLOCK_MONOTONIC also counts time asleep and runs ahead of it (ADR-024). */

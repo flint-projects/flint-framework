@@ -190,6 +190,10 @@ void flint_http1_free(flint_http1_parser *parser) {
 #endif
 
 #if defined(FLINT_HAS_NGHTTP2)
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t; /* nghttp2.h's callbacks return ssize_t, which MSVC does not define (ADR-026) */
+#endif
 #include <nghttp2/nghttp2.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,10 +1,14 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_sql_private.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBPQ)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_LIBPQ)
 
 #include <string.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* strcasecmp (ADR-026) */
+#else
 #include <strings.h>
+#endif
 
 static int letter(unsigned char ch)
 {

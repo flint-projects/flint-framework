@@ -71,6 +71,16 @@ int flint_proto_pack(const flint_proto_descriptor *descriptor, const void *messa
     return FLINT_PROTO_OK;
 }
 
+#if defined(_MSC_VER) && !defined(__clang__)
+/* MSVC's C mode has no max_align_t; double and long double are its most strictly aligned scalar types (ADR-026). */
+typedef union {
+    double floating;
+    long double extended;
+    void *pointer;
+    long long integer;
+} max_align_t;
+#endif
+
 static void *region_alloc(void *opaque, size_t size) {
     flint_proto_arena *arena = opaque;
     const uintptr_t alignment = _Alignof(max_align_t);

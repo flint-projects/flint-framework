@@ -2,21 +2,25 @@
 #include "flint_http.h"
 #include "flint_clock.h"
 
-#if defined(FLINT_HAS_CURL) && (defined(__linux__) || defined(__APPLE__))
+#if defined(FLINT_HAS_CURL) && (defined(__linux__) || defined(__APPLE__) || defined(_WIN32))
 
 #include <curl/curl.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
-#include <poll.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <time.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread, poll and strcasecmp on Win32 and Winsock (ADR-026) */
+#else
+#include <arpa/inet.h>
+#include <poll.h>
+#include <pthread.h>
+#include <strings.h>
 #include <unistd.h>
+#endif
 
 enum {
     MAX_URL = 16384,
@@ -1463,7 +1467,7 @@ int flint_http_poll(flint_curl_loop *loop, uint32_t max_wait_ms)
         if (!watch->generation)
             continue;
         struct pollfd *fd = &loop->poll_fds[count];
-        fd->fd = (int) watch->fd;
+        fd->fd = (curl_socket_t) watch->fd;
         fd->events = (watch->events & FLINT_HTTP_READ ? POLLIN : 0)
             | (watch->events & FLINT_HTTP_WRITE ? POLLOUT : 0);
         fd->revents = 0;

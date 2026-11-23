@@ -15,6 +15,10 @@ else version (OSX)
 {
     version (FlintNativeCurl) version = FlintSmtpProvider; // ADR-024
 }
+else version (Windows)
+{
+    version (FlintNativeCurl) version = FlintSmtpProvider; // ADR-026
+}
 
 package(flint.engine.mail) enum chunkBytes = 16_384;
 package(flint.engine.mail) enum pending = 12;

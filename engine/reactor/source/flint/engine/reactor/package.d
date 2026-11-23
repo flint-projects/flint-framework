@@ -22,10 +22,13 @@ public import flint.engine.reactor.types : AcceptDelegate, AcceptFn, Backend, Co
 
 @safe:
 
-// Native descriptor watches nest a poller in the owner's: epoll on Linux, kqueue on macOS.
+// Native descriptor watches nest a poller in the owner's: epoll on Linux, kqueue on macOS. Windows polls the watched
+// sockets with WSAPoll on each loop pass (ADR-026).
 version (linux)
     version = ReactorNativeWatches;
 else version (OSX)
+    version = ReactorNativeWatches;
+else version (Windows)
     version = ReactorNativeWatches;
 
 version (Posix)
@@ -48,9 +51,12 @@ else version (OSX)
     import flint.engine.reactor.sys.nativewatch : NativeWatches;
 }
 else version (Windows)
+{
     import flint.engine.reactor.sys.windows : CompletionPort, KernelEvent, Socket, bindListener, cancelKernel,
         closeCompletionPort, closeSocket, openCompletionPort, pollCompletion, sendImmediately,
         socketPort, submitAccept, submitRead, submitWrite;
+    import flint.engine.reactor.sys.nativewatch : NativeWatches;
+}
 
 private enum State : ubyte
 {
@@ -579,7 +585,8 @@ struct Reactor
         }
     }
 
-    /// Create or update a Linux or macOS watch on the current worker. The caller keeps ownership of fd and
+    /// Create or update a Linux or macOS descriptor watch, or a Windows socket watch, on the current worker. The
+    /// caller keeps ownership of fd and
     /// removes the watch before releasing the descriptor or callback. Error readiness is always delivered.
     Error watchNative(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
     {
@@ -593,7 +600,7 @@ struct Reactor
             return runtime.workers[currentWorkerIndex].watchNative(fd, interest, callback);
         }
         else
-            return Error(Status.unsupported, "native descriptor watches require Linux or macOS");
+            return Error(Status.unsupported, "native descriptor watches require Linux, macOS or Windows");
     }
 
     /// Drop a native watch from its owner loop. Remains available during cancellation and shutdown.
@@ -608,7 +615,7 @@ struct Reactor
             return Error(runtime.workers[currentWorkerIndex].nativeWatches.remove(fd));
         }
         else
-            return Error(Status.unsupported, "native descriptor watches require Linux or macOS");
+            return Error(Status.unsupported, "native descriptor watches require Linux, macOS or Windows");
     }
 
     /// Stop admission and close the listener, from any thread, while admitted connections keep running.
@@ -1278,7 +1285,20 @@ private struct Worker
                     advanceAccept();
                     version (linux)
                         advanceNativeWatch();
-                    waitForCompletions(wait);
+                    version (Windows)
+                    {
+                        // Watched sockets post no completion packet: poll them each pass, and wait at most 1 ms while
+                        // any is watched (ADR-026).
+                        if (nativeWatches.active)
+                        {
+                            notifyNativeWatches();
+                            waitForCompletions(wait < 1 ? wait : 1);
+                        }
+                        else
+                            waitForCompletions(wait);
+                    }
+                    else
+                        waitForCompletions(wait);
                 }
                 else
                 {
@@ -1322,6 +1342,14 @@ private struct Worker
         {
             if (!nativeWatches.enabled)
                 return Error(Status.resourceExhausted, "native descriptor watches are disabled");
+            version (Windows)
+                return Error(nativeWatches.update(fd, interest, callback));
+            else
+                return watchNested(fd, interest, callback);
+        }
+
+        version (Posix) private Error watchNested(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
+        {
             if (!nativeWatches.receiver.valid)
             {
                 auto created = openReadiness();

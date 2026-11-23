@@ -1,22 +1,27 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_sql_private.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBPQ)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_LIBPQ)
 
 #include <errno.h>
 #include <libpq-fe.h>
 #include <math.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread and strcasecmp on Win32 (ADR-026) */
+#include "flint_wake.h"
+#else
+#include <pthread.h>
 #include <strings.h>
+#include <unistd.h>
 #if defined(__APPLE__)
 #include "flint_wake.h"
 #else
 #include <sys/eventfd.h>
 #endif
-#include <unistd.h>
+#endif
 
 enum { PG_UNSENT, PG_EVICTING, PG_PREPARING, PG_QUERY };
 enum {
@@ -42,7 +47,7 @@ struct flint_pg_connection {
     unsigned capacity;
     uint64_t counter;
     int startup_event;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     int startup_writer;
 #endif
     int starter_active;
@@ -72,7 +77,7 @@ static void free_connection(flint_pg_connection *connection)
     for (unsigned index = 0; index < connection->capacity; ++index)
         clear_prepared(&connection->prepared[index]);
     pthread_mutex_destroy(&connection->startup_lock);
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_close(connection->startup_event, connection->startup_writer);
 #else
     close(connection->startup_event);
@@ -93,7 +98,7 @@ static void *start_connection(void *input)
     connection->starter_active = 0;
     const int abandoned = connection->abandoned;
     if (!abandoned) {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
         flint_wake_signal(connection->startup_writer);
 #else
         uint64_t ready = 1;
@@ -118,7 +123,7 @@ flint_pg_connection *flint_pg_open(const flint_sql_backend_options *options)
     if (!connection->address || (connection->capacity && !connection->prepared))
         goto fail_allocations;
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     if (flint_wake_open(&connection->startup_event, &connection->startup_writer))
         goto fail_allocations;
 #else
@@ -142,7 +147,7 @@ flint_pg_connection *flint_pg_open(const flint_sql_backend_options *options)
 fail_mutex:
     pthread_mutex_destroy(&connection->startup_lock);
 fail_descriptor:
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
     flint_wake_close(connection->startup_event, connection->startup_writer);
 #else
     close(connection->startup_event);

@@ -15,9 +15,18 @@ import flint.engine.storage.types : CredentialProvider, Credentials;
 // instantiate its (and std.uni's) module-level templates.
 package(flint.engine.storage) long unixSeconds() nothrow @nogc
 {
-    import std.datetime.systime : Clock, stdTimeToUnixTime;
+    version (Windows)
+    {
+        import flint.engine.storage.sys.clock : windowsUnixSeconds;
 
-    return stdTimeToUnixTime(Clock.currStdTime);
+        return windowsUnixSeconds();
+    }
+    else
+    {
+        import std.datetime.systime : Clock, stdTimeToUnixTime;
+
+        return stdTimeToUnixTime(Clock.currStdTime);
+    }
 }
 
 package(flint.engine.storage) struct CredentialSnapshot

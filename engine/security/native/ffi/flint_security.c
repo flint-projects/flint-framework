@@ -1,17 +1,22 @@
 #define _POSIX_C_SOURCE 200809L
 #include "flint_security.h"
 
-#if (defined(__linux__) || defined(__APPLE__)) && (defined(FLINT_HAS_OPENSSL) || defined(FLINT_HAS_LIBSODIUM))
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) \
+    && (defined(FLINT_HAS_OPENSSL) || defined(FLINT_HAS_LIBSODIUM))
 #include <limits.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include "flint_port.h" /* pthread and sysconf on Win32 (ADR-026) */
+#else
+#include <pthread.h>
 #include <unistd.h>
 #endif
+#endif
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_OPENSSL)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_OPENSSL)
 
 #include <openssl/bn.h>
 #include <openssl/core_names.h>
@@ -31,7 +36,7 @@ struct flint_jwk {
     _Atomic unsigned references;
 };
 
-static const uint8_t empty;
+static const uint8_t empty = 0;
 
 int flint_crypto_initialize(void)
 {
@@ -392,7 +397,7 @@ void flint_jwks_rate_release(unsigned index)
 
 #endif
 
-#if (defined(__linux__) || defined(__APPLE__)) && defined(FLINT_HAS_LIBSODIUM)
+#if (defined(__linux__) || defined(__APPLE__) || defined(_WIN32)) && defined(FLINT_HAS_LIBSODIUM)
 
 #include <sodium.h>
 
@@ -401,7 +406,7 @@ enum { PASSWORD_LIMIT = 1024, MAX_PASSWORD_THREADS = 16, MAX_PASSWORD_TICKETS = 
 
 static pthread_once_t sodium_once = PTHREAD_ONCE_INIT;
 static int sodium_ready = FLINT_SEC_UNAVAILABLE;
-static const uint8_t sodium_empty;
+static const uint8_t sodium_empty = 0;
 
 static void ready_sodium(void)
 {

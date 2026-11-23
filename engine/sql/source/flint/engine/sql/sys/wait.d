@@ -116,11 +116,49 @@ else version (OSX)
     }
 }
 
+version (Windows)
+{
+    // WaitOnAddress and WakeByAddressAll, resolved from KernelBase so no synchronization.lib reaches the link
+    // (ADR-026). A race resolves the same pointers.
+    private alias Word = shared(uint)*;
+    private extern (Windows) alias AddressWait = int function(Word, scope uint*, size_t, uint) @system nothrow @nogc;
+    private extern (Windows) alias AddressWake = void function(scope Word) @system nothrow @nogc;
+    private __gshared AddressWait waitOnAddress;
+    private __gshared AddressWake wakeByAddressAll;
+
+    // SAFETY: GetProcAddress returns either null or the named export, whose signature the aliases above state.
+    private bool addressWaits() @trusted nothrow @nogc
+    {
+        import core.sys.windows.winbase : GetModuleHandleW, GetProcAddress;
+
+        if (waitOnAddress is null)
+        {
+            auto kernel = GetModuleHandleW("kernelbase.dll"w.ptr);
+            if (kernel !is null)
+            {
+                wakeByAddressAll = cast(AddressWake) GetProcAddress(kernel, "WakeByAddressAll");
+                waitOnAddress = cast(AddressWait) GetProcAddress(kernel, "WaitOnAddress");
+            }
+        }
+        return waitOnAddress !is null && wakeByAddressAll !is null;
+    }
+}
+
 // SAFETY: The kernel compares the aligned 32-bit word with expected and sleeps at most nanos.
 // It reads the word only during the call and retains neither address. Without a futex this sleeps.
 private void park(ref shared uint word, uint expected, long nanos) @trusted nothrow @nogc
 {
-    version (OSX)
+    version (Windows)
+    {
+        // Timeouts and spurious returns go back to a caller that retries its acquisition.
+        uint compare = expected;
+        const millis = nanos <= 1_000_000 ? 1 : cast(uint)(nanos / 1_000_000);
+        if (addressWaits())
+            cast(void) waitOnAddress(&word, &compare, uint.sizeof, millis);
+        else
+            waitOffReactor(Interest.init, 2);
+    }
+    else version (OSX)
     {
         // EINTR, EFAULT and ETIMEDOUT all return to a caller that retries its acquisition.
         cast(void) os_sync_wait_on_address_with_timeout(cast(void*)&word, expected, uint.sizeof,
@@ -145,7 +183,12 @@ private void park(ref shared uint word, uint expected, long nanos) @trusted noth
 // SAFETY: The kernel uses the word address only as a key for waking its current waiters.
 private void wakeAll(ref shared uint word) @trusted nothrow @nogc
 {
-    version (OSX)
+    version (Windows)
+    {
+        if (addressWaits())
+            wakeByAddressAll(&word);
+    }
+    else version (OSX)
         cast(void) os_sync_wake_by_address_all(cast(void*)&word, uint.sizeof, 0);
     else static if (is(typeof(futexCall)))
     {
@@ -187,7 +230,8 @@ package(flint.engine.sql) Error waitFor(Interest interest, ref const Context con
 
     const ready = &signals[index].receive;
     const status = owner.watchNative(interest.fd, cast(NativeInterest) interest.events, ready);
-    if (status.code == Status.resourceExhausted)
+    // Without native watches (Windows, ADR-026) the fiber re-checks every millisecond, as when they are exhausted.
+    if (status.code == Status.resourceExhausted || status.code == Status.unsupported)
         return owner.yieldUntil(Deadline.afterMillis(1));
     if (status.code != Status.ok)
         return status;

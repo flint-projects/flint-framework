@@ -95,6 +95,7 @@ extern (C) private @system nothrow @nogc
 
 version (linux) version (FlintNativeCurl) version = FlintCurlOnLinux;
 version (OSX) version (FlintNativeCurl) version = FlintCurlOnLinux; // ADR-024
+version (Windows) version (FlintNativeCurl) version = FlintCurlOnLinux; // the curl shim builds on Windows too (ADR-026)
 
 version (FlintCurlOnLinux)
 {
