@@ -48,10 +48,35 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
         return mapper;
     }
 
+    /// A type the mapper has a descriptor for, `Any`, `ProblemDetail`, or a `java.util` collection or map, which
+    /// Jackson writes element by element through the elements' own descriptors (a top-level
+    /// `ResponseEntity<List<OwnerDto>>` needs no descriptor of `List!OwnerDto`).
     protected override bool supports(string typeName)
     {
         return typeName == "flint.engine.aot.any.Any" || typeName == "flint.http.ProblemDetail"
-            || mapper.descriptors().find(typeName) !is null;
+            || isJavaContainer(typeName) || mapper.descriptors().find(typeName) !is null;
+    }
+
+    private static bool isJavaContainer(string typeName) pure nothrow @nogc
+    {
+        enum prefix = "flint.java.util.";
+        if (typeName.length <= prefix.length || typeName[0 .. prefix.length] != prefix)
+            return false;
+        const rest = typeName[prefix.length .. $];
+        foreach (i, c; rest)
+        {
+            if (c != '!')
+                continue;
+            switch (rest[0 .. i])
+            {
+            case "Collection", "List", "ArrayList", "Set", "HashSet", "LinkedHashSet", "Map",
+                    "HashMap", "LinkedHashMap":
+                    return true;
+            default:
+                return false;
+            }
+        }
+        return false;
     }
 
     /// `AbstractJacksonHttpMessageConverter.readJavaType`: the body through the mapper's descriptor of `typeName`.

@@ -1081,7 +1081,8 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         const admitted = admitFiberBytes(connection, payload.length);
         if (admitted.code != Status.ok)
             return admitted;
-        if (connection.fiberHead || payload.length == 0)
+        // Tomcat's VoidOutputFilter: a 204 or 304 body is discarded, not an error.
+        if (connection.fiberHead || payload.length == 0 || connection.fiberFraming == FiberFraming.none)
             return context.check();
         return writeFramed(connection, payload, connection.fiberFraming == FiberFraming.chunked, context);
     }
@@ -1092,8 +1093,6 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
     {
         if (!connection.streamStarted || connection.streamEnded)
             return Error(Status.conflict, "fiber HTTP response output is closed");
-        if (connection.fiberFraming == FiberFraming.none)
-            return count == 0 ? Error.init : Error(Status.invalidArgument, "this status has no body");
         if (connection.fiberFraming != FiberFraming.length)
             return Error.init;
         if (count > connection.fiberRemaining)

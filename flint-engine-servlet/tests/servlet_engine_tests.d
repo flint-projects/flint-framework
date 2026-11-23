@@ -563,3 +563,42 @@ unittest
             ~ "Content-Type: text/plain;charset=ISO-8859-1\r\nContent-Length: 2\r\n\r\n", reply.head);
     assert(reply.content == "ok");
 }
+
+/// spring-petclinic-rest's updates: `new ResponseEntity<>(dto, HttpStatus.NO_CONTENT)`, a 204 with a JSON body.
+private final class NoContentWithBody : HttpServlet
+{
+    protected override void doGet(HttpServletRequest request, HttpServletResponse response)
+    {
+        response.setStatus(204);
+        response.setContentType("application/json");
+        const json = `{"id":11,"firstName":"George"}`;
+        response.setContentLength(cast(int) json.length);
+        // Spring's ServletServerHttpResponse writes the body, then flushes it (commit by flushBuffer).
+        response.getOutputStream().write(cast(const(ubyte)[]) json);
+        response.flushBuffer();
+    }
+}
+
+@("a 204 with a body sends Tomcat's head, Content-Type and no framing field, and no body")
+unittest
+{
+    ServletEngineOptions options;
+    options.address = "127.0.0.1";
+    options.port = 0;
+    auto engine = new ServletEngine(options);
+    engine.getServletContext().addServlet("dispatcherServlet", new NoContentWithBody).addMapping("/");
+    engine.start();
+    scope (exit)
+        engine.stop();
+
+    auto socket = new TcpSocket(new InternetAddress("127.0.0.1", cast(ushort) engine.getPort()));
+    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.RCVTIMEO, dur!"msecs"(3_000));
+    scope (exit)
+        socket.close();
+    char[] pending;
+    auto reply = exchange(socket, pending, "GET /owners/11 HTTP/1.1\r\nHost: localhost\r\n\r\n", true);
+    assert(reply.headWithoutDate() == "HTTP/1.1 204 \r\nContent-Type: application/json\r\n\r\n", reply.head);
+    // The connection stays usable: the next response follows directly, with no stray body bytes before it.
+    auto next = exchange(socket, pending, "GET /owners/11 HTTP/1.1\r\nHost: localhost\r\n\r\n", true);
+    assert(next.headWithoutDate() == reply.headWithoutDate(), next.head);
+}

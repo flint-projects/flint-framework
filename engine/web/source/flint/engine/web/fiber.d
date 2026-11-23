@@ -38,7 +38,8 @@ task, fails with `unavailable` instead of reaching the next request. The engine 
 - the status line has no reason phrase (`HTTP/1.1 200 `);
 - the application's fields come first, in the order given, then the framing field, `Date` (unless given) and
   the connection fields;
-- 1xx, 204 and 304 carry no framing field, and 205 carries `Content-Length: 0`;
+- 1xx, 204 and 304 carry no framing field, and 205 carries `Content-Length: 0`; body bytes sent for a 204 or
+  304 are discarded, as by Tomcat's `VoidOutputFilter`;
 - a HEAD response keeps its framing fields and sends no body bytes;
 - `Connection: close` is sent when the connection will close, and `Keep-Alive: timeout=N` with
   `Connection: keep-alive` only when the request asked for keep-alive by name.
