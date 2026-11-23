@@ -11,7 +11,6 @@ module creator_defaults_test;
 
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : ConstructorDescriptor, DescriptorTable, ParameterDescriptor, descriptorOf;
-import flint.engine.aot.name : typeNameOf;
 import flint.jackson.databind : JsonMapper;
 import std.typecons : Nullable;
 
@@ -63,10 +62,12 @@ private final class Pet
 @("an absent Nullable!int creator property reads as null")
 unittest
 {
-    // descriptorOf describes the default constructor only; Flint AOT also describes this one, unannotated.
+    // descriptorOf describes the default constructor only; Flint AOT also describes this one, unannotated, and spells
+    // the parameter type `std.typecons.Nullable!(int)` where the table has `std.typecons.Nullable!int`.
     auto pet = descriptorOf!Pet();
     pet.constructors = ConstructorDescriptor([
-        ParameterDescriptor("name", "string"), ParameterDescriptor("id", typeNameOf!(Nullable!int))
+        ParameterDescriptor("name", "string"),
+        ParameterDescriptor("id", "std.typecons.Nullable!(int)")
     ], null, (scope Any[] v) => Any.of(new Pet(v[0].get!string(), v[1].get!(Nullable!int)()))) ~ pet.constructors;
     auto table = DescriptorTable.withBuiltins();
     table.add(pet);

@@ -99,6 +99,48 @@ bool enabledByDefault(EnumFeature f) pure nothrow @nogc
     return f == EnumFeature.READ_ENUMS_USING_TO_STRING || f == EnumFeature.WRITE_ENUMS_USING_TO_STRING;
 }
 
+/// `a.T!(x)` as D prints it, `a.T!x`, when every argument in parentheses is a single token (an identifier or a
+/// keyword such as `int`, without dots); null when nothing changes.
+string shortTemplateSpelling(scope const(char)[] name) pure nothrow
+{
+    string result;
+    bool changed;
+    size_t i;
+    while (i < name.length)
+    {
+        if (name[i] == '!' && i + 1 < name.length && name[i + 1] == '(')
+        {
+            size_t close = i + 2;
+            while (close < name.length && isTokenChar(name[close]))
+                ++close;
+            if (close < name.length && name[close] == ')' && close > i + 2)
+            {
+                result ~= "!" ~ name[i + 2 .. close];
+                i = close + 1;
+                changed = true;
+                continue;
+            }
+        }
+        result ~= name[i++];
+    }
+    return changed ? result : null;
+}
+
+private bool isTokenChar(char c) pure nothrow @nogc
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+@("shortTemplateSpelling: single-token arguments lose their parentheses")
+unittest
+{
+    assert(shortTemplateSpelling("std.typecons.Nullable!(int)") == "std.typecons.Nullable!int");
+    assert(shortTemplateSpelling("a.Optional!(Nullable!(int))") == "a.Optional!(Nullable!int)");
+    assert(shortTemplateSpelling("flint.java.util.List!(a.b.C)") is null);
+    assert(shortTemplateSpelling("a.M!(string, int)") is null);
+    assert(shortTemplateSpelling("int") is null);
+}
+
 /**
  * Configurable on/off features to configure how creators are detected. Jackson
  * 3's `ConstructorDetector.DEFAULT` lets one public non-default constructor
@@ -433,10 +475,16 @@ final class MapperConfig
         return (enums & (1UL << f)) != 0;
     }
 
-    /// The descriptor named `type`, or null.
+    /// The descriptor named `type`, or null. A name spelled `T!(x)` with a single-token argument also finds the
+    /// table's `T!x`, the form `typeNameOf` gives (Flint AOT writes creator parameter types the long way).
     const(Descriptor) descriptor(scope const(char)[] type)
     {
-        return descriptors is null ? null : descriptors.find(type);
+        if (descriptors is null)
+            return null;
+        if (auto found = descriptors.find(type))
+            return found;
+        const short_ = shortTemplateSpelling(type);
+        return short_ is null ? null : descriptors.find(short_);
     }
 
     /// The introspected bean of `d`, collected once per configuration.
