@@ -82,12 +82,17 @@ final class NodeImpl : Path.Node
     /// The node as it appears in a path: `name`, `[3]name`, `[key]name`.
     override string toString() const
     {
+        return name is null ? position() : position() ~ name;
+    }
+
+    // `[3]`, `[key]` or `[]` for a node in an iterable; empty otherwise.
+    private string position() const
+    {
         import flint.engine.aot.text : decimal;
 
-        string text;
-        if (inIterable)
-            text = "[" ~ (index >= 0 ? decimal(cast(long) index) : key.isNull() ? "" : key.toString()) ~ "]";
-        return name is null ? text : text ~ name;
+        if (!inIterable)
+            return "";
+        return "[" ~ (index >= 0 ? decimal(cast(long) index) : key.isNull() ? "" : key.toString()) ~ "]";
     }
 }
 
@@ -141,7 +146,18 @@ final class PathImpl : Path
         auto path = copy();
         if (path.nodeList.length == 1 && path.nodeList[0].name is null && !path.nodeList[0].inIterable)
             path.nodeList = null;
-        path.nodeList ~= new NodeImpl(propertyName, ElementKind.PROPERTY);
+        auto node = new NodeImpl(propertyName, ElementKind.PROPERTY);
+        // As Hibernate's NodeImpl reports its parent's iterable position: the property of an element is the node
+        // in the iterable, so the position marker becomes this node (`bar`, then `alwaysNull` at index 0).
+        if (path.nodeList.length && path.nodeList[$ - 1].name is null && path.nodeList[$ - 1].inIterable)
+        {
+            auto marker = path.nodeList[$ - 1];
+            node.inIterable = true;
+            node.index = marker.index;
+            node.key = marker.key;
+            path.nodeList = path.nodeList[0 .. $ - 1];
+        }
+        path.nodeList ~= node;
         return path;
     }
 
@@ -166,30 +182,17 @@ final class PathImpl : Path
         return result;
     }
 
-    /// `owner.pets[0].name`: names joined by dots, an iterable position attached to the node after it.
+    /// `owner.pets[0].name`: names joined by dots, each iterable position after its container.
     override string toString() const
     {
         string text;
-        bool pendingIterable;
-        string position;
         foreach (n; nodeList)
         {
-            if (n.name is null && n.inIterable)
-            {
-                pendingIterable = true;
-                position = n.toString();
-                continue;
-            }
-            if (pendingIterable)
-            {
-                text ~= position;
-                pendingIterable = false;
-            }
+            if (n.inIterable)
+                text ~= n.position();
             if (n.name !is null)
                 text ~= (text.length ? "." : "") ~ n.name;
         }
-        if (pendingIterable)
-            text ~= position;
         return text;
     }
 }

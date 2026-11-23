@@ -270,23 +270,18 @@ version (FlintInterfaceConstraints)
     }
 }
 
-// Behaviour: Path.nodes() holds an extra unnamed node for the iterable position ([bar, [0], alwaysNull]) instead
-// of marking the `alwaysNull` node itself as in an iterable at index 0; the path text "bar[0].alwaysNull" agrees.
-version (FlintIterableNodeShape)
+/// HV-468
+@("ValidatorTest.testPropertyPath")
+unittest
 {
-    /// HV-468
-    @("ValidatorTest.testPropertyPath")
-    unittest
-    {
-        auto foo = new Foo();
-        auto constraintViolations = getValidator().validate(foo);
-        assertOnlyViolations(constraintViolations, typeNameOf!NotNull);
-        auto nodes = constraintViolations[0].getPropertyPath().nodes();
-        assert(nodes.length == 2);
-        assert(nodes[0].getName() == "bar" && !nodes[0].isInIterable());
-        assert(nodes[1].getName() == "alwaysNull" && nodes[1].isInIterable());
-        assert(nodes[1].getKey().isNull() && nodes[1].getIndex() == 0);
-    }
+    auto foo = new Foo();
+    auto constraintViolations = getValidator().validate(foo);
+    assertOnlyViolations(constraintViolations, typeNameOf!NotNull);
+    auto nodes = constraintViolations[0].getPropertyPath().nodes();
+    assert(nodes.length == 2);
+    assert(nodes[0].getName() == "bar" && !nodes[0].isInIterable());
+    assert(nodes[1].getName() == "alwaysNull" && nodes[1].isInIterable());
+    assert(nodes[1].getKey().isNull() && nodes[1].getIndex() == 0);
 }
 
 @("ValidatorTest.testConstraintDefinedOnEntityNotFollowingBeanNotation")
