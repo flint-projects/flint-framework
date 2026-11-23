@@ -3,7 +3,7 @@
  * tag jackson-core-3.1.8: src/main/java/tools/jackson/core/{JsonToken,JsonTokenId,
  * JacksonException,TokenStreamLocation,TokenStreamContext,JsonGenerator,JsonParser,
  * PrettyPrinter,ObjectWriteContext,ObjectReadContext,StreamReadFeature,
- * StreamWriteFeature,StreamReadConstraints}.java
+ * StreamWriteFeature,StreamReadConstraints,StreamWriteConstraints}.java
  *
  * Jackson JSON-processor.
  * Copyright (c) 2007- Tatu Saloranta, tatu.saloranta@iki.fi
@@ -523,6 +523,107 @@ struct StreamReadConstraints
     }
 }
 
+/**
+ * The constraints to use for streaming writes: used to guard against problematic
+ * output by preventing processing of "too big" output constructs (currently only
+ * the nesting depth, which also stops a cyclic object graph before the stack
+ * overflows). Values are Jackson 3.1's defaults.
+ *
+ * Jackson's process-wide `overrideDefaultStreamWriteConstraints` is not ported:
+ * Flint framework packages keep no mutable module-level state; configure a
+ * factory with `JsonFactoryBuilder.streamWriteConstraints` instead.
+ */
+struct StreamWriteConstraints
+{
+    /// Default setting for maximum depth: 500 levels.
+    enum int DEFAULT_MAX_DEPTH = 500;
+
+    private int _maxNestingDepth = DEFAULT_MAX_DEPTH;
+
+    /// Builder for `StreamWriteConstraints`.
+    static final class Builder
+    {
+        private int _maxNestingDepth;
+
+        private this(int maxNestingDepth) pure nothrow @nogc
+        {
+            _maxNestingDepth = maxNestingDepth;
+        }
+
+        /**
+         * Sets the maximum nesting depth. The depth is a count of objects and
+         * arrays that have not been closed, `{` and `[` respectively.
+         *
+         * Throws: `Exception` if `maxNestingDepth` is negative (Jackson's
+         * `IllegalArgumentException`; jackson-core does not depend on flint.java).
+         */
+        Builder maxNestingDepth(int maxNestingDepth) pure
+        {
+            if (maxNestingDepth < 0)
+                throw new Exception("Cannot set maxNestingDepth to a negative value");
+            _maxNestingDepth = maxNestingDepth;
+            return this;
+        }
+
+        /// The constraints.
+        StreamWriteConstraints build() const pure nothrow @nogc
+        {
+            return StreamWriteConstraints(_maxNestingDepth);
+        }
+    }
+
+    private this(int maxNestingDepth) pure nothrow @nogc
+    {
+        _maxNestingDepth = maxNestingDepth;
+    }
+
+    /// A builder with the default settings.
+    static Builder builder() pure nothrow
+    {
+        return new Builder(DEFAULT_MAX_DEPTH);
+    }
+
+    /// The default constraints.
+    static StreamWriteConstraints defaults() pure nothrow @nogc
+    {
+        return StreamWriteConstraints.init;
+    }
+
+    /// A builder initialized with these constraints.
+    Builder rebuild() const pure nothrow
+    {
+        return new Builder(_maxNestingDepth);
+    }
+
+    /// Maximum nesting depth allowed.
+    int getMaxNestingDepth() const pure nothrow @nogc
+    {
+        return _maxNestingDepth;
+    }
+
+    /**
+     * Convenience method that can be used to verify that the nesting depth does
+     * not exceed the maximum specified by this constraints object.
+     *
+     * Throws: `StreamConstraintsException` if `depth` exceeds the maximum.
+     */
+    void validateNestingDepth(int depth) const pure
+    {
+        if (depth > _maxNestingDepth)
+            throwNestingDepth(depth);
+    }
+
+    private void throwNestingDepth(int depth) const pure
+    {
+        import flint.engine.aot.text : decimal;
+        import flint.jackson.core.exc : StreamConstraintsException;
+
+        throw new StreamConstraintsException(
+                "Document nesting depth (" ~ decimal(depth) ~ ") exceeds the maximum allowed (" ~ decimal(
+                _maxNestingDepth) ~ ", from `StreamWriteConstraints.getMaxNestingDepth()`)");
+    }
+}
+
 /// Token reader (parser) features not-specific to any particular format backend.
 enum StreamReadFeature
 {
@@ -811,6 +912,12 @@ abstract class JsonGenerator
 
     /// Accessor for the pretty printer in use, if any.
     abstract PrettyPrinter getPrettyPrinter();
+
+    /// The constraints this generator enforces (`StreamWriteConstraints.defaults()` unless a subclass says otherwise).
+    StreamWriteConstraints streamWriteConstraints()
+    {
+        return StreamWriteConstraints.defaults();
+    }
 
     /// Whether the given feature is enabled.
     abstract bool isEnabled(StreamWriteFeature f);

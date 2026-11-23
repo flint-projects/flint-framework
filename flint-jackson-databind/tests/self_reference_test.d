@@ -50,3 +50,51 @@ unittest
     auto mapper = builder().enable(SerializationFeature.WRITE_SELF_REFERENCES_AS_NULL).build();
     assert(mapper.writeValueAsString(node) == `{"name":"loop","next":null}`);
 }
+
+// An indirect cycle is not a self-reference: Jackson writes it until StreamWriteConstraints' nesting limit
+// (500) stops it (CyclicDataSerTest.testListWithSelfReference); without the limit it overflowed the stack.
+@("an indirect cycle fails at the write nesting limit with StreamConstraintsException")
+unittest
+{
+    import flint.jackson.core.exc : StreamConstraintsException;
+
+    auto a = new Node;
+    auto b = new Node;
+    a.name = "a";
+    b.name = "b";
+    a.next = b;
+    b.next = a;
+    try
+    {
+        builder().build().writeValueAsString(a);
+        assert(false, "an indirect cycle must fail");
+    }
+    catch (StreamConstraintsException e)
+    {
+        enum prefix = "Document nesting depth (501) exceeds the maximum allowed";
+        assert(e.msg.length >= prefix.length && e.msg[0 .. prefix.length] == prefix, e.msg);
+    }
+}
+
+@("CyclicDataSerTest.testListWithSelfReference")
+unittest
+{
+    import flint.jackson.core.exc : StreamConstraintsException;
+    import flint.java.util : ArrayList, List;
+
+    auto list = new ArrayList!Object();
+    list.add(list);
+    auto table = DescriptorTable.withBuiltins();
+    table.add(descriptorOf!(List!Object)());
+    table.add(descriptorOf!(ArrayList!Object)());
+    try
+    {
+        JsonMapper.builder().descriptors(table).build().writeValueAsString(list);
+        assert(false, "expected StreamConstraintsException");
+    }
+    catch (StreamConstraintsException e)
+    {
+        enum prefix = "Document nesting depth (501) exceeds the maximum allowed";
+        assert(e.msg.length >= prefix.length && e.msg[0 .. prefix.length] == prefix, e.msg);
+    }
+}

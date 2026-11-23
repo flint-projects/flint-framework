@@ -18,8 +18,8 @@
 module flint.jackson.core.json;
 
 import flint.jackson.core : JacksonException, JsonGenerator, JsonParser, JsonToken,
-    ObjectReadContext, ObjectWriteContext, PrettyPrinter,
-    StreamReadConstraints, StreamReadFeature,
+    ObjectReadContext, ObjectWriteContext, PrettyPrinter, StreamReadConstraints,
+    StreamReadFeature, StreamWriteConstraints,
     StreamWriteFeature, TokenStreamContext, TokenStreamLocation, enabledByDefault, tokenName;
 import flint.jackson.core.exc : InputCoercionException, StreamConstraintsException,
     StreamReadException, StreamWriteException, UnexpectedEndOfInputException;
@@ -128,6 +128,7 @@ final class JsonFactory
     private uint _formatReadFeatures;
     private uint _formatWriteFeatures;
     private StreamReadConstraints _streamReadConstraints;
+    private StreamWriteConstraints _streamWriteConstraints;
     private string _rootValueSeparator = " ";
 
     /// Default constructor used to create factory instances.
@@ -147,6 +148,7 @@ final class JsonFactory
         _formatReadFeatures = b._formatReadFeatures;
         _formatWriteFeatures = b._formatWriteFeatures;
         _streamReadConstraints = b._streamReadConstraints;
+        _streamWriteConstraints = b._streamWriteConstraints;
         _rootValueSeparator = b._rootValueSeparator;
     }
 
@@ -196,6 +198,12 @@ final class JsonFactory
     StreamReadConstraints streamReadConstraints() const pure nothrow @nogc
     {
         return _streamReadConstraints;
+    }
+
+    /// The stream write constraints new generators receive.
+    StreamWriteConstraints streamWriteConstraints() const pure nothrow @nogc
+    {
+        return _streamWriteConstraints;
     }
 
     /// The separator written between root-level values.
@@ -262,6 +270,7 @@ final class JsonFactoryBuilder
     private uint _formatReadFeatures;
     private uint _formatWriteFeatures;
     private StreamReadConstraints _streamReadConstraints;
+    private StreamWriteConstraints _streamWriteConstraints;
     private string _rootValueSeparator = " ";
 
     ///
@@ -281,6 +290,7 @@ final class JsonFactoryBuilder
         _formatReadFeatures = base._formatReadFeatures;
         _formatWriteFeatures = base._formatWriteFeatures;
         _streamReadConstraints = base._streamReadConstraints;
+        _streamWriteConstraints = base._streamWriteConstraints;
         _rootValueSeparator = base._rootValueSeparator;
     }
 
@@ -375,6 +385,13 @@ final class JsonFactoryBuilder
         return this;
     }
 
+    /// Replace the stream write constraints.
+    JsonFactoryBuilder streamWriteConstraints(StreamWriteConstraints src) pure nothrow @nogc
+    {
+        _streamWriteConstraints = src;
+        return this;
+    }
+
     /// Replace the separator written between root-level values (null for none).
     JsonFactoryBuilder rootValueSeparator(string sep) pure nothrow @nogc
     {
@@ -407,12 +424,20 @@ final class JsonWriteContext : TokenStreamContext
 
     private JsonWriteContext _child;
     private bool _gotName;
+    private int _depth;
 
     private this(int type, JsonWriteContext parent) pure nothrow @nogc
     {
         _type = type;
         _parent = parent;
         _index = -1;
+        _depth = parent is null ? 0 : parent._depth + 1;
+    }
+
+    /// Nesting depth: 0 for the root.
+    int getNestingDepth() const pure nothrow @nogc
+    {
+        return _depth;
     }
 
     /// The root context of a new generator.
@@ -507,6 +532,7 @@ class UTF8JsonGenerator : JsonGenerator
     private OutputSink _sink;
     private PrettyPrinter _cfgPrettyPrinter;
     private JsonWriteContext _streamWriteContext;
+    private StreamWriteConstraints _streamWriteConstraints;
     private ubyte[] _outputBuffer;
     private size_t _outputTail;
     private bool _closed;
@@ -526,6 +552,7 @@ class UTF8JsonGenerator : JsonGenerator
         _sink = sink;
         _cfgPrettyPrinter = writeCtxt.getPrettyPrinter();
         _streamWriteContext = JsonWriteContext.createRootContext();
+        _streamWriteConstraints = factory.streamWriteConstraints();
         _outputBuffer = new ubyte[FIRST_BUFFER_SIZE];
         _quoteNames = factory.isEnabled(JsonWriteFeature.QUOTE_PROPERTY_NAMES);
         _nanAsStrings = factory.isEnabled(JsonWriteFeature.WRITE_NAN_AS_STRINGS);
@@ -544,6 +571,11 @@ class UTF8JsonGenerator : JsonGenerator
     override PrettyPrinter getPrettyPrinter()
     {
         return _cfgPrettyPrinter;
+    }
+
+    override StreamWriteConstraints streamWriteConstraints()
+    {
+        return _streamWriteConstraints;
     }
 
     override bool isEnabled(StreamWriteFeature f)
@@ -681,6 +713,7 @@ class UTF8JsonGenerator : JsonGenerator
     {
         verifyValueWrite("start an object");
         _streamWriteContext = _streamWriteContext.createChildObjectContext(null);
+        _streamWriteConstraints.validateNestingDepth(_streamWriteContext.getNestingDepth());
         if (_cfgPrettyPrinter !is null)
             _cfgPrettyPrinter.writeStartObject(this);
         else
@@ -704,6 +737,7 @@ class UTF8JsonGenerator : JsonGenerator
     {
         verifyValueWrite("start an array");
         _streamWriteContext = _streamWriteContext.createChildArrayContext(null);
+        _streamWriteConstraints.validateNestingDepth(_streamWriteContext.getNestingDepth());
         if (_cfgPrettyPrinter !is null)
             _cfgPrettyPrinter.writeStartArray(this);
         else

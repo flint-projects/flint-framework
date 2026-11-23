@@ -34,9 +34,9 @@ unittest
         g.writeEndArray();
         g.close();
         const expected = `["` ~ text ~ `",` ~ imported!"std.conv".to!string(length) ~ "]";
-        assert(cast(const(char)[]) received == expected, imported!"std.conv".to!string(length) ~ ": got "
-                ~ imported!"std.conv".to!string(received.length) ~ " bytes, expected "
-                ~ imported!"std.conv".to!string(expected.length));
+        assert(cast(const(char)[]) received == expected,
+                imported!"std.conv".to!string(length) ~ ": got " ~ imported!"std.conv".to!string(
+                    received.length) ~ " bytes, expected " ~ imported!"std.conv".to!string(expected.length));
         assert(length < 7990 ? chunks == 1 : chunks >= 1);
     }
 }
