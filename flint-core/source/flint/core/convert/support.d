@@ -337,9 +337,14 @@ private final class StringToScalarConverter : ConditionalGenericConverter
 
     private static Any toBoolean(string source)
     {
-        import std.string : strip, toLower;
+        import flint.engine.aot.text : stripWhite;
 
-        const value = source.strip.toLower;
+        // ASCII lower case is enough: no other character lowers to a letter of these words, as String.toLowerCase.
+        char[] lowered = stripWhite(source).dup;
+        foreach (ref c; lowered)
+            if (c >= 'A' && c <= 'Z')
+                c += 'a' - 'A';
+        const value = lowered;
         if (value.length == 0)
             return Any.init;
         switch (value)
@@ -355,16 +360,18 @@ private final class StringToScalarConverter : ConditionalGenericConverter
 
     private static Any toCharacter(string source, string target)
     {
-        import std.utf : count, decodeFront;
+        import flint.engine.aot.text : codePointCount, decodeUtf8, isValidUtf8;
 
         if (source.length == 0)
             return Any.init;
-        const length = count(source);
+        if (!isValidUtf8(source))
+            throw new IllegalArgumentException("Invalid UTF-8 sequence in '" ~ source ~ "'");
+        const length = codePointCount(source);
         if (length > 1)
             throw new IllegalArgumentException("Can only convert a [String] with length of 1 to a [Character]; "
                     ~ "string value '" ~ source ~ "' has length of " ~ valueOf(length));
-        auto rest = source;
-        const c = decodeFront(rest);
+        size_t index;
+        const c = decodeUtf8(source, index);
         if (target == "char")
         {
             if (c > 0x7F)
@@ -509,12 +516,12 @@ private final class StringToEnumConverter : ConditionalGenericConverter
 
     Any convert(Any source, const TypeDescriptor, const TypeDescriptor targetType)
     {
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite;
 
         const text = source.get!string;
         if (text.length == 0)
             return Any.init;
-        const name = text.strip;
+        const name = stripWhite(text);
         auto descriptor = targetType.getDescriptor();
         foreach (i, constant; descriptor.enumConstants)
             if (constant == name && i < descriptor.enumValues.length)

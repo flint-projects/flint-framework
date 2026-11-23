@@ -171,6 +171,17 @@ unittest
 
 unittest
 {
+    // Flint: trimming, case and UTF-8 now go through flint.engine.aot.text, not std.string and std.utf.
+    assert(service().convert!bool(" On\t") && !service().convert!bool(" No "));
+    assert(collectException!ConversionFailedException(service().convert!bool("Øn")) !is null);
+    assert(service().convert!dchar("é") == 'é' && service().convert!dchar("\U0001F600") == '\U0001F600');
+    // Negative: malformed UTF-8 and two code points both fail.
+    assert(collectException!ConversionFailedException(service().convert!dchar("\xFF")) !is null);
+    assert(collectException!ConversionFailedException(service().convert!dchar("éé")) !is null);
+}
+
+unittest
+{
     // booleanToString
     assert(service().convert!string(true) == "true");
 }

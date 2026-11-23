@@ -74,10 +74,9 @@ private bool isJavaWhitespace(dchar c) pure nothrow @nogc
 /// Decode the code point at `index` and advance past it; malformed UTF-8 decodes as U+FFFD.
 private dchar decodeAt(scope const(char)[] s, ref size_t index) pure nothrow @nogc
 {
-    import std.typecons : Yes;
-    import std.utf : decode;
+    import flint.engine.aot.text : decodeUtf8;
 
-    return decode!(Yes.useReplacementDchar)(s, index);
+    return decodeUtf8(s, index);
 }
 
 /// Advance `index` past the code point at `index`.
@@ -247,13 +246,10 @@ private bool containsCodePoint(scope const(char)[] s, dchar c) pure nothrow @nog
 /// The UTF-8 encoding of `c`.
 private string encodeCodePoint(dchar c) pure nothrow
 {
-    import std.utf : encode;
+    import flint.engine.aot.text : utf8;
 
-    import std.typecons : Yes;
-
-    char[4] buffer;
-    const length = encode!(Yes.useReplacementDchar)(buffer, c);
-    return buffer[0 .. length].idup;
+    const text = utf8(c);
+    return text is null ? "\uFFFD" : text; // as std.utf's replacement encode
 }
 
 /// Java's `String.trim()`: strip characters up to U+0020 at both ends.
@@ -1100,10 +1096,10 @@ abstract class StringUtils
     /// The text after the last `separator` of `qualifiedName`.
     static string unqualify(string qualifiedName, dchar separator) pure nothrow @nogc
     {
-        import std.utf : codeLength;
+        import flint.engine.aot.text : utf8Length;
 
         const index = lastIndexOfCodePoint(qualifiedName, separator);
-        return index < 0 ? qualifiedName : qualifiedName[index + codeLength!char(separator) .. $];
+        return index < 0 ? qualifiedName : qualifiedName[index + utf8Length(separator) .. $];
     }
 
     /// `str` with its first character in upper case (`std.uni.toUpper`).
@@ -1968,11 +1964,24 @@ abstract class ObjectUtils
         }
         else static if (is(Unqual!E == char) || is(Unqual!E == wchar) || is(Unqual!E == dchar))
         {
-            import std.utf : byDchar;
-
             string result;
-            foreach (c; array.byDchar)
+            void add(dchar c)
+            {
                 result ~= (result.length ? ARRAY_ELEMENT_SEPARATOR : "") ~ "'" ~ encodeCodePoint(c) ~ "'";
+            }
+
+            static if (is(Unqual!E == char))
+            {
+                for (size_t i; i < array.length;)
+                    add(decodeAt(array, i)); // byDchar's replacement decode, without std.utf
+            }
+            else
+            {
+                import std.utf : byDchar;
+
+                foreach (c; array.byDchar)
+                    add(c);
+            }
             return ARRAY_START ~ result ~ ARRAY_END;
         }
         else
@@ -3511,9 +3520,9 @@ package final class PlaceholderParser
 
     private size_t escapeLength()
     {
-        import std.utf : codeLength;
+        import flint.engine.aot.text : utf8Length;
 
-        return codeLength!char(escape);
+        return utf8Length(escape);
     }
 
     private static void addText(string value, size_t start, size_t end, ref Part[] parts)

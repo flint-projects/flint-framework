@@ -232,13 +232,11 @@ abstract class AbstractResource : Resource
     /// The content as UTF-8 text. Throws `IOException` when it is not valid UTF-8.
     string getContentAsString()
     {
-        import std.utf : UTFException, validate;
+        import flint.engine.aot.text : isValidUtf8;
 
         auto text = cast(string) getContentAsByteArray().idup;
-        try
-            validate(text);
-        catch (UTFException e)
-            throw new IOException("Malformed UTF-8 input in " ~ getDescription(), e);
+        if (!isValidUtf8(text))
+            throw new IOException("Malformed UTF-8 input in " ~ getDescription());
         return text;
     }
 
