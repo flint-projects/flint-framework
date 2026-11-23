@@ -14,19 +14,35 @@ import time
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / 'tests' / 'integration' / 'graceful-shutdown'
+import os
+import sys
+sys.path.insert(0, str(Path(os.environ.get('FLINT_ROOT') or Path(__file__).resolve().parents[2]) / 'tests'))
+from flint_testing import FLINT_ROOT, package_dir, repo_dir  # noqa: E402,F401
+ROOT = FLINT_ROOT
+FIXTURE = repo_dir('framework', 'tests/framework/integration/graceful-shutdown')
 BINARY = FIXTURE / 'build' / 'flint-graceful-shutdown-fixture'
 
 
 def setUpModule():
+    global BINARY
     if shutil.which('dub') is None:
         raise unittest.SkipTest('dub is not on PATH')
     compiler = os.environ.get('FLINT_TEST_COMPILER', 'dmd')
-    built = subprocess.run(['dub', 'build', '--root', str(FIXTURE), '--compiler=' + compiler],
-                           cwd=ROOT, capture_output=True, text=True, timeout=900)
-    if built.returncode != 0:
-        raise RuntimeError('fixture build failed:\n' + built.stdout + built.stderr)
+    if (FIXTURE.parents[3] / 'packages' / 'arena').is_dir():
+        # The monorepo: the fixture's flint:* paths reach this checkout's root recipe.
+        built = subprocess.run(['dub', 'build', '--root', str(FIXTURE), '--compiler=' + compiler],
+                               cwd=ROOT, capture_output=True, text=True, timeout=900)
+        if built.returncode != 0:
+            raise RuntimeError('fixture build failed:\n' + built.stdout + built.stderr)
+        return
+    # flint-framework: build a copy against the workspace's joined recipe (tools/workspace.py build-example).
+    import tempfile
+    import workspace
+    from flint_testing import WORKSPACE
+    output = Path(tempfile.mkdtemp(prefix='flint-graceful-'))
+    if workspace.build_example(FIXTURE, WORKSPACE, output, compiler, FLINT_ROOT) != 0:
+        raise RuntimeError('fixture build failed against the workspace')
+    BINARY = output / 'example' / 'build' / 'flint-graceful-shutdown-fixture'
 
 
 def free_port():
