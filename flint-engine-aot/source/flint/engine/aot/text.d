@@ -7,7 +7,7 @@ templates and give the same results as those `std.conv` calls, which the unittes
 +/
 module flint.engine.aot.text;
 
-import flint.engine.aot.sys.text : formatG, readDouble;
+import flint.engine.aot.sys.text : formatE, formatG, readDouble, readFloat;
 
 @safe:
 
@@ -194,11 +194,13 @@ bool parseDouble(scope const(char)[] text, out double value) pure nothrow
         ++i;
     }
     const rest = text[i .. $];
-    final switch (special(rest, negative, plus, value))
+    const read = special(rest, negative, plus);
+    final switch (read.kind)
     {
     case Special.none:
         break;
     case Special.accepted:
+        value = read.value;
         return true;
     case Special.refused:
         return false;
@@ -225,20 +227,21 @@ private enum Special
     refused
 }
 
-// `inf` (without a plus sign, as to!double) and `nan` in any case; Special.none for any other text.
-private Special special(scope const(char)[] text, bool negative, bool plus, out double value) pure nothrow @nogc
+// `inf` (without a plus sign, as to!double) and `nan` in any case, with its value; Special.none for other text.
+private struct SpecialRead
+{
+    Special kind;
+    double value;
+}
+
+/// ditto
+private SpecialRead special(scope const(char)[] text, bool negative, bool plus) pure nothrow @nogc
 {
     if (equalsIgnoreCase(text, "inf"))
-    {
-        value = negative ? -double.infinity : double.infinity;
-        return plus ? Special.refused : Special.accepted;
-    }
+        return SpecialRead(plus ? Special.refused : Special.accepted, negative ? -double.infinity : double.infinity);
     if (equalsIgnoreCase(text, "nan"))
-    {
-        value = double.nan;
-        return Special.accepted;
-    }
-    return Special.none;
+        return SpecialRead(Special.accepted, double.nan);
+    return SpecialRead(Special.none, 0);
 }
 
 // A hexadecimal or decimal number, appended to `cleaned` without underscores; false where to!double refuses it.
@@ -318,6 +321,65 @@ private bool hexadecimal(scope const(char)[] text) pure nothrow @nogc
             return false;
     }
     return i == text.length;
+}
+
+/// `value` as `format("%.*e", precision, value)` prints it: C's `%e` with `precision` digits after the point,
+/// for `precision` in [0, 40]; null outside it.
+string scientific(double value, int precision) pure nothrow
+{
+    char[64] buffer;
+    const length = formatE(value, precision, buffer[]);
+    return length ? buffer[0 .. length].idup : null;
+}
+
+/// A float parse result.
+struct ParsedFloat
+{
+    /// The text was a valid number.
+    bool ok;
+    /// The number, when ok.
+    float value;
+}
+
+/// Reads a whole floating-point number as `to!float` does: the syntax `parseDouble` accepts, rounded once to float.
+ParsedFloat tryParseFloat(scope const(char)[] text) pure nothrow
+{
+    ParsedFloat result;
+    size_t i;
+    bool negative, plus;
+    if (i < text.length && (text[i] == '-' || text[i] == '+'))
+    {
+        negative = text[i] == '-';
+        plus = !negative;
+        ++i;
+    }
+    const rest = text[i .. $];
+    const read = special(rest, negative, plus);
+    final switch (read.kind)
+    {
+    case Special.none:
+        break;
+    case Special.accepted:
+        result.ok = true;
+        result.value = cast(float) read.value;
+        return result;
+    case Special.refused:
+        return result;
+    }
+    char[] cleaned;
+    cleaned.reserve(text.length + 1);
+    if (negative)
+        cleaned ~= '-';
+    if (!mantissaAndExponent(rest, cleaned))
+        return result;
+    cleaned ~= '\0';
+    size_t consumed;
+    const parsed = readFloat(cleaned, consumed);
+    if (consumed + 1 != cleaned.length || parsed == float.infinity || parsed == -float.infinity)
+        return result;
+    result.ok = true;
+    result.value = parsed;
+    return result;
 }
 
 /// `value` as `to!string(double)` prints it: C's `%g`, six significant digits.
@@ -511,4 +573,44 @@ unittest
     ];
     foreach (text; texts)
         assert(stripWhite(text) == text.strip(), text);
+}
+
+unittest
+{
+    import std.format : format;
+
+    static immutable values = [
+        0.0, -0.0, 1.0, 1.5, 0.1, 0.2 + 0.1, 1e20, 1e-5, 123_456_789.0, 3.141_592_653_589_793,
+        double.max, double.min_normal, double.min_normal / 4, -42.75, 999_999.5, 1e308, 5e-5,
+        0.000_123
+    ];
+    foreach (value; values)
+        foreach (precision; 0 .. 17)
+            assert(scientific(value, precision) == format("%.*e", precision, value), format("%.*e", precision, value));
+    assert(scientific(1.0, -1) is null && scientific(1.0, 41) is null);
+}
+
+unittest
+{
+    import std.conv : to;
+    import std.math : isNaN;
+
+    static immutable texts = [
+        "0.1", "1.5", "-2", "1e5", "3.4028235e38", "3.4028236e38", "1e39", "1.17549435e-38",
+        "1e-46", "0x1p3", "nan", "inf", "-inf", "+inf", "1_000", "", " 1", "16777217",
+        "0.30000001192092896", "1.00000005960464477539"
+    ];
+    foreach (text; texts)
+    {
+        bool expected = true;
+        float reference;
+        try
+            reference = text.to!float;
+        catch (Exception)
+            expected = false;
+        const result = tryParseFloat(text);
+        assert(result.ok == expected, text);
+        if (expected)
+            assert(reference.isNaN ? result.value.isNaN : result.value is reference, text);
+    }
 }
