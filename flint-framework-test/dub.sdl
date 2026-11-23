@@ -1,0 +1,21 @@
+name "framework-test"
+description "Flint Test (MockMvc part): the port of spring-test's org.springframework.test.web.servlet and org.springframework.mock.web (interim name; see docs/spring/phase1/web-mvc.md, open question 1)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "framework-webmvc" path="../framework-webmvc"
+dependency "framework-web" path="../framework-web"
+dependency "framework-interim" path="../framework-interim"
+dependency "jakarta-servlet" path="../jakarta-servlet"
+dependency "engine-aot" path="../engine-aot"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

@@ -1,0 +1,20 @@
+name "framework-webmvc"
+description "Flint Web MVC: the port of spring-webmvc (interim name; becomes flint:webmvc after the engine rename)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "framework-web" path="../framework-web"
+dependency "framework-interim" path="../framework-interim"
+dependency "jakarta-servlet" path="../jakarta-servlet"
+dependency "engine-aot" path="../engine-aot"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

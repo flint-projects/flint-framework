@@ -2000,21 +2000,33 @@ struct HttpEntity
     }
 
     /// The erased body; `isNull()` when there is none.
-    Any getBody() const pure nothrow @nogc @trusted
+    Any getBody() pure nothrow @nogc
     {
-        return cast(Any) body;
+        return body;
     }
 
     /// The body as `T`. Throws: `AnyTypeException` when it is not a `T`.
-    T getBody(T)() const
+    T getBody(T)()
     {
         return body.get!T();
     }
 
     /// Whether there is a body.
-    bool hasBody() const nothrow @nogc
+    bool hasBody() const pure nothrow @nogc
     {
         return !body.isNull();
+    }
+
+    /// Java's `equals`: equal headers, and bodies of the same type that are both absent or the same reference.
+    bool opEquals(const HttpEntity other) const pure nothrow @nogc
+    {
+        return headers == other.headers && body.typeName() == other.body.typeName() && body.isNull() == other.body.isNull()
+            && body.asObject() is other.body.asObject();
+    }
+
+    size_t toHash() const pure nothrow @nogc
+    {
+        return headers.toHash();
     }
 }
 
@@ -2075,6 +2087,17 @@ struct ResponseEntity
     HttpStatusCode getStatusCode() const pure nothrow @nogc
     {
         return statusValue;
+    }
+
+    /// Java's `equals`: the entity and the status.
+    bool opEquals(const ResponseEntity other) const pure nothrow @nogc
+    {
+        return entity == other.entity && statusValue == other.statusValue;
+    }
+
+    size_t toHash() const pure nothrow @nogc
+    {
+        return 29 * entity.toHash() + statusValue.toHash();
     }
 
     /// Java's `toString()`: `<200 OK OK,body,[headers]>`.
@@ -2353,6 +2376,17 @@ struct RequestEntity
         return urlValue;
     }
 
+    /// Java's `equals`: the entity, method and URL.
+    bool opEquals(const RequestEntity other) const pure nothrow @nogc
+    {
+        return entity == other.entity && methodValue == other.methodValue && urlValue == other.urlValue;
+    }
+
+    size_t toHash() const pure nothrow @nogc
+    {
+        return entity.toHash();
+    }
+
     /// A builder for `method` and `url`.
     static RequestBodyBuilder method(HttpMethod method, URI url) pure nothrow
     {
@@ -2595,10 +2629,10 @@ class ProblemDetail
     }
 
     /// The extension property `name`, or a null `Any`.
-    Any getProperty(string name) const @trusted
+    Any getProperty(string name)
     {
         if (auto value = name in propertyValues)
-            return cast(Any) *value;
+            return *value;
         return Any.init;
     }
 
@@ -2622,7 +2656,7 @@ class ProblemDetail
             && propertyNames == that.propertyNames;
     }
 
-    override size_t toHash() const nothrow @trusted
+    override size_t toHash() const nothrow
     {
         return cast(size_t) status ^ hashOf(detail) ^ hashOf(getTitle());
     }
@@ -2689,6 +2723,40 @@ package(flint) string simpleClassName(string fullyQualified) pure nothrow @nogc
         if (c == '.')
             return fullyQualified[i + 1 .. $];
     return fullyQualified;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// HttpMessage, HttpInputMessage, HttpOutputMessage, HttpRequest
+
+/// `HttpMessage`: headers.
+interface HttpMessage
+{
+    /// The headers.
+    HttpHeaders getHeaders();
+}
+
+/// `HttpInputMessage`: headers and a readable body.
+interface HttpInputMessage : HttpMessage
+{
+    /// The body bytes (Java returns an `InputStream`; the servlet bridge has the body in memory).
+    const(ubyte)[] getBody();
+}
+
+/// `HttpOutputMessage`: headers and a writable body.
+interface HttpOutputMessage : HttpMessage
+{
+    /// Appends `bytes` to the body (Java writes to `getBody()`, an `OutputStream`).
+    void writeBody(scope const(ubyte)[] bytes);
+}
+
+/// `HttpRequest`: a method and a URI.
+interface HttpRequest : HttpMessage
+{
+    /// The method.
+    HttpMethod getMethod();
+
+    /// The request URI.
+    URI getURI();
 }
 
 // ---------------------------------------------------------------------------------------------------------

@@ -77,37 +77,37 @@ interface ErrorResponse
     mixin template Defaults()
     {
         /// `HttpHeaders.EMPTY`.
-        HttpHeaders getHeaders()
+        imported!"flint.http".HttpHeaders getHeaders()
         {
-            return HttpHeaders.EMPTY();
+            return imported!"flint.http".HttpHeaders.EMPTY();
         }
 
         ///
         string getTypeMessageCode()
         {
-            return ErrorResponse.getDefaultTypeMessageCode(typeid(this));
+            return imported!"flint.web".ErrorResponse.getDefaultTypeMessageCode(typeid(this));
         }
 
         ///
         string getTitleMessageCode()
         {
-            return ErrorResponse.getDefaultTitleMessageCode(typeid(this));
+            return imported!"flint.web".ErrorResponse.getDefaultTitleMessageCode(typeid(this));
         }
 
         ///
         string getDetailMessageCode()
         {
-            return ErrorResponse.getDefaultDetailMessageCode(typeid(this), null);
+            return imported!"flint.web".ErrorResponse.getDefaultDetailMessageCode(typeid(this), null);
         }
 
         ///
-        Any[] getDetailMessageArguments()
+        imported!"flint.engine.aot.any".Any[] getDetailMessageArguments()
         {
             return null;
         }
 
         ///
-        ProblemDetail updateAndGetBody()
+        imported!"flint.http".ProblemDetail updateAndGetBody()
         {
             return getBody();
         }
