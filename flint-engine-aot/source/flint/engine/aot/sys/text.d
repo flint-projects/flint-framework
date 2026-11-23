@@ -6,8 +6,10 @@ module flint.engine.aot.sys.text;
 
 @safe:
 
-private extern (C) int snprintf(char* buffer, size_t size, scope const char* format, ...) nothrow @nogc @system;
-private extern (C) double strtod(scope const char* text, char** end) nothrow @nogc @system;
+// Declared pure, as druntime declares its C math: they touch only errno, and Flint never calls setlocale, so the
+// "C" locale they read never changes. std.conv's own conversions are pure, and these replace them.
+private extern (C) int snprintf(char* buffer, size_t size, scope const char* format, ...) pure nothrow @nogc @system;
+private extern (C) double strtod(scope const char* text, char** end) pure nothrow @nogc @system;
 
 /++
 `value` printed with C's `%g` into `buffer`; the number of characters written, or 0 if `buffer` is too small.
@@ -16,7 +18,7 @@ snprintf writes at most `buffer.length` bytes including the terminating NUL into
 for the call only; the format is a literal with one double conversion, matching the one vararg passed.
 +/
 // SAFETY: bounded by buffer.length, NUL included; literal format with exactly one double argument.
-@trusted size_t formatG(double value, scope char[] buffer) nothrow @nogc
+@trusted size_t formatG(double value, scope char[] buffer) pure nothrow @nogc
 {
     if (buffer.length == 0)
         return 0;
@@ -32,7 +34,7 @@ strtod only reads up to the NUL the precondition guarantees; `end` points into `
 the start is returned.
 +/
 // SAFETY: text is NUL-terminated (checked); strtod reads within it and end stays inside it.
-@trusted double readDouble(scope const(char)[] text, out size_t consumed) nothrow @nogc
+@trusted double readDouble(scope const(char)[] text, out size_t consumed) pure nothrow @nogc
 {
     if (text.length == 0 || text[$ - 1] != '\0')
         return double.nan;

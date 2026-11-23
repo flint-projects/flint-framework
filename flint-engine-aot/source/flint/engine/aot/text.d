@@ -87,10 +87,44 @@ bool parseLong(scope const(char)[] text, out long value) pure nothrow @nogc
     return true;
 }
 
+/// A parse result: whether the text was accepted, and the value.
+struct ParsedLong
+{
+    /// The text was a valid number.
+    bool ok;
+    /// The number, when ok.
+    long value;
+}
+
+/// ditto
+struct ParsedDouble
+{
+    /// The text was a valid number.
+    bool ok;
+    /// The number, when ok.
+    double value;
+}
+
+/// `parseLong` as a value, for call sites that would otherwise declare an `out` variable.
+ParsedLong tryParseLong(scope const(char)[] text) pure nothrow @nogc
+{
+    ParsedLong result;
+    result.ok = parseLong(text, result.value);
+    return result;
+}
+
+/// `parseDouble` as a value, for call sites that would otherwise declare an `out` variable.
+ParsedDouble tryParseDouble(scope const(char)[] text) pure nothrow
+{
+    ParsedDouble result;
+    result.ok = parseDouble(text, result.value);
+    return result;
+}
+
 /// Reads a whole floating-point number as `to!double` does: decimal with optional fraction, exponent and single
 /// underscores after digits, hexadecimal with a binary exponent, and `inf` and `nan` in any case. False where
 /// `to!double` throws, for malformed text or a finite number out of range.
-bool parseDouble(scope const(char)[] text, out double value) nothrow
+bool parseDouble(scope const(char)[] text, out double value) pure nothrow
 {
     size_t i;
     bool negative, plus;
@@ -228,7 +262,7 @@ private bool hexadecimal(scope const(char)[] text) pure nothrow @nogc
 }
 
 /// `value` as `to!string(double)` prints it: C's `%g`, six significant digits.
-string doubleText(double value) nothrow
+string doubleText(double value) pure nothrow
 {
     char[32] buffer;
     const length = formatG(value, buffer[]);
