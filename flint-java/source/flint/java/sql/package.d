@@ -19,6 +19,7 @@ module flint.java.sql;
 
 import flint.engine.aot.any : Any;
 import flint.java.lang : AutoCloseable, javaToString;
+import flint.java.util : Properties;
 
 @safe:
 
@@ -782,8 +783,8 @@ interface DatabaseMetaData : Wrapper
 interface Driver
 {
     /// A connection for `url`, or null when the URL belongs to another driver. `info` holds the connection
-    /// properties, such as `user` and `password` (R10: Java's `Properties`, as an associative array).
-    Connection connect(string url, string[string] info);
+    /// properties, such as `user` and `password`; it may be null.
+    Connection connect(string url, Properties info);
 
     /// Whether this driver opens connections for `url`.
     bool acceptsURL(string url);
@@ -862,22 +863,22 @@ struct DriverManager
     /// A connection from the first registered driver that accepts `url`.
     static Connection getConnection(string url)
     {
-        return getConnection(url, null);
+        return getConnection(url, cast(Properties) null);
     }
 
     /// A connection from the first registered driver that accepts `url`, as `user` with `password`.
     static Connection getConnection(string url, string user, string password)
     {
-        string[string] info;
+        auto info = new Properties;
         if (user !is null)
-            info["user"] = user;
+            info.setProperty("user", user);
         if (password !is null)
-            info["password"] = password;
+            info.setProperty("password", password);
         return getConnection(url, info);
     }
 
     /// A connection from the first registered driver that accepts `url`, with the connection properties `info`.
-    static Connection getConnection(string url, string[string] info)
+    static Connection getConnection(string url, Properties info)
     {
         if (url is null)
             throw new SQLException("The url cannot be null", "08001");

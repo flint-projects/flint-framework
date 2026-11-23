@@ -4,12 +4,13 @@
 // Modified by the Flint authors.
 // Also ported: DelegatingDataSourceTests.java.
 
-/// `DriverManagerDataSourceTests` and `DelegatingDataSourceTests`. Java's `Properties` are `string[string]`; the
-/// log-writer cases are dropped with `PrintWriter`, which `flint.javax.sql.DataSource` does not carry.
+/// `DriverManagerDataSourceTests` and `DelegatingDataSourceTests`. The log-writer cases are dropped with
+/// `PrintWriter`, which `flint.javax.sql.DataSource` does not carry.
 module flint.jdbc.datasources_test;
 
 import flint.java.lang : IllegalStateException;
 import flint.java.sql : Connection, Driver, DriverManager;
+import flint.java.util : Properties;
 import flint.javax.sql : DataSource;
 import flint.jdbc.datasource;
 import std.typecons : BlackHole;
@@ -18,6 +19,23 @@ import std.typecons : BlackHole;
 
 private final class FakeConnection : BlackHole!Connection
 {
+}
+
+/// Java's `new Properties()` with `setProperty` calls.
+private Properties properties(string[string] entries)
+{
+    auto props = new Properties;
+    foreach (key, value; entries)
+        props.setProperty(key, value);
+    return props;
+}
+
+private string[string] entries(Properties props)
+{
+    string[string] result;
+    foreach (name; props.stringPropertyNames().toArray())
+        result[name] = props.getProperty(name);
+    return result;
 }
 
 /// A `DriverManagerDataSource` that checks what it would pass to `DriverManager`.
@@ -34,10 +52,10 @@ private final class TestDriverManagerDataSource : DriverManagerDataSource
         this.connection = connection;
     }
 
-    protected override Connection getConnectionFromDriverManager(string url, string[string] props)
+    protected override Connection getConnectionFromDriverManager(string url, Properties props)
     {
         assert(url == expectedUrl);
-        assert(props == expectedProps, "connection properties");
+        assert(entries(props) == expectedProps, "connection properties");
         return connection;
     }
 }
@@ -61,7 +79,7 @@ unittest
     auto props = ["myProp": "myValue", "yourProp": "yourValue", "user": "uname", "password": "pwd"];
     auto ds = new TestDriverManagerDataSource("url", props.dup, connection);
     ds.setUrl("url");
-    ds.setConnectionProperties(props);
+    ds.setConnectionProperties(properties(props));
     assert(ds.getConnection() is connection);
     assert(ds.getUrl() == "url");
 }
@@ -79,12 +97,10 @@ unittest
     ds.setUrl("url");
     ds.setUsername("uname");
     ds.setPassword("pwd");
-    ds.setConnectionProperties([
-        "myProp": "myValue",
-        "yourProp": "yourValue",
-        "user": "uname2",
-        "password": "pwd2"
-    ]);
+    auto connProps = properties(["myProp": "myValue", "yourProp": "yourValue"]);
+    connProps.setProperty("user", "uname2");
+    connProps.setProperty("password", "pwd2");
+    ds.setConnectionProperties(connProps);
     assert(ds.getConnection() is connection);
     assert(ds.getUrl() == "url" && ds.getPassword() == "pwd" && ds.getUsername() == "uname");
 }

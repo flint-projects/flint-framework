@@ -25,6 +25,7 @@ import flint.engine.aot.objects : objectToString;
 import flint.engine.sql : Driver, EngineConnection = Connection, Pool, PoolOptions, Row,
     SqlFailure, SqlValue, ValueKind;
 import flint.java.sql;
+import flint.java.util : Properties;
 import flint.javax.sql : DataSource;
 
 @safe:
@@ -1897,11 +1898,15 @@ private EngineConnection acquireLease(ref Pool pool)
 /// The Flint JDBC driver, for `jdbc:sqlite:` and `jdbc:postgresql:` URLs.
 final class FlintDriver : Driver_
 {
-    override Connection connect(string url, string[string] info)
+    override Connection connect(string url, Properties info)
     {
         if (!acceptsURL(url))
             return null;
-        auto target = parseUrl(url, info);
+        string[string] settings;
+        if (info !is null)
+            foreach (name; info.stringPropertyNames().toArray())
+                settings[name] = info.getProperty(name);
+        auto target = parseUrl(url, settings);
         auto pool = openPool(target, 1, 30_000_000_000L);
         EngineConnection lease;
         try
@@ -1912,7 +1917,7 @@ final class FlintDriver : Driver_
             cast(void) pool.close(context);
             throw ex;
         }
-        auto connection = new FlintConnection(pool, lease, true, url, info.get("user", null));
+        auto connection = new FlintConnection(pool, lease, true, url, settings.get("user", null));
         // The engine opens the native session lazily; reach the server now, as JDBC's connect does.
         try
             connection.run("SELECT 1", "connect");

@@ -7,6 +7,7 @@ import flint.java.sql : BatchUpdateException, Connection, DatabaseMetaData, Driv
     Savepoint, SQLDataException, SQLException,
     SQLIntegrityConstraintViolationException, SQLNonTransientException, SQLSyntaxErrorException, SQLTimeoutException,
     SQLTransactionRollbackException, SQLTransientException, SQLWarning, Statement, Types, Wrapper;
+import flint.java.util : Properties;
 import flint.javax.sql : DataSource;
 
 @safe:
@@ -102,7 +103,7 @@ private abstract class FakeDriver : Driver
 {
     abstract string prefix();
 
-    Connection connect(string url, string[string] info)
+    Connection connect(string url, Properties info)
     {
         if (!acceptsURL(url))
             return null;
@@ -110,7 +111,8 @@ private abstract class FakeDriver : Driver
             throw new SQLException("refused", "28000");
         // Report the credentials the driver received through the exception, so no Connection is needed.
         if (url.length > prefix.length && url[prefix.length .. $] == "whoami")
-            throw new SQLException("user=" ~ info.get("user", "") ~ " password=" ~ info.get("password", ""));
+            throw new SQLException("user=" ~ info.getProperty("user",
+                    "") ~ " password=" ~ info.getProperty("password", ""));
         return null;
     }
 

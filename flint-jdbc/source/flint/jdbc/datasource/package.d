@@ -13,7 +13,7 @@ transaction, and `DataSourceTransactionManager`, the `PlatformTransactionManager
 (ADR-030).
 
 Transaction state lives in `TransactionSynchronizationManager`, which is per fiber, so each request handled on a
-reactor fiber sees only its own bound connection. Java's `Properties` are `string[string]`, as in
+reactor fiber sees only its own bound connection.
 `flint.java.sql.Driver.connect`. `DriverManagerDataSource.setDriverClassName` loads nothing, since drivers register
 when their module loads; Java's class loading is excluded as `jvm-runtime`.
 +/
@@ -28,6 +28,7 @@ import flint.java.lang : IllegalArgumentException, IllegalStateException, Runtim
     UnsupportedOperationException;
 import flint.java.sql : Connection, Driver, DriverManager, SQLException,
     SQLFeatureNotSupportedException, Savepoint, Statement;
+import flint.java.util : Properties;
 import flint.javax.sql : DataSource;
 import flint.jdbc : CannotGetJdbcConnectionException;
 import flint.slf4j : Logger, LoggerFactory;
@@ -1164,7 +1165,7 @@ abstract class AbstractDriverBasedDataSource : AbstractDataSource
     private string password;
     private string catalog;
     private string schema;
-    private string[string] connectionProperties;
+    private Properties connectionProperties;
 
     /// Set the JDBC URL to use for connecting through the `Driver`.
     void setUrl(string url)
@@ -1228,13 +1229,13 @@ abstract class AbstractDriverBasedDataSource : AbstractDataSource
 
     /// Specify arbitrary connection properties as key/value pairs, to be passed to the `Driver`. Can also contain
     /// "user" and "password" properties; explicit `username` and `password` override those.
-    void setConnectionProperties(string[string] connectionProperties)
+    void setConnectionProperties(Properties connectionProperties)
     {
         this.connectionProperties = connectionProperties;
     }
 
     /// Return the connection properties to be passed to the `Driver`, if any.
-    string[string] getConnectionProperties()
+    Properties getConnectionProperties()
     {
         return connectionProperties;
     }
@@ -1256,13 +1257,14 @@ abstract class AbstractDriverBasedDataSource : AbstractDataSource
     /// corresponding `Connection`.
     protected Connection getConnectionFromDriver(string username, string password)
     {
-        string[string] mergedProps;
-        foreach (key, value; getConnectionProperties())
-            mergedProps[key] = value;
+        auto mergedProps = new Properties;
+        if (auto connProps = getConnectionProperties())
+            foreach (name; connProps.stringPropertyNames().toArray())
+                mergedProps.setProperty(name, connProps.getProperty(name));
         if (username !is null)
-            mergedProps["user"] = username;
+            mergedProps.setProperty("user", username);
         if (password !is null)
-            mergedProps["password"] = password;
+            mergedProps.setProperty("password", password);
         auto con = getConnectionFromDriver(mergedProps);
         if (catalog !is null)
             con.setCatalog(catalog);
@@ -1272,7 +1274,7 @@ abstract class AbstractDriverBasedDataSource : AbstractDataSource
     }
 
     /// Obtain a `Connection` using the given properties.
-    protected abstract Connection getConnectionFromDriver(string[string] props);
+    protected abstract Connection getConnectionFromDriver(Properties props);
 }
 
 /++
@@ -1303,7 +1305,7 @@ class DriverManagerDataSource : AbstractDriverBasedDataSource
     }
 
     /// Create a new `DriverManagerDataSource` with the given JDBC URL and connection properties.
-    this(string url, string[string] conProps)
+    this(string url, Properties conProps)
     {
         this.url = url !is null ? trim(url) : null;
         connectionProperties = conProps;
@@ -1337,7 +1339,7 @@ class DriverManagerDataSource : AbstractDriverBasedDataSource
         return false;
     }
 
-    protected override Connection getConnectionFromDriver(string[string] props)
+    protected override Connection getConnectionFromDriver(Properties props)
     {
         const url = getUrl();
         if (url is null)
@@ -1348,7 +1350,7 @@ class DriverManagerDataSource : AbstractDriverBasedDataSource
     }
 
     /// Get a `Connection` from the `DriverManager`, using the given properties.
-    protected Connection getConnectionFromDriverManager(string url, string[string] props)
+    protected Connection getConnectionFromDriverManager(string url, Properties props)
     {
         return DriverManager.getConnection(url, props);
     }
@@ -1387,7 +1389,7 @@ class SimpleDriverDataSource : AbstractDriverBasedDataSource
     }
 
     /// Create a new `SimpleDriverDataSource` with the given standard `Driver` parameters.
-    this(Driver driver, string url, string[string] conProps)
+    this(Driver driver, string url, Properties conProps)
     {
         this.driver = driver;
         this.url = url !is null ? trim(url) : null;
@@ -1412,7 +1414,7 @@ class SimpleDriverDataSource : AbstractDriverBasedDataSource
         return driver;
     }
 
-    protected override Connection getConnectionFromDriver(string[string] props)
+    protected override Connection getConnectionFromDriver(Properties props)
     {
         auto driverToUse = getDriver();
         if (driverToUse is null)
