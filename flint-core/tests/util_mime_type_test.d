@@ -693,3 +693,18 @@ unittest
     const withCharset = MimeType(MimeTypeUtils.parseMimeType(input), StandardCharsets.UTF_8);
     assert(withCharset.toString() == "application/json;charset=UTF-8");
 }
+
+unittest
+{
+    // Flint: countMimeTypes and eachMimeType let a caller build its own result in one allocation.
+    const list = "text/plain;q=0.5, , application/json,*/*";
+    assert(MimeTypeUtils.countMimeTypes(list) == 3 && MimeTypeUtils.countMimeTypes("") == 0);
+    string[] seen;
+    MimeTypeUtils.eachMimeType(list, (MimeType type) { seen ~= type.toString(); });
+    assert(seen == ["text/plain;q=0.5", "application/json", "*/*"]);
+    assert(MimeTypeUtils.parseMimeTypes(list).length == 3);
+    const e = expectThrows!InvalidMimeTypeException(() {
+        MimeTypeUtils.eachMimeType("text/plain, /json", (MimeType) {});
+    });
+    assert(e !is null);
+}

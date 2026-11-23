@@ -5831,13 +5831,36 @@ struct MimeTypeUtils
     /// Parses a comma-separated list of MIME types.
     static MimeType[] parseMimeTypes(string mimeTypes) pure
     {
-        if (mimeTypes.length == 0)
+        // One allocation: count the tokens, then parse each into its slot (Accept headers, every request).
+        const count = countMimeTypes(mimeTypes);
+        if (count == 0)
             return null;
-        auto tokens = tokenizeList(mimeTypes);
-        auto result = new MimeType[tokens.length];
-        foreach (i, token; tokens)
-            result[i] = parseMimeType(token);
+        auto result = new MimeType[count];
+        size_t i;
+        string token;
+        for (size_t at; nextToken(mimeTypes, at, token);)
+            result[i++] = parseMimeType(token);
         return result;
+    }
+
+    /// How many MIME types the comma-separated list `mimeTypes` holds (its non-blank tokens), for callers that
+    /// size their own result before `eachMimeType`.
+    package(flint) static size_t countMimeTypes(string mimeTypes) pure nothrow @nogc
+    {
+        size_t count;
+        string token;
+        for (size_t at; nextToken(mimeTypes, at, token);)
+            count++;
+        return count;
+    }
+
+    /// Parse each MIME type of the comma-separated list `mimeTypes`, in order, into `sink`, allocating nothing
+    /// unless a type has parameters. Throws `InvalidMimeTypeException` as `parseMimeType` does.
+    package(flint) static void eachMimeType(string mimeTypes, scope void delegate(MimeType) pure @safe sink) pure
+    {
+        string token;
+        for (size_t at; nextToken(mimeTypes, at, token);)
+            sink(parseMimeType(token));
     }
 
     /// Splits a comma-separated list, honouring quoted strings.
