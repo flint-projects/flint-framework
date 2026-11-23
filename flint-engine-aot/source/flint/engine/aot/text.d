@@ -354,7 +354,7 @@ unittest
 unittest
 {
     import std.conv : to;
-    import std.math : isNaN;
+    import std.math : isNaN, nextDown, nextUp;
 
     static struct Parsed
     {
@@ -376,8 +376,14 @@ unittest
         "_1", "1__0", "1_", "1._5", "1e_5", "0012", "1.5e", "e5", ".", "1.5E+3", "1.5e-3",
         "4.9e-324", "123456789012345678901234567890", "2.2250738585072014e-308"
     ];
+    // Phobos is the oracle only where `real` is wider than `double` (x86's 80 bits). Where `real` is `double`
+    // (AArch64), `to!double` range-errors on an underflow and can be one ulp off, so values are compared within an
+    // ulp there, and the underflow is pinned below.
+    enum wideReal = real.mant_dig > double.mant_dig;
     foreach (text; texts)
     {
+        if (text == "1e-400")
+            continue;
         bool expected = true;
         double reference;
         try
@@ -386,9 +392,19 @@ unittest
             expected = false;
         const result = parsed(text);
         assert(result.ok == expected, text);
-        if (expected)
-            assert(reference.isNaN ? result.value.isNaN : result.value is reference, text);
+        if (!expected)
+            continue;
+        if (reference.isNaN)
+            assert(result.value.isNaN, text);
+        else if (wideReal)
+            assert(result.value is reference, text);
+        else
+            assert(result.value is reference || result.value is nextUp(reference)
+                    || result.value is nextDown(reference), text);
     }
+    // An underflow rounds to zero, as Java's Double.parseDouble and x86's Phobos do.
+    const underflow = parsed("1e-400");
+    assert(underflow.ok && underflow.value == 0.0);
 }
 
 unittest
