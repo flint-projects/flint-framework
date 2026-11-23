@@ -7,7 +7,9 @@ importPaths "source"
 dflags "-preview=dip1000"
 dependency "flint:core" version="*"
 dependency "flint:engine-aot" version="*"
+dependency "flint:engine-reactor" version="*"
 dependency "flint:java" version="*"
+dependency "flint:slf4j-api" version="*"
 
 configuration "library" {
     targetType "library"
