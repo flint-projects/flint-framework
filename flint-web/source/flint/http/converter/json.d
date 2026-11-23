@@ -94,13 +94,14 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
 
     protected override void writeInternal(Any value, HttpOutputMessage outputMessage)
     {
-        string json;
+        // The mapper's own buffer, written as it is: writeValueAsString would copy it into a string first.
+        const(ubyte)[] json;
         try
             json = value.holds!ProblemDetail
-                ? problemDetailJson(value.get!ProblemDetail) : mapper.writeValueAsString(value);
+                ? cast(const(ubyte)[]) problemDetailJson(value.get!ProblemDetail) : mapper.writeValueAsBytes(value);
         catch (Exception e)
             throw new HttpMessageNotWritableException("Could not write JSON: " ~ e.msg, e);
-        outputMessage.writeBody(cast(const(ubyte)[]) json);
+        outputMessage.writeBody(json);
     }
 
     /// `ProblemDetailJacksonMixin`: `@JsonInclude(NON_EMPTY)`, Jackson 3's name order for the bean properties
