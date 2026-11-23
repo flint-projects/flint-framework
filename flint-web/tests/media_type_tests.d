@@ -31,7 +31,7 @@ private void shuffle(T)(T[] values, ref uint seed)
     {
         seed = seed * 1_103_515_245 + 12_345;
         const j = (seed >> 16) % i;
-        auto tmp = values[i - 1];
+        const tmp = values[i - 1];
         values[i - 1] = values[j];
         values[j] = tmp;
     }
@@ -97,7 +97,7 @@ unittest
 @("MediaTypeTests.parseMediaTypes")
 unittest
 {
-    auto mediaTypes = MediaType.parseMediaTypes("text/plain; q=0.5, text/html, text/x-dvi; q=0.8, text/x-c");
+    const mediaTypes = MediaType.parseMediaTypes("text/plain; q=0.5, text/html, text/x-dvi; q=0.8, text/x-c");
     assert(mediaTypes.length == 4, "Invalid amount of media types");
     assert(MediaType.parseMediaTypes("").length == 0, "Invalid amount of media types");
 }
@@ -115,9 +115,9 @@ unittest
 
     MediaType audioBasic = MediaType("audio", "basic");
     MediaType audio = MediaType("audio");
-    MediaType audioWave = MediaType("audio", "wave");
+    const MediaType audioWave = MediaType("audio", "wave");
     MediaType audioBasicLevel = MediaType("audio", "basic", [MimeTypeParameter("level", "1")]);
-    MediaType audioBasic07 = MediaType("audio", "basic", 0.7);
+    const MediaType audioBasic07 = MediaType("audio", "basic", 0.7);
 
     assert(audioBasic.compareTo(audioBasic) == 0, "Invalid comparison result");
     assert(audio.compareTo(audio) == 0, "Invalid comparison result");
@@ -225,14 +225,14 @@ unittest
 @("MediaTypeTests.sortBySpecificity")
 unittest
 {
-    MediaType audioBasic = MediaType("audio", "basic");
-    MediaType audio = MediaType("audio");
-    MediaType audio03 = MediaType("audio", "*", 0.3);
-    MediaType audio07 = MediaType("audio", "*", 0.7);
-    MediaType audioBasicLevel = MediaType("audio", "basic", [MimeTypeParameter("level", "1")]);
-    MediaType all = MediaType.ALL;
+    const MediaType audioBasic = MediaType("audio", "basic");
+    const MediaType audio = MediaType("audio");
+    const MediaType audio03 = MediaType("audio", "*", 0.3);
+    const MediaType audio07 = MediaType("audio", "*", 0.7);
+    const MediaType audioBasicLevel = MediaType("audio", "basic", [MimeTypeParameter("level", "1")]);
+    const MediaType all = MediaType.ALL;
 
-    MediaType[] expected = [audioBasicLevel, audioBasic, audio, all, audio07, audio03];
+    const MediaType[] expected = [audioBasicLevel, audioBasic, audio, all, audio07, audio03];
     MediaType[] result = expected.dup;
     uint seed = 7;
     foreach (i; 0 .. 10)

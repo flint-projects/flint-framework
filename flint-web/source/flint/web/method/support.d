@@ -303,7 +303,7 @@ class InvocableHandlerMethod : HandlerMethod
 
     private static bool isInstance(Any value, string typeName)
     {
-        auto object = value.asObject();
+        const object = value.asObject();
         if (object is null)
             return false;
         for (auto info = typeid(object); info !is null; info = info.base)

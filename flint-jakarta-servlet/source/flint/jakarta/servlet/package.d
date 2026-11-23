@@ -24,12 +24,12 @@ class ServletException : Exception
 {
     /// With a message and an optional root cause.
     // dfmt off
-    this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line =
-            __LINE__) pure nothrow @nogc
-          // dfmt on
+    this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line = __LINE__)
+            pure nothrow @nogc
     {
         super(message, file, line, rootCause);
     }
+    // dfmt on
 
     /// With a root cause only; the message is the cause's text.
     this(Throwable rootCause, string file = __FILE__, size_t line = __LINE__) pure nothrow

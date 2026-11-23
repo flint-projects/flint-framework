@@ -1938,9 +1938,9 @@ struct HttpHeaders
         static immutable string[12] months = [
             "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
         ];
-        long seconds = millis >= 0 ? millis / 1000 : -((-millis + 999) / 1000);
-        long dayNumber = seconds >= 0 ? seconds / 86_400 : -((-seconds + 86_399) / 86_400);
-        long secondOfDay = seconds - dayNumber * 86_400;
+        const long seconds = millis >= 0 ? millis / 1000 : -((-millis + 999) / 1000);
+        const long dayNumber = seconds >= 0 ? seconds / 86_400 : -((-seconds + 86_399) / 86_400);
+        const long secondOfDay = seconds - dayNumber * 86_400;
         int year, month, day;
         civilFromDays(dayNumber, year, month, day);
         const weekday = cast(size_t)(((dayNumber % 7) + 7) % 7);
@@ -2928,7 +2928,7 @@ private string[] tokenizeQuoted(string str) pure nothrow
             else
                 builder ~= ch;
         }
-        else if (ch == '\\' && quoted && i < str.length - 1)
+        else if (ch == '\\' && quoted && i + 1 < str.length)
             builder ~= str[++i];
         else if (ch == ',' && !quoted)
         {
@@ -3001,7 +3001,7 @@ private bool parseHttpDate(string value, out long millis) pure nothrow
     {
         if (text.length == 0)
             return false;
-        bool negative = text[0] == '-';
+        const bool negative = text[0] == '-';
         foreach (c; text[negative ? 1 : 0 .. $])
         {
             if (c < '0' || c > '9')

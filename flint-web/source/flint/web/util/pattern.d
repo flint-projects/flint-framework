@@ -319,8 +319,8 @@ final class PathPatternParser
         }
         // Separators count one each in the normalized length.
         string[] segments = splitSegments(pathPattern[start .. $]);
-        pattern.normalizedLength = cast(int)(pattern.leadingSeparator
-                ? 1 : 0) + cast(int)(segments.length > 0 ? segments.length - 1 : 0);
+        const separators = segments.length > 0 ? cast(int) segments.length - 1 : 0;
+        pattern.normalizedLength = (pattern.leadingSeparator ? 1 : 0) + separators;
         foreach (index, segment; segments)
         {
             const last = index + 1 == segments.length;

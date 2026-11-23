@@ -855,7 +855,7 @@ package(flint.engine.servlet) Locale[] acceptLanguages(string[] values)
     // A stable insertion sort by descending quality; header lists are short.
     foreach (i; 1 .. ranked.length)
     {
-        auto item = ranked[i];
+        const item = ranked[i];
         size_t j = i;
         while (j > 0 && ranked[j - 1].quality < item.quality)
         {
@@ -903,6 +903,7 @@ unittest
     ]);
     assert(locales.length == 5);
     assert(locales[0].toLanguageTag() == "fr-CH" && locales[1].toLanguageTag() == "fr");
-    assert(locales[2].toLanguageTag() == "it" && locales[3].toLanguageTag() == "en" && locales[4].toLanguageTag() == "de");
+    assert(locales[2].toLanguageTag() == "it" && locales[3].toLanguageTag() == "en");
+    assert(locales[4].toLanguageTag() == "de");
     assert(acceptLanguages(["en;q=x"]).length == 0 && acceptLanguages(null).length == 0);
 }

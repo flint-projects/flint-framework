@@ -465,7 +465,7 @@ unittest
 unittest
 {
     auto headers1 = HttpHeaders.create();
-    auto headers2 = HttpHeaders(headers1);
+    const headers2 = HttpHeaders(headers1);
     headers1.set("foo", "bar");
     assert(headers1 == headers2);
     assert(headers2 == headers1);

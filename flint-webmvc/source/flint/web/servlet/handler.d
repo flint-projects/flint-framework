@@ -74,10 +74,10 @@ final class MappedInterceptor : HandlerInterceptor
     // dfmt off
     override void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
             Exception ex)
-     // dfmt on
     {
         interceptor.afterCompletion(request, response, handler, ex);
     }
+    // dfmt on
 }
 
 /// The application-relative, still-encoded request path (Spring 6's parsed `RequestPath.pathWithinApplication()`).
@@ -273,7 +273,6 @@ abstract class AbstractHandlerExceptionResolver : HandlerExceptionResolver
     // dfmt off
     ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler,
             Exception ex)
-     // dfmt on
     {
         if (!shouldApplyTo(request, handler))
             return null;
@@ -281,6 +280,7 @@ abstract class AbstractHandlerExceptionResolver : HandlerExceptionResolver
             response.addHeader("Cache-Control", "no-store");
         return doResolveException(request, response, handler, ex);
     }
+    // dfmt on
 
     /// Whether this resolver applies to `handler`.
     protected bool shouldApplyTo(HttpServletRequest request, Object handler)
@@ -313,11 +313,11 @@ class HandlerExceptionResolverComposite : HandlerExceptionResolver
     // dfmt off
     ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler,
             Exception ex)
-     // dfmt on
     {
         foreach (resolver; resolvers)
             if (auto mav = resolver.resolveException(request, response, handler, ex))
                 return mav;
         return null;
     }
+    // dfmt on
 }

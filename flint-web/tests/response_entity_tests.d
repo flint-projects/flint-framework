@@ -113,7 +113,7 @@ unittest
 unittest
 {
     URI location = URI.create("location");
-    long contentLength = 67_890;
+    const long contentLength = 67_890;
     MediaType contentType = MediaType.TEXT_PLAIN;
     auto responseEntity = ResponseEntity.ok().allow(HttpMethod.GET).lastModified(12_345L)
         .location(location).contentLength(contentLength).contentType(contentType).headers((HttpHeaders headers) {

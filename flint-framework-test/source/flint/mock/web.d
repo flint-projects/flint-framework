@@ -1104,7 +1104,7 @@ private Locale[] acceptLanguageLocales(string value)
     }
     foreach (i; 1 .. ranked.length)
     {
-        auto item = ranked[i];
+        const item = ranked[i];
         size_t j = i;
         while (j > 0 && ranked[j - 1].weight < item.weight)
         {

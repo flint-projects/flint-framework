@@ -571,12 +571,15 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     void registerMapping(RequestMappingInfo info, HandlerMethod handlerMethod)
     {
         foreach (existing; registrations)
-            if (existing.info.toString() == info.toString() && existing.handlerMethod !is handlerMethod)// dfmt off
-                throw new IllegalStateException("Ambiguous mapping. Cannot map '" ~ handlerMethod.getBeanName()
-                        ~ "' method \n" ~ handlerMethod.toString() ~ "\nto " ~ info
-                    // dfmt on
-                    .toString() ~ ": There is already '" ~ existing.handlerMethod.getBeanName()
-                    ~ "' bean method\n" ~ existing.handlerMethod.toString() ~ " mapped.");
+        {
+            if (existing.info.toString() != info.toString() || existing.handlerMethod is handlerMethod)
+                continue;
+            string message = "Ambiguous mapping. Cannot map '" ~ handlerMethod.getBeanName() ~ "' method \n";
+            message ~= handlerMethod.toString() ~ "\nto " ~ info.toString() ~ ": There is already '";
+            message ~= existing.handlerMethod.getBeanName() ~ "' bean method\n";
+            message ~= existing.handlerMethod.toString() ~ " mapped.";
+            throw new IllegalStateException(message);
+        }
         registrations ~= Registration(info, handlerMethod);
     }
 

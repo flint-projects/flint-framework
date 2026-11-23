@@ -368,9 +368,10 @@ final class CorsConfiguration
         if (other is null)
             return this;
         auto config = new CorsConfiguration(this);
-        bool originsDefault = false;
-        const origins = combineLists(getAllowedOrigins(), originsPermitDefault,
-                other.getAllowedOrigins(), other.originsPermitDefault, originsDefault);
+        const combinedOrigins = combineLists(getAllowedOrigins(), originsPermitDefault,
+                other.getAllowedOrigins(), other.originsPermitDefault);
+        const origins = combinedOrigins.values;
+        const originsDefault = combinedOrigins.isDefault;
         const patterns = combinePatterns(other);
         if (originsDefault && patterns.length != 0)
         {
@@ -388,13 +389,12 @@ final class CorsConfiguration
         config.allowedOriginPatterns = patterns.dup;
         config.hasAllowedOriginPatterns = true;
         // The setters copy, so a combined method or header list is never the permit default by identity.
-        bool unused;
         config.setAllowedMethods(nonNull(combineLists(getAllowedMethods(), methodsPermitDefault,
-                other.getAllowedMethods(), other.methodsPermitDefault, unused)));
+                other.getAllowedMethods(), other.methodsPermitDefault).values));
         config.setAllowedHeaders(nonNull(combineLists(getAllowedHeaders(), headersPermitDefault,
-                other.getAllowedHeaders(), other.headersPermitDefault, unused)));
+                other.getAllowedHeaders(), other.headersPermitDefault).values));
         config.setExposedHeaders(nonNull(combineLists(getExposedHeaders(), false,
-                other.getExposedHeaders(), false, unused)));
+                other.getExposedHeaders(), false).values));
         if (!other.allowCredentials.isNull)
             config.allowCredentials = other.allowCredentials;
         if (!other.allowPrivateNetwork.isNull)
@@ -404,29 +404,25 @@ final class CorsConfiguration
         return config;
     }
 
-    /// Spring's private `combine(List, List)`. `isDefault` reports that the result is a permit-default list.
-    private static const(string)[] combineLists(const(string)[] source, bool sourceDefault,
-            const(string)[] other, bool otherDefault, out bool isDefault) pure nothrow
+    /// A combined list, and whether it is a permit-default list (Spring compares those by identity).
+    private static struct Combined
+    {
+        const(string)[] values;
+        bool isDefault;
+    }
+
+    /// Spring's private `combine(List, List)`.
+    private static Combined combineLists(const(string)[] source, bool sourceDefault,
+            const(string)[] other, bool otherDefault) pure nothrow
     {
         if (other is null)
-        {
-            isDefault = sourceDefault;
-            return source !is null ? source : emptyList;
-        }
-        if (source is null)
-        {
-            isDefault = otherDefault;
-            return other;
-        }
-        if (sourceDefault)
-        {
-            isDefault = otherDefault;
-            return other;
-        }
+            return Combined(source !is null ? source : emptyList, sourceDefault);
+        if (source is null || sourceDefault)
+            return Combined(other, otherDefault);
         if (otherDefault)
-            return source;
+            return Combined(source, false);
         if (containsAll(source) || containsAll(other))
-            return [ALL];
+            return Combined([ALL], false);
         string[] combined;
         foreach (value; source ~ other)
         {
@@ -436,7 +432,7 @@ final class CorsConfiguration
             if (!seen)
                 combined ~= value;
         }
-        return combined;
+        return Combined(combined, false);
     }
 
     /// Spring's `combinePatterns`: patterns join without duplicates, and `*` wins.
@@ -613,11 +609,17 @@ private struct OriginPattern
                 acceptable = rest.length == 0 || (rest.length > 1 && rest[0] == ':' && allDigits(rest[1 .. $]));
             else
                 foreach (port; ports)
-                    acceptable = acceptable || (rest.length == port.length + 1 && rest[0] == ':' && rest[1 .. $] == port);
+                    acceptable = acceptable || isPort(rest, port);
             if (acceptable && wildcard(base, origin[0 .. cut]))
                 return true;
         }
         return false;
+    }
+
+    /// Whether `rest` is `:` followed by exactly `port`.
+    private static bool isPort(scope const(char)[] rest, scope const(char)[] port) pure nothrow @nogc
+    {
+        return rest.length == port.length + 1 && rest[0] == ':' && rest[1 .. $] == port;
     }
 
     private static bool allDigits(scope const(char)[] text) pure nothrow @nogc

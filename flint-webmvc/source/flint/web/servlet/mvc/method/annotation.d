@@ -852,7 +852,9 @@ struct ControllerAdviceBean
     /// Whether the advice applies to a controller of `beanType` carrying `typeAnnotations` (Spring's
     /// `HandlerTypePredicate`: a name prefix of a base package, an assignable type, or a class annotation).
     /// Assignability compares the exact type until descriptors carry supertypes.
-    bool isApplicableToBeanType(string beanType, scope const(MergedAnnotation)[] typeAnnotations = null) const pure nothrow @nogc
+    // dfmt off
+    bool isApplicableToBeanType(string beanType, scope const(MergedAnnotation)[] typeAnnotations = null) const
+            pure nothrow @nogc
     {
         if (basePackages.length == 0 && assignableTypes.length == 0 && annotations.length == 0)
             return true;
@@ -868,6 +870,7 @@ struct ControllerAdviceBean
                     return true;
         return false;
     }
+    // dfmt on
 }
 
 /// `ExceptionHandlerExceptionResolver`: invokes `@ExceptionHandler` methods of the controller, then of advice.

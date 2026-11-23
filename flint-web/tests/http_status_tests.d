@@ -130,7 +130,7 @@ unittest
 {
     foreach (status; HttpStatus.values())
     {
-        HttpStatus.Series expectedSeries = HttpStatus.Series.valueOf(status.value());
+        const HttpStatus.Series expectedSeries = HttpStatus.Series.valueOf(status.value());
         assert(status.series() == expectedSeries);
     }
 }
@@ -152,7 +152,7 @@ unittest
 unittest
 {
     HttpMethod[] values = HttpMethod.values();
-    HttpMethod[] expected = [
+    const HttpMethod[] expected = [
         HttpMethod.GET, HttpMethod.HEAD, HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH,
         HttpMethod.DELETE, HttpMethod.OPTIONS, HttpMethod.TRACE, HttpMethod.QUERY
     ];
@@ -173,8 +173,8 @@ unittest
     assert(get == HttpMethod.GET && get.name() == "GET");
     // Java's isNotSameAs on two unknown methods is reference identity, which a value struct does not
     // have (R11); equality is what remains observable.
-    HttpMethod foo = HttpMethod.valueOf("foo");
-    HttpMethod other = HttpMethod.valueOf("foo");
+    const HttpMethod foo = HttpMethod.valueOf("foo");
+    const HttpMethod other = HttpMethod.valueOf("foo");
     assert(foo == other);
 }
 

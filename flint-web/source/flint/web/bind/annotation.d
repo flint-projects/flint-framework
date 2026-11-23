@@ -351,54 +351,73 @@ private mixin template AdviceAttributes(bool composed)
     }
 
     /// Every attribute by name.
+    // dfmt off
     static typeof(this) opCall(string[] value = null, string name = "", string[] basePackages = null,
-            // dfmt off
-            ClassRef[] basePackageClasses = null, ClassRef[] assignableTypes = null, ClassRef[] annotations =
-                    null) pure nothrow
-            // dfmt on
-            {
-        typeof(this) result; result.name = name; result.value = value; result.basePackages = basePackages;
-            result.basePackageClasses = basePackageClasses; result.assignableTypes = assignableTypes; result
-                .annotations = annotations; return result;}
+            ClassRef[] basePackageClasses = null, ClassRef[] assignableTypes = null, ClassRef[] annotations = null)
+            pure nothrow
+    {
+        typeof(this) result;
+        result.name = name;
+        result.value = value;
+        result.basePackages = basePackages;
+        result.basePackageClasses = basePackageClasses;
+        result.assignableTypes = assignableTypes;
+        result.annotations = annotations;
+        return result;
+    }
+    // dfmt on
+}
+
+/// `@ControllerAdvice`: `@ExceptionHandler` methods shared across controllers.
+@Component struct ControllerAdvice
+{
+    mixin AdviceAttributes!false;
+}
+
+/// `@ControllerAdvice` with `@ResponseBody`.
+@ControllerAdvice @ResponseBody struct RestControllerAdvice
+{
+    mixin AdviceAttributes!true;
+}
+
+/// `@CrossOrigin`: CORS for a controller class or handler method.
+struct CrossOrigin
+{
+    @AliasFor("origins") string[] value; ///
+    @AliasFor("value") string[] origins; ///
+    string[] originPatterns; ///
+    string[] allowedHeaders; ///
+    string[] exposedHeaders; ///
+    RequestMethod[] methods; ///
+    string allowCredentials = ""; ///
+    string allowPrivateNetwork = ""; ///
+    long maxAge = -1; ///
+
+    /// `@CrossOrigin("https://example.com")`.
+    static typeof(this) opCall(string value) pure nothrow
+    {
+        typeof(this) result;
+        result.value = [value];
+        return result;
     }
 
-    /// `@ControllerAdvice`: `@ExceptionHandler` methods shared across controllers.
-    @Component struct ControllerAdvice
+    /// Every attribute by name.
+    // dfmt off
+    static typeof(this) opCall(string[] value = null, string[] origins = null, string[] originPatterns = null,
+            string[] allowedHeaders = null, string[] exposedHeaders = null, RequestMethod[] methods = null,
+            string allowCredentials = "", string allowPrivateNetwork = "", long maxAge = -1) pure nothrow
     {
-        mixin AdviceAttributes!false;}
-
-        /// `@ControllerAdvice` with `@ResponseBody`.
-        @ControllerAdvice @ResponseBody struct RestControllerAdvice
-        {
-            mixin AdviceAttributes!true;}
-
-            /// `@CrossOrigin`: CORS for a controller class or handler method.
-            struct CrossOrigin
-            {
-                @AliasFor("origins") string[] value;  ///
-                @AliasFor("value") string[] origins;  ///
-                string[] originPatterns;  ///
-                string[] allowedHeaders;  ///
-                string[] exposedHeaders;  ///
-                RequestMethod[] methods;  ///
-                string allowCredentials = "";  ///
-                string allowPrivateNetwork = "";  ///
-                long maxAge = -1;  ///
-
-                /// `@CrossOrigin("https://example.com")`.
-                static typeof(this) opCall(string value) pure nothrow
-                {
-                    typeof(this) result; result.value = [value]; return result;}
-
-                    /// Every attribute by name.
-                    static typeof(this) opCall(string[] value = null, string[] origins = null,
-                            string[] originPatterns = null, string[] allowedHeaders = null, string[] exposedHeaders = null,
-                            RequestMethod[] methods = null,
-                            string allowCredentials = "", string allowPrivateNetwork = "", long maxAge = -1) pure nothrow
-                    {
-                        typeof(this) result; result.value = value; result.origins = origins; result.originPatterns
-                            = originPatterns; result.allowedHeaders = allowedHeaders; result.exposedHeaders
-                            = exposedHeaders; result.methods = methods; result.allowCredentials = allowCredentials;
-                        result.allowPrivateNetwork = allowPrivateNetwork; result.maxAge = maxAge; return result;
-                    }
-                }
+        typeof(this) result;
+        result.value = value;
+        result.origins = origins;
+        result.originPatterns = originPatterns;
+        result.allowedHeaders = allowedHeaders;
+        result.exposedHeaders = exposedHeaders;
+        result.methods = methods;
+        result.allowCredentials = allowCredentials;
+        result.allowPrivateNetwork = allowPrivateNetwork;
+        result.maxAge = maxAge;
+        return result;
+    }
+    // dfmt on
+}
