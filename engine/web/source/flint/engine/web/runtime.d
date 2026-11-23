@@ -1063,7 +1063,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         if (status < 200 || status > 999)
             return Error(Status.invalidArgument, "invalid fiber HTTP response status");
         const head = fiberHead(connection, status, contentLength);
-        ubyte[ioBytes] header;
+        ubyte[ioBytes] header = void; // only the written prefix is sent
         const count = writeFiberHeader(header[], status, fields, head.framing, head.length,
                 connection.parser.versionMinor, head.persistence);
         if (count == 0)
@@ -1112,7 +1112,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         if (chunked && bounded <= 12)
             return Error(Status.resourceExhausted, "HTTP/1 write queue cannot carry chunk framing");
         const capacity = chunked ? bounded - 12 : bounded;
-        ubyte[ioBytes] frame;
+        ubyte[ioBytes] frame = void; // only the written prefix is sent
         size_t first;
         while (first < payload.length)
         {
@@ -1159,7 +1159,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         const head = fiberHead(connection, status, chunked ? unknownLength : cast(long) payload.length);
         // A status without a body (204, 304) drops it, as a container does; 205 sends Content-Length: 0.
         const sent = head.framing == FiberFraming.none || status == 205 ? payload[0 .. 0] : payload;
-        ubyte[ioBytes] frame;
+        ubyte[ioBytes] frame = void; // only the written prefix is sent
         const count = writeFiberHeader(frame[], status, fields, head.framing, head.length,
                 connection.parser.versionMinor, head.persistence);
         if (count == 0)

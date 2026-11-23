@@ -256,8 +256,20 @@ final class RequestMappingInfo
     package(flint) PathPattern[] matchPatterns(HttpServletRequest request)
     {
         const path = parsedLookupPath(request);
+        // Most mappings have one pattern: when exactly one matches, its slice of `patterns` is the result, read
+        // only, with no allocation.
+        size_t first = patterns.length, count;
+        foreach (index, p; patterns)
+            if (p.matches(path))
+            {
+                if (count++ == 0)
+                    first = index;
+            }
+        if (count <= 1)
+            return count == 0 ? null : patterns[first .. first + 1];
         PathPattern[] matched;
-        foreach (p; patterns)
+        matched.reserve(count);
+        foreach (p; patterns[first .. $])
             if (p.matches(path))
                 matched ~= p;
         // Sort by specificity (Spring's PathPatternsRequestCondition keeps a sorted set).
@@ -663,16 +675,37 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
             HandlerMethod handlerMethod;
         }
 
+        // Usually one mapping matches: the first match stays on the stack, and only a second allocates.
+        Match single;
         Match[] matches;
+        size_t found;
+        void add(RequestMappingInfo matched, HandlerMethod handlerMethod)
+        {
+            if (found++ == 0)
+                single = Match(matched, handlerMethod);
+            else
+            {
+                if (matches.length == 0)
+                    matches ~= single;
+                matches ~= Match(matched, handlerMethod);
+            }
+        }
         // The mappings with this exact path first (MappingRegistry.getMappingsByDirectPath), then every mapping.
         if (auto direct = lookupPath in directPathRegistrations)
             foreach (index; *direct)
                 if (auto matched = registrations[index].info.getMatchingCondition(request))
-                    matches ~= Match(matched, registrations[index].handlerMethod);
-        if (matches.length == 0)
+                    add(matched, registrations[index].handlerMethod);
+        if (found == 0)
             foreach (r; registrations)
                 if (auto matched = r.info.getMatchingCondition(request))
-                    matches ~= Match(matched, r.handlerMethod);
+                    add(matched, r.handlerMethod);
+        if (found == 1)
+        {
+            request.setAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE,
+                    Any.of(cast(Object) single.handlerMethod));
+            handleMatch(single.info, lookupPath, request);
+            return single.handlerMethod;
+        }
         if (matches.length == 0)
         {
             RequestMappingInfo[] infos;

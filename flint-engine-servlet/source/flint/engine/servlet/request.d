@@ -28,6 +28,12 @@ package(flint.engine.servlet) interface RequestHost
     RequestDispatcher dispatcher(string path);
 }
 
+private struct Attribute
+{
+    string name;
+    Any value;
+}
+
 /// The request a servlet sees for one exchange on the servlet engine.
 final class ServletEngineRequest : HttpServletRequest
 {
@@ -41,10 +47,12 @@ final class ServletEngineRequest : HttpServletRequest
     private string[] names;
     private string[] values;
     private immutable(ubyte)[] content;
-    private string requestId;
+    private ulong requestNumber;
     private DispatcherType dispatcherType = DispatcherType.REQUEST;
-    private Any[string] attributes;
-    private string[] attributeOrder;
+    // A request holds a handful of attributes: slots in insertion order (getAttributeNames' order) cost one
+    // allocation per request where an AA and a name list cost several.
+    private Attribute[] attributeSlots;
+    private size_t attributeCount;
     private string characterEncoding;
     private string[][string] parameters;
     private string[] parameterOrder;
@@ -53,7 +61,7 @@ final class ServletEngineRequest : HttpServletRequest
 
     package(flint.engine.servlet) this(RequestHost host, string method, string requestURI, string queryString,
             string protocol, string contextPath, string[] names, string[] values,
-            immutable(ubyte)[] content, string requestId)
+            immutable(ubyte)[] content, ulong requestNumber)
     {
         this.host = host;
         this.method = method;
@@ -65,7 +73,7 @@ final class ServletEngineRequest : HttpServletRequest
         this.names = names;
         this.values = values;
         this.content = content;
-        this.requestId = requestId;
+        this.requestNumber = requestNumber;
     }
 
     /// Change the path the request reports, as a forward or error dispatch does; returns the previous state.
@@ -92,14 +100,24 @@ final class ServletEngineRequest : HttpServletRequest
 
     Any getAttribute(string name)
     {
-        if (auto value = name in attributes)
-            return *value;
-        return Any.init;
+        const index = attributeIndex(name);
+        return index < attributeCount ? attributeSlots[index].value : Any.init;
     }
 
     string[] getAttributeNames()
     {
-        return attributeOrder.dup;
+        auto names = new string[attributeCount];
+        foreach (index, ref attribute; attributeSlots[0 .. attributeCount])
+            names[index] = attribute.name;
+        return names;
+    }
+
+    private size_t attributeIndex(scope const(char)[] name) const pure nothrow @nogc
+    {
+        foreach (index, ref attribute; attributeSlots[0 .. attributeCount])
+            if (attribute.name.length == name.length && (attribute.name.ptr is name.ptr || attribute.name == name))
+                return index;
+        return attributeCount;
     }
 
     string getCharacterEncoding()
@@ -250,25 +268,26 @@ final class ServletEngineRequest : HttpServletRequest
             removeAttribute(name);
             return;
         }
-        if ((name in attributes) is null)
-            attributeOrder ~= name;
-        attributes[name] = o;
+        const index = attributeIndex(name);
+        if (index < attributeCount)
+        {
+            attributeSlots[index].value = o;
+            return;
+        }
+        if (attributeCount == attributeSlots.length)
+            attributeSlots.length = attributeCount == 0 ? 8 : attributeCount * 2;
+        attributeSlots[attributeCount++] = Attribute(name, o);
     }
 
     /// `HttpServletRequest.removeAttribute`.
     void removeAttribute(string name)
     {
-        if ((name in attributes) is null)
+        const index = attributeIndex(name);
+        if (index == attributeCount)
             return;
-        attributes.remove(name);
-        foreach (index, existing; attributeOrder)
-        {
-            if (existing == name)
-            {
-                attributeOrder = attributeOrder[0 .. index] ~ attributeOrder[index + 1 .. $];
-                break;
-            }
-        }
+        foreach (later; index + 1 .. attributeCount)
+            attributeSlots[later - 1] = attributeSlots[later];
+        attributeSlots[--attributeCount] = Attribute.init;
     }
 
     /// `HttpServletRequest.isSecure`.
@@ -332,7 +351,8 @@ final class ServletEngineRequest : HttpServletRequest
 
     string getRequestId()
     {
-        return requestId;
+        // Formatted on demand: most requests never ask for it.
+        return decimal(cast(long) requestNumber);
     }
 
     /// HTTP/1 has no protocol-level request id.
@@ -368,7 +388,7 @@ final class ServletEngineRequest : HttpServletRequest
         {
             if (name != "cookie")
                 continue;
-            foreach (pair; split(values[index], ';'))
+            foreach (pair; splitter(values[index], ';'))
             {
                 const text = trim(pair);
                 size_t equals = text.length;
@@ -533,7 +553,7 @@ final class ServletEngineRequest : HttpServletRequest
         if (method == "POST" && !inputUsed && content.length != 0)
         {
             const type = getContentType();
-            if (type !is null && equalsIgnoreCase(trim(split(type, ';')[0]), "application/x-www-form-urlencoded"))
+            if (type !is null && equalsIgnoreCase(trim(splitter(type, ';').front), "application/x-www-form-urlencoded"))
                 addParameters(cast(string) content);
         }
     }
@@ -542,7 +562,7 @@ final class ServletEngineRequest : HttpServletRequest
     {
         if (text.length == 0)
             return;
-        foreach (pair; split(text, '&'))
+        foreach (pair; splitter(text, '&'))
         {
             if (pair.length == 0)
                 continue;
@@ -684,7 +704,9 @@ package(flint.engine.servlet) string charsetOf(string contentType) pure nothrow
 {
     if (contentType is null)
         return null;
-    foreach (parameter; split(contentType, ';')[1 .. $])
+    auto parameters = splitter(contentType, ';');
+    parameters.popFront();
+    foreach (parameter; parameters)
     {
         const text = trim(parameter);
         if (text.length > 8 && equalsIgnoreCase(text[0 .. 8], "charset="))
@@ -748,20 +770,68 @@ package(flint.engine.servlet) bool equalsIgnoreCase(scope const(char)[] a, scope
     return true;
 }
 
-package(flint.engine.servlet) string[] split(string text, char separator) pure nothrow
+/// The parts of `text` between `separator`s, as slices of it, without allocating: "a;b;" gives "a", "b" and "".
+package(flint.engine.servlet) Splitter splitter(string text, char separator) pure nothrow @nogc
 {
-    string[] parts;
-    size_t start;
-    foreach (index, c; text)
+    return Splitter(text, separator);
+}
+
+/// ditto
+package(flint.engine.servlet) struct Splitter
+{
+    private string rest;
+    private char separator;
+    private bool last;
+    /// The current part.
+    string front;
+    /// Whether every part has been visited.
+    bool empty;
+
+    private this(string text, char separator) pure nothrow @nogc
     {
-        if (c == separator)
-        {
-            parts ~= text[start .. index];
-            start = index + 1;
-        }
+        rest = text;
+        this.separator = separator;
+        popFront();
     }
-    parts ~= text[start .. $];
-    return parts;
+
+    /// Advance to the next part.
+    void popFront() pure nothrow @nogc
+    {
+        if (last)
+        {
+            empty = true;
+            return;
+        }
+        foreach (index, c; rest)
+        {
+            if (c == separator)
+            {
+                front = rest[0 .. index];
+                rest = rest[index + 1 .. $];
+                return;
+            }
+        }
+        front = rest;
+        last = true;
+    }
+}
+
+@("splitter yields the same parts as splitting into an array")
+unittest
+{
+    string[] parts(string text, char separator)
+    {
+        string[] result;
+        foreach (part; splitter(text, separator))
+            result ~= part;
+        return result;
+    }
+
+    assert(parts("a=1&b=2", '&') == ["a=1", "b=2"]);
+    assert(parts("text/plain; charset=UTF-8;", ';') == ["text/plain", " charset=UTF-8", ""]);
+    assert(parts("", ';') == [""]);
+    assert(parts("x", ';') == ["x"]);
+    assert(parts(";", ';') == ["", ""]);
 }
 
 package(flint.engine.servlet) string trim(string text) pure nothrow @nogc
@@ -834,12 +904,13 @@ package(flint.engine.servlet) Locale[] acceptLanguages(string[] values)
     Ranked[] ranked;
     foreach (value; values)
     {
-        foreach (entry; split(value, ','))
+        foreach (entry; splitter(value, ','))
         {
-            const parts = split(entry, ';');
-            const range = trim(parts[0]);
+            auto parts = splitter(entry, ';');
+            const range = trim(parts.front);
+            parts.popFront();
             double quality = 1;
-            foreach (parameter; parts[1 .. $])
+            foreach (parameter; parts)
             {
                 const text = trim(parameter);
                 if (text.length > 2 && (text[0] == 'q' || text[0] == 'Q') && text[1] == '=')

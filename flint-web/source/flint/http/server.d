@@ -154,10 +154,10 @@ class ServletServerHttpResponse : ServerHttpResponse
                 servletResponse.setContentType(values.length != 0 ? values[0] : null);
             else if (equalsAscii(name, HttpHeaders.CONTENT_LENGTH))
             {
-                import std.conv : to;
+                import flint.http : parseJavaLong;
 
                 if (values.length != 0)
-                    servletResponse.setContentLengthLong(values[0].to!long);
+                    servletResponse.setContentLengthLong(parseJavaLong(values[0]));
             }
             else
                 foreach (value; values)

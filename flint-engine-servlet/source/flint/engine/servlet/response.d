@@ -15,7 +15,7 @@ module flint.engine.servlet.response;
 
 import flint.arena : Status, TransportError = Error;
 import flint.conc : Context;
-import flint.engine.servlet.request : charsetOf, decimal, equalsIgnoreCase, split, trim;
+import flint.engine.servlet.request : charsetOf, decimal, equalsIgnoreCase, splitter, trim;
 import flint.engine.web.fiber : FiberResponse, unknownLength;
 import flint.engine.web.stream : StreamField;
 import flint.jakarta.servlet : ServletOutputStream;
@@ -201,9 +201,10 @@ final class ServletEngineResponse : HttpServletResponse
             return;
         }
         // Tomcat keeps the media type and its other parameters, and moves the charset to the encoding.
-        const parts = split(type, ';');
-        string kept = trim(parts[0]);
-        foreach (parameter; parts[1 .. $])
+        auto parts = splitter(type, ';');
+        string kept = trim(parts.front);
+        parts.popFront();
+        foreach (parameter; parts)
         {
             const text = trim(parameter);
             if (text.length > 8 && equalsIgnoreCase(text[0 .. 8], "charset="))
@@ -521,20 +522,21 @@ final class ServletEngineResponse : HttpServletResponse
     /// The fields in Tomcat's order. Framing and hop-by-hop fields belong to the engine and are left out.
     private StreamField[] fields() const
     {
-        StreamField[] result;
-        result.reserve(headerNames.length + 2);
+        // One exact allocation; reserve and appends cost several times more per response.
+        auto result = new StreamField[headerNames.length + 2];
+        size_t used;
         foreach (index, name; headerNames)
         {
             if (hopByHop(name))
                 continue;
-            result ~= StreamField(name, headerValues[index]);
+            result[used++] = StreamField(name, headerValues[index]);
         }
         if (contentType !is null)
-            result ~= StreamField("Content-Type", characterEncodingSet && characterEncoding !is null
-                    ? contentType ~ ";charset=" ~ characterEncoding : contentType);
+            result[used++] = StreamField("Content-Type", characterEncodingSet
+                    && characterEncoding !is null ? contentType ~ ";charset=" ~ characterEncoding : contentType);
         if (contentLanguage !is null)
-            result ~= StreamField("Content-Language", contentLanguage);
-        return result;
+            result[used++] = StreamField("Content-Language", contentLanguage);
+        return result[0 .. used];
     }
 
     /// `Content-Type` and `Content-Length` set as fields go to their own properties, as in Tomcat.

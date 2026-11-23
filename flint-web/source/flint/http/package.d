@@ -1092,6 +1092,11 @@ struct HttpHeaders
     private static final class Store
     {
         Entry[] entries;
+        // The text setContentType wrote and the MediaType it came from: getContentType answers from them while
+        // the header still holds that same string, instead of parsing it again (Spring parses each time but
+        // caches MimeTypeUtils.parseMimeType).
+        string contentTypeText;
+        MediaType contentTypeParsed;
     }
 
     private static struct Entry
@@ -1519,7 +1524,10 @@ struct HttpHeaders
             throw new IllegalArgumentException("Content-Type cannot contain wildcard type '*'");
         if (mediaType.isWildcardSubtype())
             throw new IllegalArgumentException("Content-Type cannot contain wildcard subtype '*'");
-        set(CONTENT_TYPE, mediaType.toString());
+        const text = mediaType.toString();
+        set(CONTENT_TYPE, text);
+        store.contentTypeText = text;
+        store.contentTypeParsed = mediaType;
     }
 
     /// The `Content-Type`, or `null`.
@@ -1529,7 +1537,10 @@ struct HttpHeaders
         if (value.length == 0)
             return null;
         auto result = new MediaType;
-        *result = MediaType.parseMediaType(value);
+        if (value is store.contentTypeText)
+            *result = store.contentTypeParsed;
+        else
+            *result = MediaType.parseMediaType(value);
         return result;
     }
 
@@ -2952,12 +2963,12 @@ private bool isJavaWhitespace(char c) pure nothrow @nogc
 /// Java's `Long.parseLong`.
 package(flint) long parseJavaLong(scope const(char)[] text) pure
 {
-    import std.conv : ConvException, to;
+    import flint.engine.aot.text : tryParseLong;
 
-    try
-        return to!long(text);
-    catch (ConvException)
+    const parsed = tryParseLong(text);
+    if (!parsed.ok)
         throw new NumberFormatException("For input string: \"" ~ text.idup ~ "\"");
+    return parsed.value;
 }
 
 private string twoDigits(int value) pure nothrow

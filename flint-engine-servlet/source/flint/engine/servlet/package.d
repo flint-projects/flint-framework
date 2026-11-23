@@ -315,7 +315,8 @@ final class ServletEngine : RequestHost
         sizes[2] = bodyBuffer.ok() ? bodyBuffer.value.length() : 0;
         total = sizes[0] + sizes[1];
         const count = request.fieldCount();
-        auto lengths = new size_t[count * 2];
+        size_t[64] small = void; // the lengths of up to 32 fields, without an allocation
+        size_t[] lengths = count * 2 <= small.length ? small[0 .. count * 2] : new size_t[count * 2];
         foreach (index; 0 .. count)
         {
             request.visitField(index, context.arena, (scope const(char)[] name,
@@ -354,8 +355,8 @@ final class ServletEngine : RequestHost
             used += name.length + value.length;
         }
         immutable frozen = text.idup;
-        auto names = new string[count];
-        auto values = new string[count];
+        auto fields = new string[count * 2];
+        auto names = fields[0 .. count], values = fields[count .. $];
         size_t at = sizes[0] + sizes[1];
         foreach (index; 0 .. count)
         {
@@ -378,7 +379,7 @@ final class ServletEngine : RequestHost
         string query = sizes[1] != 0 ? frozen[sizes[0] .. sizes[0] + sizes[1]] : null;
         return new ServletEngineRequest(this, methodName(request.method()), path, query,
                 request.protocolMinor() == 0 ? "HTTP/1.0" : "HTTP/1.1", options.contextPath, names,
-                values, content, decimal(cast(long) context.requestId));
+                values, content, context.requestId);
     }
 
     /// Tomcat's `StandardWrapperValve.exception` and `StandardHostValve.throwable`: an uncaught exception becomes a

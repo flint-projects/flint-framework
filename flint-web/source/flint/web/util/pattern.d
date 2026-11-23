@@ -425,16 +425,28 @@ package(flint) struct PathContainer
             result.segments = [""];
             return result;
         }
-        foreach (segment; splitSegments(path[start .. $]))
+        // One allocation for the segments: count the separators first.
+        const rest = path[start .. $];
+        size_t count = 1;
+        foreach (c; rest)
+            if (c == '/')
+                count++;
+        result.segments = new string[count];
+        size_t from, index;
+        foreach (i; 0 .. rest.length + 1)
         {
+            if (i < rest.length && rest[i] != '/')
+                continue;
+            auto segment = rest[from .. i];
+            from = i + 1;
             // Matrix variables (`;a=b`) are not part of the value matched.
-            foreach (i, c; segment)
+            foreach (j, c; segment)
                 if (c == ';')
                 {
-                    segment = segment[0 .. i];
+                    segment = segment[0 .. j];
                     break;
                 }
-            result.segments ~= decodeSegment(segment);
+            result.segments[index++] = decodeSegment(segment);
         }
         return result;
     }
