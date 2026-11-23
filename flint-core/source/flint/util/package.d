@@ -5624,9 +5624,33 @@ struct MimeType
     /// `type/subtype;key=value...`, parameters in insertion order.
     string toString() const pure nothrow
     {
-        char[] builder;
-        appendTo(builder);
-        return builder.idup;
+        return rendered(mimeType, mimeSubtype, parameterList); // one allocation, unique, so immutable
+    }
+
+    private static char[] rendered(string type, string subtype, scope const(MimeTypeParameter)[] params) pure nothrow
+    {
+        size_t length = type.length + 1 + subtype.length;
+        foreach (ref entry; params)
+            length += 2 + entry.key.length + entry.value.length;
+        auto result = new char[](length);
+        size_t at;
+        void put(scope const(char)[] text) pure nothrow @nogc
+        {
+            result[at .. at + text.length] = text;
+            at += text.length;
+        }
+
+        put(type);
+        put("/");
+        put(subtype);
+        foreach (ref entry; params)
+        {
+            put(";");
+            put(entry.key);
+            put("=");
+            put(entry.value);
+        }
+        return result;
     }
 
     /// Spring's protected `appendTo(StringBuilder)`.
@@ -5817,40 +5841,43 @@ struct MimeTypeUtils
 
     package(flint) static string[] tokenizeList(string mimeTypes) pure nothrow
     {
-        if (mimeTypes.length == 0)
+        // Two passes, so the result is allocated once at its size (this runs on every request's Accept header).
+        size_t count;
+        string token;
+        for (size_t at; nextToken(mimeTypes, at, token);)
+            count++;
+        if (count == 0)
             return null;
-        string[] tokens;
-        bool inQuotes;
-        size_t startIndex;
+        auto tokens = new string[](count);
         size_t i;
-        while (i < mimeTypes.length)
-        {
-            switch (mimeTypes[i])
-            {
-            case '"':
-                inQuotes = !inQuotes;
-                break;
-            case ',':
-                if (!inQuotes)
-                {
-                    const trimmed = javaTrim(mimeTypes[startIndex .. i]);
-                    if (trimmed.length != 0)
-                        tokens ~= trimmed;
-                    startIndex = i + 1;
-                }
-                break;
-            case '\\':
-                i++;
-                break;
-            default:
-                break;
-            }
-            i++;
-        }
-        const trimmed = javaTrim(mimeTypes[startIndex < mimeTypes.length ? startIndex : $ .. $]);
-        if (trimmed.length != 0)
-            tokens ~= trimmed;
+        for (size_t at; nextToken(mimeTypes, at, token);)
+            tokens[i++] = token;
         return tokens;
+    }
+
+    /// The next non-empty trimmed token of a comma-separated list from `at`, honouring quotes and escapes; false at
+    /// the end.
+    private static bool nextToken(string list, ref size_t at, out string token) pure nothrow @nogc
+    {
+        while (at < list.length)
+        {
+            bool inQuotes;
+            size_t i = at;
+            while (i < list.length && (inQuotes || list[i] != ','))
+            {
+                if (list[i] == '"')
+                    inQuotes = !inQuotes;
+                else if (list[i] == '\\')
+                    i++;
+                i++;
+            }
+            const end = i < list.length ? i : list.length;
+            token = javaTrim(list[at .. end]);
+            at = end + 1;
+            if (token.length != 0)
+                return true;
+        }
+        return false;
     }
 
     /// Joins with `", "`.

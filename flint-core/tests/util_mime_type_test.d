@@ -664,3 +664,18 @@ unittest
     assert(m1.compareTo(m2) == 0);
     assert(m2.compareTo(m1) == 0);
 }
+
+unittest
+{
+    // Flint: tokenizeList sizes its result in one allocation; the tokens are as Spring's tokenize gives them.
+    assert(MimeTypeUtils.tokenizeList("") is null && MimeTypeUtils.tokenizeList(" , ,") is null);
+    assert(MimeTypeUtils.tokenizeList("text/plain") == ["text/plain"]);
+    assert(MimeTypeUtils.tokenizeList(" text/plain , text/html,") == ["text/plain", "text/html"]);
+    assert(MimeTypeUtils.tokenizeList(`text/plain;a="x,y", text/html;b="\",", */*`) == [
+        `text/plain;a="x,y"`, `text/html;b="\","`, "*/*"
+    ]);
+    // toString renders in one allocation: type, subtype, then parameters in insertion order.
+    const text = "text/plain;charset=UTF-8;q=0.7";
+    assert(MimeTypeUtils.parseMimeType(text).toString() == text);
+    assert(MimeTypeUtils.parseMimeType("TEXT/Plain").toString() == "text/plain");
+}

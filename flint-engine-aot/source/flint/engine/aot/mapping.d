@@ -6,7 +6,7 @@ The web-mvc packages own dispatch; this module holds only the generated tables.
 module flint.engine.aot.mapping;
 
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : MergedAnnotation, MethodDescriptor;
+import flint.engine.aot.descriptor : Descriptor, MergedAnnotation, MethodDescriptor;
 
 @safe:
 
@@ -41,6 +41,9 @@ struct ArgumentSpec
     string elementType;
     /// The parameter's merged annotations.
     MergedAnnotation[] annotations;
+    /// Contract 3: the parameter type's descriptor (`descriptorOf!T`), so dispatch need not look it up by `type`
+    /// per request; null for scalars, `string`, and older generated code (callers then look up `type`).
+    const(Descriptor) descriptor;
 }
 
 /// The resolved arguments of one invocation.
@@ -90,6 +93,9 @@ struct HandlerMapping
     HandlerInvoker invoke;
     /// Where the handler was declared.
     string source;
+    /// Contract 3: the return type's descriptor; null for scalars, `void`, and older generated code (callers then
+    /// look up `returnType`).
+    const(Descriptor) returnDescriptor;
 }
 
 /// A generated exception-handler invoker: `(bean, exception, arguments, ref result)`.
