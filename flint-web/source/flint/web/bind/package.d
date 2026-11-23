@@ -79,6 +79,8 @@ class MissingRequestValueException : ServletRequestBindingException
     {
         super(message);
         this.missingAfterConversion = missingAfterConversion;
+        // The base built the body before the flag was set; a subclass's status may depend on it.
+        getBody().setStatus(getStatusCode().value());
     }
 
     /// ditto, with a message code.
@@ -86,6 +88,7 @@ class MissingRequestValueException : ServletRequestBindingException
     {
         super(message, null, messageDetailCode, arguments);
         this.missingAfterConversion = missingAfterConversion;
+        getBody().setStatus(getStatusCode().value());
     }
 
     /// Whether the value was present but became `null` after conversion.

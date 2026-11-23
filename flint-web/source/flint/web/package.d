@@ -430,8 +430,7 @@ class HttpMediaTypeNotSupportedException : HttpMediaTypeException
             Nullable!HttpMethod httpMethod, string message)
     {
         super(message, supportedMediaTypes, null, [
-            Any.of(contentType.isNull ? null : contentType.get.toString()),
-            Any.of(supportedMediaTypes)
+            contentType.isNull ? Any.init : Any.of(contentType.get), Any.of(supportedMediaTypes)
         ]);
         this.contentType = contentType;
         this.httpMethod = httpMethod;
@@ -458,7 +457,7 @@ class HttpMediaTypeNotSupportedException : HttpMediaTypeException
         auto headers = HttpHeaders.create();
         headers.setAccept(getSupportedMediaTypes());
         if (!httpMethod.isNull && httpMethod.get == HttpMethod.PATCH)
-            headers.set(HttpHeaders.ACCEPT_PATCH, MediaType.toString(getSupportedMediaTypes()));
+            headers.setAcceptPatch(getSupportedMediaTypes());
         else if (!httpMethod.isNull && httpMethod.get == HttpMethod.QUERY)
             headers.set("Accept-Query", MediaType.toString(getSupportedMediaTypes()));
         return headers;

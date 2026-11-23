@@ -29,30 +29,25 @@ private MethodParameter methodParameter()
             "ErrorResponseExceptionTests.handle");
 }
 
-// Spring asserts `Content-Type` details and `Accept-Patch`: flint.http's HttpHeaders has no getAcceptPatch(), and
-// the detail message arguments carry the content type as its string, not the MediaType.
-version (FlintHttpHeadersAcceptPatch)
+@("ErrorResponseExceptionTests.httpMediaTypeNotSupportedException")
+unittest
 {
-    @("ErrorResponseExceptionTests.httpMediaTypeNotSupportedException")
-    unittest
-    {
-        import std.typecons : Nullable;
+    import std.typecons : Nullable;
 
-        MediaType[] mediaTypes = [MediaType.APPLICATION_JSON, MediaType.APPLICATION_CBOR];
+    MediaType[] mediaTypes = [MediaType.APPLICATION_JSON, MediaType.APPLICATION_CBOR];
 
-        auto ex = new HttpMediaTypeNotSupportedException(Nullable!MediaType(MediaType.APPLICATION_XML),
-                mediaTypes, Nullable!HttpMethod(HttpMethod.PATCH), "Custom message");
+    auto ex = new HttpMediaTypeNotSupportedException(Nullable!MediaType(MediaType.APPLICATION_XML),
+            mediaTypes, Nullable!HttpMethod(HttpMethod.PATCH), "Custom message");
 
-        assertStatus(ex, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
-        assertDetail(ex, "Content-Type 'application/xml' is not supported.");
-        assertDetailMessageCode(ex, null, [
-            Any.of(ex.getContentType().get), Any.of(ex.getSupportedMediaTypes())
-        ]);
+    assertStatus(ex, HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+    assertDetail(ex, "Content-Type 'application/xml' is not supported.");
+    assertDetailMessageCode(ex, null, [
+        Any.of(ex.getContentType().get), Any.of(ex.getSupportedMediaTypes())
+    ]);
 
-        HttpHeaders headers = ex.getHeaders();
-        assert(headers.getAccept() == mediaTypes);
-        assert(headers.getAcceptPatch() == mediaTypes);
-    }
+    HttpHeaders headers = ex.getHeaders();
+    assert(headers.getAccept() == mediaTypes);
+    assert(headers.getAcceptPatch() == mediaTypes);
 }
 
 @("ErrorResponseExceptionTests.httpMediaTypeNotSupportedExceptionWithParseError")
@@ -181,20 +176,16 @@ unittest
     assert(ex.getHeaders().isEmpty());
 }
 
-// flint.web builds the body eagerly, before missingAfterConversion is set, so its status stays 500 (Spring: 400).
-version (FlintWebMissingAfterConversionBodyStatus)
+@("ErrorResponseExceptionTests.missingPathVariableExceptionAfterConversion")
+unittest
 {
-    @("ErrorResponseExceptionTests.missingPathVariableExceptionAfterConversion")
-    unittest
-    {
-        auto ex = new MissingPathVariableException("id", methodParameter(), true);
+    auto ex = new MissingPathVariableException("id", methodParameter(), true);
 
-        assertStatus(ex, HttpStatus.BAD_REQUEST);
-        assertDetail(ex, "Required path variable 'id' is not present.");
-        assertDetailMessageCode(ex, null, [Any.of(ex.getVariableName())]);
+    assertStatus(ex, HttpStatus.BAD_REQUEST);
+    assertDetail(ex, "Required path variable 'id' is not present.");
+    assertDetailMessageCode(ex, null, [Any.of(ex.getVariableName())]);
 
-        assert(ex.getHeaders().isEmpty());
-    }
+    assert(ex.getHeaders().isEmpty());
 }
 
 @("ErrorResponseExceptionTests.missingRequestCookieException")
@@ -630,7 +621,7 @@ private bool argumentEquals(const Any actual, const Any expected)
         return true;
     if (actual.typeName() != expected.typeName())
         return false;
-    static foreach (T; AliasSeq!(MediaType[], HttpMethod[], string[]))
+    static foreach (T; AliasSeq!(MediaType, MediaType[], HttpMethod[], string[]))
         if (actual.holds!T && expected.holds!T)
             return actual.get!T == expected.get!T;
     return false;

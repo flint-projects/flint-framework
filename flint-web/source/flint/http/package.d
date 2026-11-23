@@ -1445,6 +1445,18 @@ struct HttpHeaders
         return MediaType.parseMediaTypes(get(ACCEPT));
     }
 
+    /// Sets `Accept-Patch`, the media types a PATCH request may carry.
+    void setAcceptPatch(scope const(MediaType)[] mediaTypes) pure
+    {
+        set(ACCEPT_PATCH, MediaType.toString(mediaTypes));
+    }
+
+    /// The `Accept-Patch` media types; an empty list when absent.
+    MediaType[] getAcceptPatch() const pure
+    {
+        return MediaType.parseMediaTypes(get(ACCEPT_PATCH));
+    }
+
     /// Sets `Allow`.
     void setAllow(scope const(HttpMethod)[] allowedMethods) pure
     {
