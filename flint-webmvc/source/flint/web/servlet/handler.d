@@ -13,8 +13,10 @@ module flint.web.servlet.handler;
 
 import flint.engine.aot.any : Any;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
+import flint.web.cors : CorsConfiguration, CorsConfigurationSource, CorsProcessor, CorsUtils, DefaultCorsProcessor;
 import flint.web.servlet : HandlerExceptionResolver, HandlerExecutionChain, HandlerInterceptor, HandlerMapping,
     ModelAndView;
+import flint.web.servlet.resource : HttpRequestHandler;
 import flint.web.util.pattern : PathPattern, PathPatternParser;
 
 @safe:
@@ -90,6 +92,8 @@ abstract class AbstractHandlerMapping : HandlerMapping
 {
     private int order = int.max;
     private HandlerInterceptor[] adaptedInterceptors;
+    private CorsConfigurationSource corsConfigurationSource;
+    private CorsProcessor corsProcessor;
 
     /// The order among handler mappings (lower first).
     void setOrder(int order) pure nothrow @nogc
@@ -115,12 +119,62 @@ abstract class AbstractHandlerMapping : HandlerMapping
         return adaptedInterceptors;
     }
 
+    /// Sets the global CORS configuration (Spring Boot's `CorsRegistry`).
+    void setCorsConfigurationSource(CorsConfigurationSource source) pure nothrow @nogc
+    {
+        corsConfigurationSource = source;
+    }
+
+    /// Sets the CORS processor (`DefaultCorsProcessor` by default).
+    void setCorsProcessor(CorsProcessor processor) pure nothrow @nogc
+    {
+        corsProcessor = processor;
+    }
+
     HandlerExecutionChain getHandler(HttpServletRequest request)
     {
         Object handler = getHandlerInternal(request);
         if (handler is null)
             return null;
-        return getHandlerExecutionChain(handler, request);
+        auto chain = getHandlerExecutionChain(handler, request);
+        if (hasCorsConfigurationSource(handler) || CorsUtils.isPreFlightRequest(request))
+        {
+            CorsConfiguration config = getCorsConfiguration(handler, request);
+            if (corsConfigurationSource !is null)
+            {
+                auto globalConfig = corsConfigurationSource.getCorsConfiguration(request);
+                config = globalConfig !is null ? globalConfig.combine(config) : config;
+            }
+            if (config !is null)
+                config.validateAllowCredentials();
+            chain = getCorsHandlerExecutionChain(request, chain, config);
+        }
+        return chain;
+    }
+
+    /// Whether `handler` has CORS configuration (its own or global).
+    protected bool hasCorsConfigurationSource(Object handler)
+    {
+        return cast(CorsConfigurationSource) handler !is null || corsConfigurationSource !is null;
+    }
+
+    /// The handler's own CORS configuration, or `null`.
+    protected CorsConfiguration getCorsConfiguration(Object handler, HttpServletRequest request)
+    {
+        if (auto source = cast(CorsConfigurationSource) handler)
+            return source.getCorsConfiguration(request);
+        return null;
+    }
+
+    /// A preflight handler, or the CORS interceptor first in `chain`.
+    protected HandlerExecutionChain getCorsHandlerExecutionChain(HttpServletRequest request, HandlerExecutionChain chain,
+            CorsConfiguration config)
+    {
+        auto processor = corsProcessor !is null ? corsProcessor : new DefaultCorsProcessor;
+        if (CorsUtils.isPreFlightRequest(request))
+            return new HandlerExecutionChain(new PreFlightHandler(config, processor), chain.getInterceptorList());
+        chain.addInterceptor(0, new CorsInterceptor(config, processor));
+        return chain;
     }
 
     /// The handler for `request`, or `null`.
@@ -143,6 +197,49 @@ abstract class AbstractHandlerMapping : HandlerMapping
                 chain.addInterceptor(interceptor);
         }
         return chain;
+    }
+}
+
+/// `AbstractHandlerMapping.PreFlightHandler`.
+final class PreFlightHandler : HttpRequestHandler, CorsConfigurationSource
+{
+    private CorsConfiguration config;
+    private CorsProcessor processor;
+
+    ///
+    this(CorsConfiguration config, CorsProcessor processor) pure nothrow @nogc
+    {
+        this.config = config;
+        this.processor = processor;
+    }
+
+    void handleRequest(HttpServletRequest request, HttpServletResponse response)
+    {
+        processor.processRequest(config, request, response);
+    }
+
+    CorsConfiguration getCorsConfiguration(HttpServletRequest request)
+    {
+        return config;
+    }
+}
+
+/// `AbstractHandlerMapping.CorsInterceptor`.
+final class CorsInterceptor : HandlerInterceptor
+{
+    private CorsConfiguration config;
+    private CorsProcessor processor;
+
+    ///
+    this(CorsConfiguration config, CorsProcessor processor) pure nothrow @nogc
+    {
+        this.config = config;
+        this.processor = processor;
+    }
+
+    override bool preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+    {
+        return processor.processRequest(config, request, response);
     }
 }
 

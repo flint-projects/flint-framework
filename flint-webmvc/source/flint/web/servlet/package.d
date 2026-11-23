@@ -426,6 +426,12 @@ class DispatcherServlet : HttpServlet
         return servletName;
     }
 
+    /// FrameworkServlet implements every `doXxx` and routes PATCH through `service`.
+    protected override string[] getDeclaredMethods()
+    {
+        return ["GET", "POST", "PUT", "DELETE", "PATCH"];
+    }
+
     alias service = HttpServlet.service;
 
     // FrameworkServlet: every method goes through processRequest.

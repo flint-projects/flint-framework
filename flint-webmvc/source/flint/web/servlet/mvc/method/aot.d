@@ -19,6 +19,7 @@ import flint.engine.aot.name : typeNameOf;
 import flint.web.bind.annotation : CookieValue, ExceptionHandler, ModelAttribute, PathVariable, RequestBody,
     RequestHeader, RequestMapping, RequestParam, ResponseStatus, ValueConstants;
 import flint.web.util.pattern : PathPatternParser;
+import std.traits : ReturnType;
 
 @safe:
 
@@ -78,6 +79,10 @@ HandlerMapping[] requestMappingsOf(C)(string beanName)
                         descriptor.name = member;
                         descriptor.returnType = row.returnType;
                         descriptor.annotations = methodAnnotations;
+                        foreach (ref annotation; typeAnnotations)
+                            if (annotation.type == "flint.web.bind.annotation.CrossOrigin")
+                                descriptor.annotations ~= MergedAnnotation(annotation.type, annotation.value,
+                                        cast(ubyte)(annotation.distance + 100));
                         row.method = descriptor;
                         row.invoke = &invokeHandler!(C, overload);
                         row.source = __traits(identifier, C) ~ "." ~ member;
@@ -151,8 +156,8 @@ Descriptor[] handlerDescriptorsOf(C)()
         {
             static foreach (overload; __traits(getOverloads, C, member))
             {
-                static if (is(typeof(overload) R == return) && isUserData!R)
-                    result ~= descriptorOf!R();
+                static if (isUserData!(ReturnType!overload))
+                    result ~= descriptorOf!(ReturnType!overload)();
             }
         }
     }

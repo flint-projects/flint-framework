@@ -18,6 +18,7 @@ import flint.engine.aot.descriptor : DescriptorTable;
 import flint.engine.aot.mapping : AotHandlerMapping = HandlerMapping, ExceptionHandlerSpec;
 import flint.http.converter : ByteArrayHttpMessageConverter, HttpMessageConverter, StringHttpMessageConverter;
 import flint.http.converter.json : JacksonJsonHttpMessageConverter;
+import flint.web.cors : CorsConfiguration, UrlBasedCorsConfigurationSource;
 import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodReturnValueHandler;
 import flint.web.servlet : DispatcherStrategies, HandlerExceptionResolver, HandlerInterceptor, HandlerMapping,
     ViewResolver;
@@ -114,6 +115,103 @@ class InterceptorRegistry
     }
 }
 
+/// `CorsRegistration`: one path pattern's CORS settings (Spring's permit defaults unless changed).
+class CorsRegistration
+{
+    private string pathPattern;
+    private CorsConfiguration config;
+
+    ///
+    this(string pathPattern)
+    {
+        this.pathPattern = pathPattern;
+        config = new CorsConfiguration().applyPermitDefaultValues();
+    }
+
+    /// `allowedOrigins`.
+    CorsRegistration allowedOrigins(string[] origins...)
+    {
+        config.setAllowedOrigins(origins.dup);
+        return this;
+    }
+
+    /// `allowedOriginPatterns`.
+    CorsRegistration allowedOriginPatterns(string[] patterns...)
+    {
+        config.setAllowedOriginPatterns(patterns.dup);
+        return this;
+    }
+
+    /// `allowedMethods`.
+    CorsRegistration allowedMethods(string[] methods...)
+    {
+        config.setAllowedMethods(methods.dup);
+        return this;
+    }
+
+    /// `allowedHeaders`.
+    CorsRegistration allowedHeaders(string[] headers...)
+    {
+        config.setAllowedHeaders(headers.dup);
+        return this;
+    }
+
+    /// `exposedHeaders`.
+    CorsRegistration exposedHeaders(string[] headers...)
+    {
+        config.setExposedHeaders(headers.dup);
+        return this;
+    }
+
+    /// `allowCredentials`.
+    CorsRegistration allowCredentials(bool allowCredentials)
+    {
+        config.setAllowCredentials(allowCredentials);
+        return this;
+    }
+
+    /// `maxAge` in seconds.
+    CorsRegistration maxAge(long maxAge)
+    {
+        config.setMaxAge(maxAge);
+        return this;
+    }
+
+    package(flint) string getPathPattern() const pure nothrow @nogc
+    {
+        return pathPattern;
+    }
+
+    package(flint) CorsConfiguration getCorsConfiguration() pure nothrow @nogc
+    {
+        return config;
+    }
+}
+
+/// `CorsRegistry`.
+class CorsRegistry
+{
+    private CorsRegistration[] registrations;
+
+    /// Enables CORS for `pathPattern` (`/**` for every path).
+    CorsRegistration addMapping(string pathPattern)
+    {
+        auto registration = new CorsRegistration(pathPattern);
+        registrations ~= registration;
+        return registration;
+    }
+
+    package(flint) UrlBasedCorsConfigurationSource getCorsConfigurationSource()
+    {
+        if (registrations.length == 0)
+            return null;
+        auto source = new UrlBasedCorsConfigurationSource;
+        foreach (r; registrations)
+            source.registerCorsConfiguration(r.getPathPattern(), r.getCorsConfiguration());
+        return source;
+    }
+}
+
 /++
 `WebMvcConfigurer`: callbacks to customize Spring MVC. Java's interface of default methods is an abstract class
 (deviation D-3), so a configurer overrides only what it needs.
@@ -122,6 +220,11 @@ abstract class WebMvcConfigurer
 {
     /// Adds interceptors.
     void addInterceptors(InterceptorRegistry registry)
+    {
+    }
+
+    /// Configures global CORS.
+    void addCorsMappings(CorsRegistry registry)
     {
     }
 
@@ -233,12 +336,21 @@ class WebMvcConfigurationSupport
             configurer.addInterceptors(registry);
         auto interceptors = registry.getInterceptors();
 
+        auto corsRegistry = new CorsRegistry;
+        foreach (configurer; configurers)
+            configurer.addCorsMappings(corsRegistry);
+        auto corsSource = corsRegistry.getCorsConfigurationSource();
+
         auto requestMappings = new RequestMappingHandlerMapping(mappings, beanFactory);
         requestMappings.setInterceptors(interceptors);
+        if (corsSource !is null)
+            requestMappings.setCorsConfigurationSource(corsSource);
         auto resources = new SimpleUrlHandlerMapping;
         resources.setOrder(int.max - 1);
         resources.registerHandler("/**", new ResourceHttpRequestHandler);
         resources.setInterceptors(interceptors);
+        if (corsSource !is null)
+            resources.setCorsConfigurationSource(corsSource);
 
         HandlerMethodArgumentResolver[] customResolvers;
         HandlerMethodReturnValueHandler[] customHandlers;

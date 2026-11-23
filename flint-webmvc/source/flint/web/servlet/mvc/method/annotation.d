@@ -45,6 +45,7 @@ import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodAr
     ModelAndViewContainer;
 import flint.web.servlet : HandlerAdapter, HandlerMapping, ModelAndView;
 import flint.web.servlet.handler : AbstractHandlerExceptionResolver;
+import flint.web.cors : CorsConfiguration;
 import flint.web.servlet.mvc.method : RequestMappingInfo, RequestMappingInfoHandlerMapping;
 
 @safe:
@@ -64,8 +65,69 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
             Object bean = beanFactory.getBean(mapping.bean);
             auto handlerMethod = new HandlerMethod(bean, typeid(bean).name, mapping);
             registerMapping(new RequestMappingInfo(mapping.paths, mapping.methods, mapping.params, mapping.headers,
-                    mapping.consumes, mapping.produces), handlerMethod);
+                    mapping.consumes, mapping.produces), handlerMethod, initCorsConfiguration(mapping));
         }
+    }
+
+    /// Spring's `initCorsConfiguration`: class-level `@CrossOrigin` updated by the method's, then permit defaults.
+    /// Class-level values arrive as the method row's `@CrossOrigin` at distance 100 or more (interim until contract 2
+    /// carries class annotations separately).
+    protected CorsConfiguration initCorsConfiguration(AotHandlerMapping mapping)
+    {
+        import flint.web.bind.annotation : CrossOrigin;
+
+        if (mapping.method is null)
+            return null;
+        const(CrossOrigin)[] typeValues, methodValues;
+        foreach (ref annotation; mapping.method.annotations)
+        {
+            if (annotation.type != "flint.web.bind.annotation.CrossOrigin")
+                continue;
+            if (annotation.distance >= 100)
+                typeValues ~= annotation.value.get!CrossOrigin;
+            else if (methodValues.length == 0)
+                methodValues ~= annotation.value.get!CrossOrigin;
+        }
+        const(CrossOrigin)* typeAnnotation = typeValues.length != 0 ? &typeValues[0] : null;
+        const(CrossOrigin)* methodAnnotation = methodValues.length != 0 ? &methodValues[0] : null;
+        if (typeAnnotation is null && methodAnnotation is null)
+            return null;
+        auto config = new CorsConfiguration;
+        updateCorsConfig(config, typeAnnotation);
+        updateCorsConfig(config, methodAnnotation);
+        if (config.getAllowedMethods().length == 0)
+            foreach (m; mapping.methods)
+                config.addAllowedMethod(m);
+        return config.applyPermitDefaultValues();
+    }
+
+    private static void updateCorsConfig(CorsConfiguration config, const(imported!"flint.web.bind.annotation".CrossOrigin)* annotation)
+    {
+        if (annotation is null)
+            return;
+        foreach (origin; annotation.origins.length != 0 ? annotation.origins : annotation.value)
+            config.addAllowedOrigin(origin);
+        if (annotation.originPatterns.length != 0)
+            config.setAllowedOriginPatterns((config.getAllowedOriginPatterns() ~ annotation.originPatterns).dup);
+        foreach (method; annotation.methods)
+            config.addAllowedMethod(method.name());
+        foreach (header; annotation.allowedHeaders)
+            config.addAllowedHeader(header);
+        foreach (header; annotation.exposedHeaders)
+            config.addExposedHeader(header);
+        if (annotation.allowCredentials == "true")
+            config.setAllowCredentials(true);
+        else if (annotation.allowCredentials == "false")
+            config.setAllowCredentials(false);
+        else if (annotation.allowCredentials.length != 0)
+            throw new IllegalStateException("@CrossOrigin's allowCredentials value must be \"true\", \"false\", "
+                    ~ "or an empty string (\"\"): current value is [" ~ annotation.allowCredentials ~ "]");
+        if (annotation.allowPrivateNetwork == "true")
+            config.setAllowPrivateNetwork(true);
+        else if (annotation.allowPrivateNetwork == "false")
+            config.setAllowPrivateNetwork(false);
+        if (annotation.maxAge >= 0)
+            config.setMaxAge(annotation.maxAge);
     }
 
     protected override HandlerMethod createOptionsHandler(string[] declaredMethods, MediaType[] acceptPatch,

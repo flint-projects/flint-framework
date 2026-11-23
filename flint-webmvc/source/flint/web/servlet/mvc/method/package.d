@@ -27,6 +27,7 @@ import flint.web.accept : ContentNegotiationManager;
 import flint.web.context.request : ServletWebRequest;
 import flint.web.method : HandlerMethod;
 import flint.web.servlet : HandlerMapping;
+import flint.web.cors : CorsConfiguration;
 import flint.web.servlet.handler : AbstractHandlerMapping, lookupPath;
 import flint.web.util.pattern : PathMatchInfo, PathPattern, PathPatternParser;
 import std.typecons : Nullable, nullable;
@@ -485,6 +486,32 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
     }
 
     private Registration[] registrations;
+    private CorsConfiguration[HandlerMethod] corsLookup;
+
+    /// Registers `handlerMethod` under `info` with its CORS configuration (or `null`).
+    void registerMapping(RequestMappingInfo info, HandlerMethod handlerMethod, CorsConfiguration corsConfig)
+    {
+        registerMapping(info, handlerMethod);
+        if (corsConfig !is null)
+            corsLookup[handlerMethod] = corsConfig;
+    }
+
+    protected override bool hasCorsConfigurationSource(Object handler)
+    {
+        if (super.hasCorsConfigurationSource(handler))
+            return true;
+        auto method = cast(HandlerMethod) handler;
+        return method !is null && (method in corsLookup) !is null;
+    }
+
+    protected override CorsConfiguration getCorsConfiguration(Object handler, HttpServletRequest request)
+    {
+        auto config = super.getCorsConfiguration(handler, request);
+        if (auto method = cast(HandlerMethod) handler)
+            if (auto found = method in corsLookup)
+                return config !is null ? config.combine(*found) : *found;
+        return config;
+    }
 
     /// Registers `handlerMethod` under `info`. Throws `IllegalStateException` for an ambiguous mapping.
     void registerMapping(RequestMappingInfo info, HandlerMethod handlerMethod)

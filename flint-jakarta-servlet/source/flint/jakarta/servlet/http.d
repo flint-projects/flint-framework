@@ -384,10 +384,46 @@ abstract class HttpServlet : GenericServlet
         sendMethodNotAllowed(req, resp, "http.method_delete_not_supported");
     }
 
-    /// Handles OPTIONS.
+    /// Handles OPTIONS: `Allow` lists the methods this servlet handles, in the order Tomcat writes them.
     protected void doOptions(HttpServletRequest req, HttpServletResponse resp)
     {
-        resp.setHeader("Allow", "GET, HEAD, POST, PUT, DELETE, OPTIONS");
+        const declared = getDeclaredMethods();
+        bool has(string m)
+        {
+            foreach (d; declared)
+                if (d == m)
+                    return true;
+            return false;
+        }
+
+        string allow;
+        void add(string m)
+        {
+            allow ~= (allow.length != 0 ? ", " : "") ~ m;
+        }
+
+        if (has(METHOD_GET))
+        {
+            add(METHOD_GET);
+            add(METHOD_HEAD);
+        }
+        if (has(METHOD_PATCH))
+            add(METHOD_PATCH);
+        if (has(METHOD_POST))
+            add(METHOD_POST);
+        if (has(METHOD_PUT))
+            add(METHOD_PUT);
+        if (has(METHOD_DELETE))
+            add(METHOD_DELETE);
+        add(METHOD_OPTIONS);
+        add(METHOD_TRACE);
+        resp.setHeader("Allow", allow);
+    }
+
+    /// The `doXxx` methods a subclass implements (Java finds them by reflection; R4-style, a subclass lists them).
+    protected string[] getDeclaredMethods()
+    {
+        return null;
     }
 
     /// Handles TRACE; Flint answers 405 (Tomcat disables TRACE by default).
