@@ -703,9 +703,9 @@ unittest
     assert(annotation.synthesize().readOnly);
 }
 
-// MergedAnnotations.from reads only the type's own descriptor and ignores the SearchStrategy: annotations declared
-// on superclasses and super-interfaces are never found (Spring searches them for every strategy but DIRECT).
-version (FlintAnnotationUtilsSupertypeSearch)
+// `@Inherited` is not modelled: INHERITED_ANNOTATIONS reads the type's own annotations (aggregate 0), so a
+// superclass's @Inherited annotation is not found.
+version (FlintInheritedAnnotations)
 {
     unittest
     {
@@ -758,23 +758,20 @@ unittest
         assert(annotation.getAggregateIndex() == 0);
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // getWithTypeHierarchyFromSubInheritedAnnotationInterface
-        const annotation = from!SubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
-        assert(annotation.isPresent());
-        assert(annotation.getAggregateIndex() == 1);
-    }
+    // getWithTypeHierarchyFromSubInheritedAnnotationInterface
+    const annotation = from!SubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
+    assert(annotation.isPresent());
+    assert(annotation.getAggregateIndex() == 1);
+}
 
-    unittest
-    {
-        // getWithTypeHierarchyFromSubSubInheritedAnnotationInterface
-        const annotation = from!SubSubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
-        assert(annotation.isPresent());
-        assert(annotation.getAggregateIndex() == 2);
-    }
+unittest
+{
+    // getWithTypeHierarchyFromSubSubInheritedAnnotationInterface
+    const annotation = from!SubSubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
+    assert(annotation.isPresent());
+    assert(annotation.getAggregateIndex() == 2);
 }
 
 unittest
@@ -786,23 +783,20 @@ unittest
         assert(annotation.getAggregateIndex() == 0);
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // getWithTypeHierarchyFromSubNonInheritedAnnotationInterface
-        const annotation = from!SubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
-        assert(annotation.isPresent());
-        assert(annotation.getAggregateIndex() == 1);
-    }
+    // getWithTypeHierarchyFromSubNonInheritedAnnotationInterface
+    const annotation = from!SubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
+    assert(annotation.isPresent());
+    assert(annotation.getAggregateIndex() == 1);
+}
 
-    unittest
-    {
-        // getWithTypeHierarchyFromSubSubNonInheritedAnnotationInterface
-        const annotation = from!SubSubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
-        assert(annotation.isPresent());
-        assert(annotation.getAggregateIndex() == 2);
-    }
+unittest
+{
+    // getWithTypeHierarchyFromSubSubNonInheritedAnnotationInterface
+    const annotation = from!SubSubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
+    assert(annotation.isPresent());
+    assert(annotation.getAggregateIndex() == 2);
 }
 
 unittest
@@ -843,21 +837,18 @@ unittest
     assert(annotation.synthesize().value == "meta2");
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // getDirectFromClassFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedAnnotations
-        const annotation = from!SubSubClassWithInheritedAnnotation(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
-        assert(annotation.synthesize().readOnly);
-    }
+    // getDirectFromClassFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedAnnotations
+    const annotation = from!SubSubClassWithInheritedAnnotation(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
+    assert(annotation.synthesize().readOnly);
+}
 
-    unittest
-    {
-        // getDirectFromClassFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedComposedAnnotations
-        const annotation = from!SubSubClassWithInheritedMetaAnnotation(SearchStrategy.TYPE_HIERARCHY).get!Component();
-        assert(annotation.synthesize().value == "meta2");
-    }
+unittest
+{
+    // getDirectFromClassFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedComposedAnnotations
+    const annotation = from!SubSubClassWithInheritedMetaAnnotation(SearchStrategy.TYPE_HIERARCHY).get!Component();
+    assert(annotation.synthesize().value == "meta2");
 }
 
 unittest
@@ -899,21 +890,18 @@ version (FlintMergedAnnotationMetaSource)
     }
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // getDirectFromClassWithSubInheritedAnnotationInterface
-        const annotation = from!SubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
-        assert(annotation.getAggregateIndex() == 1);
-    }
+    // getDirectFromClassWithSubInheritedAnnotationInterface
+    const annotation = from!SubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
+    assert(annotation.getAggregateIndex() == 1);
+}
 
-    unittest
-    {
-        // getDirectFromClassWithSubSubInheritedAnnotationInterface
-        const annotation = from!SubSubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
-        assert(annotation.getAggregateIndex() == 2);
-    }
+unittest
+{
+    // getDirectFromClassWithSubSubInheritedAnnotationInterface
+    const annotation = from!SubSubInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
+    assert(annotation.getAggregateIndex() == 2);
 }
 
 version (FlintMergedAnnotationMetaSource)
@@ -926,21 +914,18 @@ version (FlintMergedAnnotationMetaSource)
     }
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // getDirectFromClassWithSubNonInheritedAnnotationInterface
-        const annotation = from!SubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
-        assert(annotation.getAggregateIndex() == 1);
-    }
+    // getDirectFromClassWithSubNonInheritedAnnotationInterface
+    const annotation = from!SubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
+    assert(annotation.getAggregateIndex() == 1);
+}
 
-    unittest
-    {
-        // getDirectFromClassWithSubSubNonInheritedAnnotationInterface
-        const annotation = from!SubSubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
-        assert(annotation.getAggregateIndex() == 2);
-    }
+unittest
+{
+    // getDirectFromClassWithSubSubNonInheritedAnnotationInterface
+    const annotation = from!SubSubNonInheritedAnnotationInterface(SearchStrategy.TYPE_HIERARCHY).get!Order();
+    assert(annotation.getAggregateIndex() == 2);
 }
 
 // ---------------------------------------------------------------------------------------------------------------

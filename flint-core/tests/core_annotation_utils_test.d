@@ -695,27 +695,22 @@ unittest
     assert(component.value == "meta2");
 }
 
-// AnnotationUtils.findAnnotation reads only the type's own descriptor: annotations declared on superclasses and
-// super-interfaces are not found (Spring searches the whole type hierarchy).
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // findClassAnnotationFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedAnnotations
-        bool found;
-        const transactional = findAnnotation!(Transactional, SubSubClassWithInheritedAnnotation)(found);
-        assert(found);
-        assert(transactional.readOnly, "readOnly flag for SubSubClassWithInheritedAnnotation");
-    }
+    // findClassAnnotationFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedAnnotations
+    bool found;
+    const transactional = findAnnotation!(Transactional, SubSubClassWithInheritedAnnotation)(found);
+    assert(found);
+    assert(transactional.readOnly, "readOnly flag for SubSubClassWithInheritedAnnotation");
+}
 
-    unittest
-    {
-        // findClassAnnotationFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedComposedAnnotations
-        bool found;
-        const component = findAnnotation!(Component, SubSubClassWithInheritedMetaAnnotation)(found);
-        assert(found);
-        assert(component.value == "meta2");
-    }
+unittest
+{
+    // findClassAnnotationFavorsMoreLocallyDeclaredComposedAnnotationsOverInheritedComposedAnnotations
+    bool found;
+    const component = findAnnotation!(Component, SubSubClassWithInheritedMetaAnnotation)(found);
+    assert(found);
+    assert(component.value == "meta2");
 }
 
 unittest
@@ -761,23 +756,20 @@ unittest
     assert(found, "Should find @Transactional on InheritedAnnotationInterface");
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // findClassAnnotationOnSubInheritedAnnotationInterface
-        bool found;
-        findAnnotation!(Transactional, SubInheritedAnnotationInterface)(found);
-        assert(found, "Should find @Transactional on SubInheritedAnnotationInterface");
-    }
+    // findClassAnnotationOnSubInheritedAnnotationInterface
+    bool found;
+    findAnnotation!(Transactional, SubInheritedAnnotationInterface)(found);
+    assert(found, "Should find @Transactional on SubInheritedAnnotationInterface");
+}
 
-    unittest
-    {
-        // findClassAnnotationOnSubSubInheritedAnnotationInterface
-        bool found;
-        findAnnotation!(Transactional, SubSubInheritedAnnotationInterface)(found);
-        assert(found, "Should find @Transactional on SubSubInheritedAnnotationInterface");
-    }
+unittest
+{
+    // findClassAnnotationOnSubSubInheritedAnnotationInterface
+    bool found;
+    findAnnotation!(Transactional, SubSubInheritedAnnotationInterface)(found);
+    assert(found, "Should find @Transactional on SubSubInheritedAnnotationInterface");
 }
 
 unittest
@@ -788,23 +780,20 @@ unittest
     assert(found, "Should find @Order on NonInheritedAnnotationInterface");
 }
 
-version (FlintAnnotationUtilsSupertypeSearch)
+unittest
 {
-    unittest
-    {
-        // findClassAnnotationOnSubNonInheritedAnnotationInterface
-        bool found;
-        findAnnotation!(Order, SubNonInheritedAnnotationInterface)(found);
-        assert(found, "Should find @Order on SubNonInheritedAnnotationInterface");
-    }
+    // findClassAnnotationOnSubNonInheritedAnnotationInterface
+    bool found;
+    findAnnotation!(Order, SubNonInheritedAnnotationInterface)(found);
+    assert(found, "Should find @Order on SubNonInheritedAnnotationInterface");
+}
 
-    unittest
-    {
-        // findClassAnnotationOnSubSubNonInheritedAnnotationInterface
-        bool found;
-        findAnnotation!(Order, SubSubNonInheritedAnnotationInterface)(found);
-        assert(found, "Should find @Order on SubSubNonInheritedAnnotationInterface");
-    }
+unittest
+{
+    // findClassAnnotationOnSubSubNonInheritedAnnotationInterface
+    bool found;
+    findAnnotation!(Order, SubSubNonInheritedAnnotationInterface)(found);
+    assert(found, "Should find @Order on SubSubNonInheritedAnnotationInterface");
 }
 
 // AnnotationUtils has no findAnnotationDeclaringClass, findAnnotationDeclaringClassForTypes or

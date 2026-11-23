@@ -120,19 +120,14 @@ unittest
     assert(hasExactlyElementsOfTypes(list, typeid(A2), typeid(B)));
 }
 
-// The comparator reads only the object's own class descriptor: C (a subclass of @Order(1) A) gets no order and
-// sorts after @Order(2) B, where Spring finds A's @Order through the type hierarchy.
-version (FlintOrderFromSuperclass)
+unittest
 {
-    unittest
-    {
-        // sortInstancesWithSubclass
-        List!Object list = new ArrayList!Object();
-        list.add(new B);
-        list.add(new C);
-        sort(list);
-        assert(hasExactlyElementsOfTypes(list, typeid(C), typeid(B)));
-    }
+    // sortInstancesWithSubclass
+    List!Object list = new ArrayList!Object();
+    list.add(new B);
+    list.add(new C);
+    sort(list);
+    assert(hasExactlyElementsOfTypes(list, typeid(C), typeid(B)));
 }
 
 // The comparator has no order lookup for class objects (Java's `Class` order sources).

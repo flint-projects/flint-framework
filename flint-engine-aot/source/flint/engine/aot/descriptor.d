@@ -39,6 +39,12 @@ struct MergedAnnotation
     Any value;
     /// 0 when declared on the element; n for a meta-annotation n levels up.
     ubyte distance;
+    /// Contract 3: 0 for the element itself; n >= 1 for its nth supertype (or overridden method) in Spring's
+    /// `TYPE_HIERARCHY` order: the class, its interfaces (recursively), then the superclass and its interfaces.
+    ubyte aggregateIndex;
+    /// Runtime extension: Spring's `AnnotationConfigurationException` message for a misconfigured `@AliasFor`
+    /// (set only by `descriptorOf`'s merger; the generator reports FLINT-E1103 instead). Null when well formed.
+    string error;
 }
 
 /// A constructor or method parameter.
@@ -159,10 +165,15 @@ final class Descriptor
         this.kind = kind;
     }
 
-    /// The annotation of type `type` nearest to the element, or null. Hot: no allocation.
+    /// The annotation of type `type` nearest to the element, declared on the type itself (aggregate 0, Spring's
+    /// `INHERITED_ANNOTATIONS` without `@Inherited`), or null. Hot: no allocation.
     const(MergedAnnotation)* annotation(string type) const nothrow @nogc
     {
-        return findAnnotation(annotations, type);
+        const(MergedAnnotation)* best;
+        foreach (ref a; annotations)
+            if (a.aggregateIndex == 0 && a.type == type && (best is null || a.distance < best.distance))
+                best = &a;
+        return best;
     }
 
     /// The property named `propertyName`, or null.
@@ -207,12 +218,14 @@ final class Descriptor
     }
 }
 
-/// The nearest annotation of `type` in a merged list, or null.
+/// The nearest annotation of `type` in a merged list, across every aggregate, or null. As Spring's `TYPE_HIERARCHY`
+/// search: the first aggregate holding one wins (`MergedAnnotationFinder` stops there), then the lowest distance.
 const(MergedAnnotation)* findAnnotation(return scope const(MergedAnnotation)[] annotations, string type) nothrow @nogc
 {
     const(MergedAnnotation)* best;
     foreach (ref a; annotations)
-        if (a.type == type && (best is null || a.distance < best.distance))
+        if (a.type == type && (best is null || a.aggregateIndex < best.aggregateIndex
+                || (a.aggregateIndex == best.aggregateIndex && a.distance < best.distance)))
             best = &a;
     return best;
 }
@@ -295,7 +308,12 @@ Descriptor descriptorOf(T)()
         d.keyType = typeNameOf!(U.__flintKeyType);
     addBuilders!U(d);
     static if (is(U == struct) || is(U == class) || is(U == interface) || is(U == enum))
-        d.annotations = mergedAnnotations!(__traits(getAttributes, U))();
+    {
+        d.annotations = mergedAnnotations!(__traits(getAttributes, U))((is(U == interface)
+                ? "interface " : "class ") ~ typeNameOf!U);
+        static if (is(U == class) || is(U == interface))
+            d.annotations ~= supertypeAnnotations!U();
+    }
     static if ((is(U == struct) || is(U == class)) && !__traits(compiles, U.__flintOpaque))
     {
         d.properties = propertiesOf!U();
@@ -579,23 +597,95 @@ private enum aliasForName = "flint.core.annotation.AliasFor";
 /// `@AliasFor` configures merging; it is not itself a merged annotation.
 private enum isAnnotation(U) = is(U == struct) && typeNameOf!U != aliasForName;
 
-/// The merged annotation list for the UDAs `attributes` of one element.
-MergedAnnotation[] mergedAnnotations(attributes...)()
+/++
+The merged annotation list for the UDAs `attributes` of one element, as flint-aot's generator merges (contract
+section 2.1, `merge.d`), so dub tests and generated tables agree:
+
+- breadth first: the nearest declaration of a type wins, and among equals the first declared;
+- an explicit `@AliasFor(annotation: ...)` maps its attribute even at its default, may target a meta-meta-annotation,
+  and the nearest declaring annotation wins (a set alias over one at its default among equals);
+- a single value aliasing an array attribute becomes a one-element array;
+- intra-annotation mirrors and implicit aliases (attributes aliasing the same meta-annotation attribute) agree: the
+  set one wins;
+- a misconfigured `@AliasFor`, or a mirror pair given two values, sets `error` on every entry (with Spring's
+  `AnnotationConfigurationException` message), where the generator reports FLINT-E1103.
+`source` names the element in error messages, as Java's `toString` does (`class app.Owner`).
++/
+MergedAnnotation[] mergedAnnotations(attributes...)(string source = null)
 {
-    MergedAnnotation[] result;
+    MergeState state;
+    state.source = source.length ? source : "an unknown element";
     static foreach (instance; UdaInstances!attributes)
     {
         static if (isAnnotation!(typeof(instance)))
-            addAnnotation(result, typeNameOf!(typeof(instance)), Any.of(resolveMirrors(instance)), 0);
+            enqueue(state, instance, 0, null);
     }
-    static foreach (instance; UdaInstances!attributes)
+    for (size_t next = 0; next < state.queue.length; next++)
     {
-        static if (isAnnotation!(typeof(instance)))
-            appendMeta!(typeof(instance))(result, resolveMirrors(instance), 1);
+        auto current = state.queue[next];
+        if (state.has(current.type))
+            continue;
+        state.result ~= MergedAnnotation(current.type, current.value, current.distance);
+        if (current.distance < 8)
+            current.expand(state, current.overrides, current.distance);
     }
-    return result;
+    foreach (ref alias_; state.aliases)
+        if (!state.has(alias_.type))
+            state.fail("@AliasFor declaration on " ~ describe(alias_.fromAttribute,
+                    alias_.fromAnnotation) ~ " declares an alias for " ~ describe(alias_.attribute,
+                    alias_.type) ~ " which is not meta-present.");
+    if (state.error.length)
+        foreach (ref merged; state.result)
+            merged.error = state.error;
+    return state.result;
 }
 
+/// The merged annotations of `U`'s supertypes, one aggregate each, in Spring's `TYPE_HIERARCHY` order
+/// (`AnnotationsScanner.processClassHierarchy`): its interfaces (recursively), then its superclass and that one's.
+private MergedAnnotation[] supertypeAnnotations(U)()
+{
+    Hierarchy hierarchy;
+    hierarchy.addSupertypes!U();
+    return hierarchy.result;
+}
+
+private struct Hierarchy
+{
+    MergedAnnotation[] result;
+    ubyte aggregate;
+
+    void addSupertypes(U)()
+    {
+        static if (is(U S == super))
+        {
+            static foreach (B; S)
+            {
+                static if (is(B == interface))
+                    add!B();
+            }
+            static foreach (B; S)
+            {
+                static if (is(B == class) && !is(B == Object))
+                    add!B();
+            }
+        }
+    }
+
+    private void add(B)()
+    {
+        if (aggregate == ubyte.max)
+            return;
+        aggregate++;
+        foreach (merged; mergedAnnotations!(__traits(getAttributes, B))())
+        {
+            merged.aggregateIndex = aggregate;
+            result ~= merged;
+        }
+        addSupertypes!B();
+    }
+}
+
+/// Keep the nearest declaration of `type` in a list being merged (one entry per type).
 private void addAnnotation(ref MergedAnnotation[] result, string type, Any value, ubyte distance)
 {
     foreach (ref existing; result)
@@ -604,22 +694,78 @@ private void addAnnotation(ref MergedAnnotation[] result, string type, Any value
     result ~= MergedAnnotation(type, value, distance);
 }
 
-private void appendMeta(A)(ref MergedAnnotation[] result, A root, ubyte distance)
+/// One attribute's explicit `@AliasFor(annotation: ...)`, carried to every annotation further up the path.
+private struct Override
 {
-    if (distance > 8)
-        return;
+    string type;
+    string attribute;
+    Any value;
+    /// Whether the aliasing attribute differs from its default.
+    bool set;
+    /// Distance of the declaring annotation: the nearest one wins.
+    ubyte distance;
+    string fromAnnotation;
+    string fromAttribute;
+}
+
+/// A queued annotation: its merged value, and the explicit aliases of every annotation on its path.
+private struct Pending
+{
+    string type;
+    Any value;
+    ubyte distance;
+    Override[] overrides;
+    void function(ref MergeState, Override[], ubyte) @safe expand;
+}
+
+private struct MergeState
+{
+    MergedAnnotation[] result;
+    Pending[] queue;
+    string[] validated;
+    Override[] aliases;
+    string error;
+    string source;
+
+    bool has(string type) const pure nothrow @nogc
+    {
+        foreach (ref merged; result)
+            if (merged.type == type)
+                return true;
+        return false;
+    }
+
+    /// Record the first configuration error, as Spring throws on the first.
+    void fail(string message) pure nothrow @nogc
+    {
+        if (error.length == 0)
+            error = message;
+    }
+}
+
+private enum isAliasFor(U) = typeNameOf!U == aliasForName;
+
+/// Spring's `AttributeMethods.describe`.
+private string describe(string attribute, string annotation) pure nothrow
+{
+    return "attribute '" ~ attribute ~ "' in annotation [" ~ annotation ~ "]";
+}
+
+private void enqueue(A)(ref MergeState state, A declared, ubyte distance, Override[] inherited)
+{
+    validate!A(state);
+    auto merged = mirrored(declared, state);
+    state.queue ~= Pending(typeNameOf!A, Any.of(merged), distance,
+            inherited ~ explicitAliases(merged, distance), &expand!A);
+}
+
+/// Queue `A`'s meta-annotations, with the attributes the annotations below override through `@AliasFor`.
+private void expand(A)(ref MergeState state, Override[] overrides, ubyte distance)
+{
     static foreach (meta; UdaInstances!(__traits(getAttributes, A)))
     {
         static if (isAnnotation!(typeof(meta)) && !is(typeof(meta) == A))
-        {
-            {
-                auto merged = resolveMirrors(applyAliases(root, meta));
-                const before = result.length;
-                addAnnotation(result, typeNameOf!(typeof(meta)), Any.of(merged), distance);
-                if (result.length > before)
-                    appendMeta!(typeof(meta))(result, merged, cast(ubyte)(distance + 1));
-            }
-        }
+            enqueue(state, overridden(meta, overrides, state), cast(ubyte)(distance + 1), overrides);
     }
 }
 
@@ -633,58 +779,238 @@ private string aliasTarget(F)(F alias_, string fieldName)
     return fieldName;
 }
 
-/// Copy the attributes of `root` declared `@AliasFor(annotation: classOf!M)` onto meta-annotation `meta`, when
-/// they differ from their defaults.
-private M applyAliases(A, M)(A root, M meta)
+/// Whether an `@AliasFor` aliases an attribute of the annotation `self` declares it on.
+private bool isLocal(F)(F alias_, string self)
 {
-    static foreach (i, field; A.tupleof)
+    return alias_.annotation.name.length == 0 || alias_.annotation.name == self;
+}
+
+/// The explicit aliases `instance`'s attributes declare to its meta-annotations' attributes.
+private Override[] explicitAliases(A)(A instance, ubyte distance)
+{
+    Override[] result;
+    static foreach (i; 0 .. A.tupleof.length)
     {
         static foreach (alias_; UdaInstances!(__traits(getAttributes, A.tupleof[i])))
         {
-            static if (typeNameOf!(typeof(alias_)) == aliasForName)
+            static if (isAliasFor!(typeof(alias_)))
             {
+                if (!isLocal(alias_, typeNameOf!A))
+                    result ~= Override(alias_.annotation.name, aliasTarget(alias_,
+                            __traits(identifier, A.tupleof[i])), Any.of(instance.tupleof[i]),
+                            instance.tupleof[i] != A.init.tupleof[i], distance, typeNameOf!A,
+                            __traits(identifier, A.tupleof[i]));
+            }
+        }
+    }
+    return result;
+}
+
+/// Among the nearest annotation's aliases of `type.attribute`, a set one, else the first; null when none.
+private Override* chosen(return Override[] overrides, string type, string attribute) pure nothrow @nogc
+{
+    Override* pick;
+    foreach (ref item; overrides)
+    {
+        if (item.type != type || item.attribute != attribute)
+            continue;
+        if (pick is null || item.distance < pick.distance || (item.distance == pick.distance && item.set && !pick.set))
+            pick = &item;
+    }
+    return pick;
+}
+
+/// The meta-annotation `meta` with the attributes the annotations below it alias.
+private M overridden(M)(M meta, Override[] overrides, ref MergeState state)
+{
+    M result = meta;
+    static foreach (j; 0 .. M.tupleof.length)
+    {
+        {
+            enum name = __traits(identifier, M.tupleof[j]);
+            if (auto pick = chosen(overrides, typeNameOf!M, name))
+            {
+                if (!assign(result.tupleof[j], pick.value))
+                    state.fail("Misconfigured aliases: " ~ describe(pick.fromAttribute,
+                            pick.fromAnnotation) ~ " and " ~ describe(name,
+                            typeNameOf!M) ~ " must declare the same return type.");
+                else if (result.tupleof[j] != M.init.tupleof[j])
+                    setPartner!j(result); // the set member of a mirror pair replaces its partner too
+            }
+        }
+    }
+    foreach (ref item; overrides)
+        if (item.type == typeNameOf!M && !hasField!M(item.attribute))
+            state.fail(capitalized(describe(item.fromAttribute,
+                    item.fromAnnotation)) ~ " is declared as an @AliasFor nonexistent " ~ describe(item.attribute,
+                    typeNameOf!M) ~ ".");
+    return result;
+}
+
+private string capitalized(string text) pure nothrow
+{
+    return text.length && text[0] >= 'a' && text[0] <= 'z' ? cast(char)(text[0] - 32) ~ text[1 .. $] : text;
+}
+
+private bool hasField(M)(string name)
+{
+    static foreach (j; 0 .. M.tupleof.length)
+        if (__traits(identifier, M.tupleof[j]) == name)
+            return true;
+    return false;
+}
+
+/// Write an aliased value into `field`: the same type, or one element of an array attribute.
+private bool assign(F)(ref F field, ref Any value)
+{
+    static if (is(F == E[], E) && !is(F == string))
+    {
+        if (value.holds!F)
+        {
+            field = value.get!F;
+            return true;
+        }
+        if (value.holds!E)
+        {
+            static if (is(immutable(E) == immutable(string)))
+                field = value.get!E.length ? [value.get!E] : null; // an empty single value is an empty array
+            else
+                field = [value.get!E];
+            return true;
+        }
+        return false;
+    }
+    else
+    {
+        if (!value.holds!F)
+            return false;
+        field = value.get!F;
+        return true;
+    }
+}
+
+/// Give the intra-annotation alias partner of field `j` the same value.
+private void setPartner(size_t j, M)(ref M result)
+{
+    static foreach (alias_; UdaInstances!(__traits(getAttributes, M.tupleof[j])))
+    {
+        static if (isAliasFor!(typeof(alias_)))
+        {
+            if (isLocal(alias_, typeNameOf!M))
+            {
+                const partner = aliasTarget(alias_, __traits(identifier, M.tupleof[j]));
+                static foreach (k; 0 .. M.tupleof.length)
                 {
-                    if (alias_.annotation.name == typeNameOf!M && root.tupleof[i] != A.init.tupleof[i])
+                    static if (k != j && is(typeof(M.tupleof[k]) == typeof(M.tupleof[j])))
                     {
-                        const target = aliasTarget(alias_, __traits(identifier, A.tupleof[i]));
-                        static foreach (j, member; M.tupleof)
-                        {
-                            static if (__traits(compiles, meta.tupleof[j] = root.tupleof[i]))
-                            {
-                                if (__traits(identifier, M.tupleof[j]) == target)
-                                    meta.tupleof[j] = root.tupleof[i];
-                            }
-                        }
+                        if (__traits(identifier, M.tupleof[k]) == partner)
+                            result.tupleof[k] = result.tupleof[j];
                     }
                 }
             }
         }
     }
-    return meta;
 }
 
-/// Within one annotation, an attribute set away from its default fills the mirror it aliases.
-private A resolveMirrors(A)(A instance)
+private string notPresent(string where, string attribute) pure nothrow
 {
-    static foreach (i, field; A.tupleof)
+    return "@AliasFor declaration on " ~ where ~ " declares an alias for '" ~ attribute ~ "' which is not present.";
+}
+
+/// Whether field `j` of `A` is `attribute` (an intra-annotation alias, `target` empty), or, for an explicit alias
+/// of `target.attribute`, declares one to the same attribute (implicit aliases).
+private bool linked(A, size_t j)(string target, string attribute)
+{
+    if (target.length == 0)
+        return __traits(identifier, A.tupleof[j]) == attribute;
+    bool result;
+    static foreach (alias_; UdaInstances!(__traits(getAttributes, A.tupleof[j])))
+    {
+        static if (isAliasFor!(typeof(alias_)))
+        {
+            if (!isLocal(alias_, typeNameOf!A) && alias_.annotation.name == target)
+            {
+                const other = aliasTarget(alias_, __traits(identifier, A.tupleof[j]));
+                result = other == attribute || aliasedInMeta!A(target, attribute, other, 0);
+            }
+        }
+    }
+    return result;
+}
+
+/// Whether attributes `first` and `second` of `A`'s direct meta-annotation `target` are aliases of each other, so
+/// attributes aliasing them are implicit aliases too (Spring's `MirrorSets` follow alias chains).
+private bool aliasedInMeta(A)(string target, string first, string second, uint depth)
+{
+    if (depth > 8)
+        return false;
+    static foreach (meta; UdaInstances!(__traits(getAttributes, A)))
+    {
+        static if (isAnnotation!(typeof(meta)) && !is(typeof(meta) == A))
+        {
+            if (typeNameOf!(typeof(meta)) == target)
+                return aliasedIn!(typeof(meta))(first, second, depth);
+        }
+    }
+    return false;
+}
+
+/// Whether attributes `first` and `second` of `M` are a mirror pair, or alias the same attribute (or a mirror pair)
+/// of one of `M`'s meta-annotations.
+private bool aliasedIn(M)(string first, string second, uint depth)
+{
+    if (first == second)
+        return true;
+    string firstTarget, firstAttribute, secondTarget, secondAttribute;
+    static foreach (k; 0 .. M.tupleof.length)
+    {
+        static foreach (alias_; UdaInstances!(__traits(getAttributes, M.tupleof[k])))
+        {
+            static if (isAliasFor!(typeof(alias_)))
+            {
+                {
+                    enum name = __traits(identifier, M.tupleof[k]);
+                    const local = isLocal(alias_, typeNameOf!M);
+                    const attribute = aliasTarget(alias_, name);
+                    if (local && ((name == first && attribute == second) || (name == second && attribute == first)))
+                        return true;
+                    if (!local && name == first)
+                    {
+                        firstTarget = alias_.annotation.name;
+                        firstAttribute = attribute;
+                    }
+                    if (!local && name == second)
+                    {
+                        secondTarget = alias_.annotation.name;
+                        secondAttribute = attribute;
+                    }
+                }
+            }
+        }
+    }
+    return firstTarget.length && firstTarget == secondTarget && aliasedInMeta!M(firstTarget,
+            firstAttribute, secondAttribute, depth + 1);
+}
+
+/// `instance` with its aliased attributes agreeing: the set one of each mirror pair or implicit alias set wins.
+private A mirrored(A)(A instance, ref MergeState state)
+{
+    static foreach (i; 0 .. A.tupleof.length)
     {
         static foreach (alias_; UdaInstances!(__traits(getAttributes, A.tupleof[i])))
         {
-            static if (typeNameOf!(typeof(alias_)) == aliasForName)
+            static if (isAliasFor!(typeof(alias_)))
             {
                 {
-                    if ((alias_.annotation.name.length == 0
-                            || alias_.annotation.name == typeNameOf!A) && instance.tupleof[i] != A.init.tupleof[i])
+                    const local = isLocal(alias_, typeNameOf!A);
+                    const target = local ? null : alias_.annotation.name;
+                    const attribute = aliasTarget(alias_, __traits(identifier, A.tupleof[i]));
+                    static foreach (j; 0 .. A.tupleof.length)
                     {
-                        const mirror = aliasTarget(alias_, __traits(identifier, A.tupleof[i]));
-                        static foreach (j, member; A.tupleof)
+                        static if (i != j && is(typeof(A.tupleof[i]) == typeof(A.tupleof[j])))
                         {
-                            static if (i != j && __traits(compiles, instance.tupleof[j] = instance.tupleof[i]))
-                            {
-                                if (__traits(identifier, A.tupleof[j]) == mirror
-                                        && instance.tupleof[j] == A.init.tupleof[j])
-                                    instance.tupleof[j] = instance.tupleof[i];
-                            }
+                            if (linked!(A, j)(target, attribute))
+                                mirror!(i, j)(instance, state);
                         }
                     }
                 }
@@ -692,6 +1018,176 @@ private A resolveMirrors(A)(A instance)
         }
     }
     return instance;
+}
+
+private void mirror(size_t i, size_t j, A)(ref A instance, ref MergeState state)
+{
+    const mineSet = instance.tupleof[i] != A.init.tupleof[i];
+    const theirsSet = instance.tupleof[j] != A.init.tupleof[j];
+    enum mine = __traits(identifier, A.tupleof[i]);
+    enum theirs = __traits(identifier, A.tupleof[j]);
+    if (mineSet && theirsSet && instance.tupleof[i] != instance.tupleof[j])
+    {
+        // Spring's MirrorSet resolves attributes in name order.
+        static if (mine < theirs)
+            state.fail("Different @AliasFor mirror values for annotation [" ~ typeNameOf!A
+                    ~ "] declared on " ~ state.source ~ "; attribute '" ~ mine ~ "' and its alias '"
+                    ~ theirs ~ "' are declared with values of [" ~ javaString(
+                        instance.tupleof[i]) ~ "] and [" ~ javaString(instance.tupleof[j]) ~ "].");
+    }
+    else if (mineSet && !theirsSet)
+        instance.tupleof[j] = instance.tupleof[i];
+    else if (theirsSet && !mineSet)
+        instance.tupleof[i] = instance.tupleof[j];
+}
+
+/// Spring's `ObjectUtils.nullSafeToString` for attribute values in messages: arrays as `{a, b}`.
+private string javaString(T)(T value)
+{
+    import flint.engine.aot.text : decimal;
+
+    static if (is(T : const(char)[]))
+        return value.idup;
+    else static if (is(T == E[], E))
+    {
+        string text = "{";
+        foreach (k, element; value)
+            text ~= (k ? ", " : "") ~ javaString(element);
+        return text ~ "}";
+    }
+    else static if (is(T == bool))
+        return value ? "true" : "false";
+    else static if (__traits(isIntegral, T) && !is(T == enum))
+        return decimal(cast(long) value);
+    else
+        return typeNameOf!T;
+}
+
+/// Spring's `AnnotationTypeMapping` checks of `A`'s `@AliasFor` declarations, once per type.
+private void validate(A)(ref MergeState state)
+{
+    foreach (name; state.validated)
+        if (name == typeNameOf!A)
+            return;
+    state.validated ~= typeNameOf!A;
+    static foreach (i; fieldsByName!A)
+    {
+        static foreach (alias_; UdaInstances!(__traits(getAttributes, A.tupleof[i])))
+        {
+            static if (isAliasFor!(typeof(alias_)))
+            {
+                validateAlias!(A, i)(alias_, state);
+                if (!isLocal(alias_, typeNameOf!A))
+                    validateImplicit!(A, i)(alias_.annotation.name, aliasTarget(alias_,
+                            __traits(identifier, A.tupleof[i])), state);
+            }
+        }
+    }
+}
+
+/// Implicit aliases of field `i` (aliasing `target.attribute`) must declare its default.
+private void validateImplicit(A, size_t i)(string target, string attribute, ref MergeState state)
+{
+    static foreach (j; fieldsByName!A)
+    {
+        static if (i != j && is(typeof(A.tupleof[i]) == typeof(A.tupleof[j])))
+        {
+            if (linked!(A, j)(target, attribute) && A.init.tupleof[i] != A.init.tupleof[j])
+                return state.fail("Misconfigured aliases: " ~ describe(__traits(identifier,
+                        A.tupleof[i]), typeNameOf!A) ~ " and " ~ describe(__traits(identifier,
+                        A.tupleof[j]), typeNameOf!A) ~ " must declare the same default value.");
+        }
+    }
+}
+
+private void validateAlias(A, size_t i, F)(F alias_, ref MergeState state)
+{
+    enum field = __traits(identifier, A.tupleof[i]);
+    const where = describe(field, typeNameOf!A);
+    if (alias_.attribute.length && alias_.value.length)
+        return state.fail("In @AliasFor declared on " ~ where ~ ", attribute 'attribute' and its alias 'value' "
+                ~ "are present with values of '" ~ alias_.attribute ~ "' and '" ~ alias_.value
+                ~ "', but only one is permitted.");
+    const attribute = aliasTarget(alias_, field);
+    if (!isLocal(alias_, typeNameOf!A))
+        state.aliases ~= Override(alias_.annotation.name, attribute, Any.init, false, 0, typeNameOf!A, field);
+    else
+        validateLocalAlias!(A, i)(attribute, state);
+}
+
+/// An intra-annotation alias of field `i` names an attribute that exists, is not itself, aliases it back, and has its
+/// type and default.
+private void validateLocalAlias(A, size_t i)(string attribute, ref MergeState state)
+{
+    enum field = __traits(identifier, A.tupleof[i]);
+    const where = describe(field, typeNameOf!A);
+    if (attribute == field)
+        return state.fail("@AliasFor declaration on " ~ where ~ " points to itself. Specify 'annotation' to point "
+                ~ "to a same-named attribute on a meta-annotation.");
+    if (!hasField!A(attribute))
+        return state.fail(notPresent(where, attribute));
+    static foreach (j; 0 .. A.tupleof.length)
+    {
+        static if (i != j)
+        {
+            if (__traits(identifier, A.tupleof[j]) == attribute)
+            {
+                const mirror = localAlias!(A, j)();
+                const partner = describe(attribute, typeNameOf!A);
+                if (mirror.length && !hasField!A(mirror))
+                    return state.fail(notPresent(partner, mirror));
+                if (mirror.length && mirror != field)
+                    return state.fail(capitalized(
+                            partner) ~ " must be declared as an @AliasFor " ~ where ~ ", not " ~ describe(mirror,
+                            typeNameOf!A) ~ ".");
+                static if (!is(typeof(A.tupleof[i]) == typeof(A.tupleof[j])))
+                    return state.fail("Misconfigured aliases: " ~ where ~ " and " ~ describe(attribute,
+                            typeNameOf!A) ~ " must declare the same return type.");
+                else
+                {
+                    if (A.init.tupleof[i] != A.init.tupleof[j])
+                        return state.fail("Misconfigured aliases: " ~ where ~ " and " ~ describe(attribute,
+                                typeNameOf!A) ~ " must declare the same default value.");
+                }
+            }
+        }
+    }
+}
+
+/// `A`'s field indexes in name order, the order of Spring's `AttributeMethods`.
+private enum size_t[] fieldsByName(A) = () {
+    size_t[] order;
+    foreach (i, name; fieldNames!A)
+    {
+        size_t at = order.length;
+        while (at > 0 && fieldNames!A[order[at - 1]] > name)
+            at--;
+        order = order[0 .. at] ~ i ~ order[at .. $];
+    }
+    return order;
+}();
+
+private template fieldNames(A)
+{
+    import std.meta : staticMap;
+
+    private enum nameOf(alias field) = __traits(identifier, field);
+    enum string[] fieldNames = [staticMap!(nameOf, A.tupleof)];
+}
+
+/// The attribute field `j` of `A` names in an intra-annotation `@AliasFor`, or null when it declares none.
+private string localAlias(A, size_t j)()
+{
+    string result;
+    static foreach (alias_; UdaInstances!(__traits(getAttributes, A.tupleof[j])))
+    {
+        static if (isAliasFor!(typeof(alias_)))
+        {
+            if (isLocal(alias_, typeNameOf!A))
+                result = aliasTarget(alias_, __traits(identifier, A.tupleof[j]));
+        }
+    }
+    return result;
 }
 
 // ---------------------------------------------------------------------------------------------------------

@@ -37,7 +37,8 @@ module flint.core.annotation.types;
 import flint.core : OrderComparator, Ordered;
 import flint.core.annotation : Order;
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : Descriptor, DescriptorTable, EngineMergedAnnotation = MergedAnnotation;
+import flint.engine.aot.descriptor : Descriptor, DescriptorTable,
+    EngineMergedAnnotation = MergedAnnotation, findAnnotation;
 import flint.engine.aot.name : canonicalTypeName, typeNameOf;
 import flint.java.util : NoSuchElementException, Optional;
 
@@ -58,17 +59,20 @@ struct MergedAnnotation(A)
 {
     private bool present_;
     private ubyte distance_;
+    private ubyte aggregateIndex_;
     private const(A) value_;
 
-    private this(ubyte distance, const A value) pure nothrow @nogc
+    private this(ubyte distance, ubyte aggregateIndex, const A value) pure nothrow @nogc
     {
         present_ = true;
         distance_ = distance;
+        aggregateIndex_ = aggregateIndex;
         value_ = value;
     }
 
-    /// The value meaning the annotation is not present.
-    static MergedAnnotation missing() pure nothrow @nogc
+    /// The value meaning the annotation is not present. Not `@nogc`: an annotation's array attribute may have a
+    /// non-empty default (`string[] value = [""]`).
+    static MergedAnnotation missing() pure nothrow
     {
         return MergedAnnotation.init;
     }
@@ -88,7 +92,7 @@ struct MergedAnnotation(A)
     /// Whether the annotation is declared directly on the source element.
     bool isDirectlyPresent() const pure nothrow @nogc
     {
-        return present_ && distance_ == 0;
+        return present_ && distance_ == 0 && aggregateIndex_ == 0;
     }
 
     /// Whether the annotation is present as a meta-annotation.
@@ -103,6 +107,13 @@ struct MergedAnnotation(A)
         return present_ ? distance_ : -1;
     }
 
+    /// The index of the aggregate (0 for the element itself, n for its nth supertype) it was found in; -1 when
+    /// missing.
+    int getAggregateIndex() const pure nothrow @nogc
+    {
+        return present_ ? aggregateIndex_ : -1;
+    }
+
     /// The merged annotation struct (annotations are immutable, so the view is `const`). Throws
     /// `NoSuchElementException` when missing.
     const(A) synthesize() const
@@ -113,7 +124,9 @@ struct MergedAnnotation(A)
     }
 }
 
-/// How `MergedAnnotations.from` searches; Flint AOT merges with `INHERITED_ANNOTATIONS` semantics.
+/// How `MergedAnnotations.from` searches. Descriptors hold the element's own annotations (aggregate 0) and those of
+/// each supertype (aggregates 1..n, contract 3); `DIRECT` and `INHERITED_ANNOTATIONS` read aggregate 0 (deviation:
+/// `@Inherited` is not modelled), `SUPERCLASS` and `TYPE_HIERARCHY` read every aggregate.
 enum SearchStrategy
 {
     /// Only annotations directly declared (and their meta-annotations).
@@ -132,22 +145,26 @@ The merged annotations of one element, from a Flint AOT descriptor's tables.
 final class MergedAnnotations
 {
     private const(EngineMergedAnnotation)[] annotations;
+    private bool hierarchy;
 
-    private this(const(EngineMergedAnnotation)[] annotations) pure nothrow @nogc
+    private this(const(EngineMergedAnnotation)[] annotations, bool hierarchy) pure nothrow @nogc
     {
         this.annotations = annotations;
+        this.hierarchy = hierarchy;
     }
 
-    /// The annotations of the type `descriptor` describes.
-    static MergedAnnotations from(const Descriptor descriptor, SearchStrategy = SearchStrategy.INHERITED_ANNOTATIONS)
+    /// The annotations of the type `descriptor` describes, searched with `strategy`.
+    static MergedAnnotations from(const Descriptor descriptor,
+            SearchStrategy strategy = SearchStrategy.INHERITED_ANNOTATIONS)
     {
-        return new MergedAnnotations(descriptor is null ? null : descriptor.annotations);
+        return from(descriptor is null ? null : descriptor.annotations, strategy);
     }
 
     /// The annotations of an element whose merged table is `annotations` (a property, method or parameter).
-    static MergedAnnotations from(const(EngineMergedAnnotation)[] annotations) pure nothrow
+    static MergedAnnotations from(const(EngineMergedAnnotation)[] annotations,
+            SearchStrategy strategy = SearchStrategy.INHERITED_ANNOTATIONS) pure nothrow
     {
-        return new MergedAnnotations(annotations);
+        return new MergedAnnotations(annotations, strategy >= SearchStrategy.SUPERCLASS);
     }
 
     /// Whether an annotation named `annotationType` is present.
@@ -166,7 +183,7 @@ final class MergedAnnotations
     bool isDirectlyPresent(string annotationType) const nothrow @nogc
     {
         auto found = find(annotationType);
-        return found !is null && found.distance == 0;
+        return found !is null && found.distance == 0 && found.aggregateIndex == 0;
     }
 
     /// Whether `A` is directly present.
@@ -175,13 +192,17 @@ final class MergedAnnotations
         return isDirectlyPresent(typeNameOf!A);
     }
 
-    /// The nearest `A`, or `MergedAnnotation!A.missing()`.
+    /// The nearest `A`, or `MergedAnnotation!A.missing()`. Throws `AnnotationConfigurationException` when the
+    /// element's annotations declare `@AliasFor` incorrectly.
     MergedAnnotation!A get(A)() const
     {
+        foreach (ref annotation; annotations)
+            if (annotation.error.length)
+                throw new AnnotationConfigurationException(annotation.error);
         auto found = find(typeNameOf!A);
         if (found is null)
             return MergedAnnotation!A.missing();
-        return MergedAnnotation!A(found.distance, found.value.get!(const A));
+        return MergedAnnotation!A(found.distance, found.aggregateIndex, found.value.get!(const A));
     }
 
     /// The canonical type names of every present annotation, nearest first.
@@ -189,22 +210,33 @@ final class MergedAnnotations
     {
         string[] result;
         foreach (ref annotation; annotations)
-            result ~= annotation.type;
+            if (hierarchy || annotation.aggregateIndex == 0)
+                result ~= annotation.type;
         return result;
     }
 
     /// How many annotations are present.
     size_t size() const pure nothrow @nogc
     {
-        return annotations.length;
+        size_t count;
+        foreach (ref annotation; annotations)
+            if (hierarchy || annotation.aggregateIndex == 0)
+                count++;
+        return count;
     }
 
+    /// Spring's `MergedAnnotationFinder`: the first aggregate holding one, then the `nearest` (lowest) distance.
     private const(EngineMergedAnnotation)* find(string annotationType) const nothrow @nogc
     {
         const(EngineMergedAnnotation)* best;
         foreach (ref annotation; annotations)
-            if (annotation.type == annotationType && (best is null || annotation.distance < best.distance))
+        {
+            if (annotation.type != annotationType || (!hierarchy && annotation.aggregateIndex != 0))
+                continue;
+            if (best is null || annotation.aggregateIndex < best.aggregateIndex
+                    || (annotation.aggregateIndex == best.aggregateIndex && annotation.distance < best.distance))
                 best = &annotation;
+        }
         return best;
     }
 }
@@ -233,7 +265,8 @@ struct OrderUtils
     {
         if (descriptor is null)
             return Optional!int.empty();
-        if (auto order = descriptor.annotation(typeNameOf!Order))
+        // Spring's OrderUtils searches the TYPE_HIERARCHY: an @Order on a superclass or interface counts.
+        if (auto order = findAnnotation(descriptor.annotations, typeNameOf!Order))
             return Optional!int.of(order.value.get!(const Order).value);
         return getPriority(descriptor);
     }
@@ -243,7 +276,7 @@ struct OrderUtils
     {
         import flint.jakarta.annotation : Priority;
 
-        auto priority = descriptor is null ? null : descriptor.annotation(typeNameOf!Priority);
+        auto priority = descriptor is null ? null : findAnnotation(descriptor.annotations, typeNameOf!Priority);
         return priority is null ? Optional!int.empty() : Optional!int.of(priority.value.get!(const Priority).value);
     }
 }
@@ -296,10 +329,10 @@ struct AnnotationUtils
     /// The `value` attribute name.
     enum VALUE = "value";
 
-    /// The nearest `A` on `descriptor`'s type, with `found` false when absent.
+    /// The nearest `A` on `descriptor`'s type or its supertypes (`TYPE_HIERARCHY`), with `found` false when absent.
     static const(A) findAnnotation(A)(const Descriptor descriptor, out bool found)
     {
-        auto merged = MergedAnnotations.from(descriptor).get!A();
+        auto merged = MergedAnnotations.from(descriptor, SearchStrategy.TYPE_HIERARCHY).get!A();
         found = merged.isPresent();
         return found ? merged.synthesize() : A.init;
     }

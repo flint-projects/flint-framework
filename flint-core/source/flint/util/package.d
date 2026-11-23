@@ -5521,17 +5521,22 @@ struct MimeType
             if (getSubtype() == other.getSubtype())
                 return true;
             if (isWildcardSubtype() || other.isWildcardSubtype())
-            {
-                const thisSuffix = getSubtypeSuffix();
-                const otherSuffix = other.getSubtypeSuffix();
-                if (getSubtype() == WILDCARD_TYPE || other.getSubtype() == WILDCARD_TYPE)
-                    return true;
-                else if (isWildcardSubtype() && thisSuffix !is null)
-                    return thisSuffix == other.getSubtype() || (otherSuffix !is null && thisSuffix == otherSuffix);
-                else if (other.isWildcardSubtype() && otherSuffix !is null)
-                    return getSubtype() == otherSuffix || (thisSuffix !is null && otherSuffix == thisSuffix);
-            }
+                return wildcardSubtypeCompatible(other);
         }
+        return false;
+    }
+
+    /// `isCompatibleWith` for equal types when either subtype is a wildcard (`*` or `*+suffix`).
+    private bool wildcardSubtypeCompatible(const MimeType other) const pure nothrow @nogc
+    {
+        const thisSuffix = getSubtypeSuffix();
+        const otherSuffix = other.getSubtypeSuffix();
+        if (getSubtype() == WILDCARD_TYPE || other.getSubtype() == WILDCARD_TYPE)
+            return true;
+        else if (isWildcardSubtype() && thisSuffix !is null)
+            return thisSuffix == other.getSubtype() || (otherSuffix !is null && thisSuffix == otherSuffix);
+        else if (other.isWildcardSubtype() && otherSuffix !is null)
+            return getSubtype() == otherSuffix || (thisSuffix !is null && otherSuffix == thisSuffix);
         return false;
     }
 
@@ -5655,36 +5660,32 @@ struct MimeType
         auto otherAttributes = sortedKeys(other.getParameters().keySet());
         foreach (i, thisAttribute; thisAttributes)
         {
-            const otherAttribute = otherAttributes[i];
-            comp = compareIgnoreCase(thisAttribute, otherAttribute);
+            comp = compareParameter(other, thisAttribute, otherAttributes[i]);
             if (comp != 0)
                 return comp;
-            if (equalsIgnoreCase(PARAM_CHARSET, thisAttribute))
-            {
-                const thisCharset = getCharset();
-                const otherCharset = other.getCharset();
-                if (thisCharset is null && otherCharset is null)
-                    continue;
-                if (thisCharset is null)
-                    return -1;
-                if (otherCharset is null)
-                    return 1;
-                comp = thisCharset.compareTo(*otherCharset);
-                if (comp != 0)
-                    return comp;
-            }
-            else
-            {
-                const thisValue = getParameters().get(thisAttribute);
-                string otherValue = other.getParameters().get(otherAttribute);
-                if (otherValue is null)
-                    otherValue = "";
-                comp = compareOrdinal(unquote(thisValue), unquote(otherValue));
-                if (comp != 0)
-                    return comp;
-            }
         }
         return 0;
+    }
+
+    /// `compareTo` for the parameters at one position: names, then values (charsets compared as charsets).
+    private int compareParameter(const MimeType other, string thisAttribute, string otherAttribute) const pure nothrow
+    {
+        const comp = compareIgnoreCase(thisAttribute, otherAttribute);
+        if (comp != 0)
+            return comp;
+        if (equalsIgnoreCase(PARAM_CHARSET, thisAttribute))
+        {
+            const thisCharset = getCharset();
+            const otherCharset = other.getCharset();
+            if (thisCharset is null || otherCharset is null)
+                return thisCharset is otherCharset ? 0 : thisCharset is null ? -1 : 1;
+            return thisCharset.compareTo(*otherCharset);
+        }
+        const thisValue = getParameters().get(thisAttribute);
+        string otherValue = other.getParameters().get(otherAttribute);
+        if (otherValue is null)
+            otherValue = "";
+        return compareOrdinal(unquote(thisValue), unquote(otherValue));
     }
 
     int opCmp(const MimeType other) const pure nothrow
@@ -5947,96 +5948,163 @@ private struct MimeTypeParser
         final switch (state)
         {
         case State.INITIAL:
-            if (c == ' ' || c == '\t')
-                return state;
-            mark = index;
-            return State.TYPE;
+            return initial(state, c);
         case State.TYPE:
-            if (c == '/')
-            {
-                type = input[mark .. index];
-                if (type.length == 0)
-                    throw new InvalidMimeTypeException(input, "'type' must not be empty");
-                mark = index + 1;
-                return State.SUBTYPE;
-            }
-            if (c == ';' || c == ' ' || c == '\t')
-            {
-                resolveBareType(input[mark .. index]);
-                return c == ';' ? State.WHITESPACE : State.PARAM_SEPARATOR;
-            }
-            return state;
+            return inType(state, c);
         case State.SUBTYPE:
-            if (c == ';' || c == ' ' || c == '\t')
-            {
-                subtype = input[mark .. index];
-                return c == ';' ? State.WHITESPACE : State.PARAM_SEPARATOR;
-            }
-            return state;
+            return inSubtype(state, c);
         case State.PARAM_SEPARATOR:
-            if (c == ' ' || c == '\t')
-                return state;
-            if (c == ';')
-                return State.WHITESPACE;
-            throw new InvalidMimeTypeException(input, "Unexpected character '" ~ c ~ "', expected ';'");
+            return afterParameter(state, c);
         case State.WHITESPACE:
-            if (c == ' ' || c == '\t' || c == ';')
-                return state;
-            if (c == '=')
-                throw new InvalidMimeTypeException(input, "missing parameter name before '='");
-            mark = index;
-            return State.PARAM_NAME;
         case State.PARAM_NAME:
-            if (c == '=')
-            {
-                paramName = input[mark .. index];
-                return State.PARAM_VALUE_START;
-            }
-            if (c == ' ' || c == '\t')
-            {
-                paramName = input[mark .. index];
-                return State.PARAM_NAME_END;
-            }
-            if (c == ';')
-            {
-                paramName = input[mark .. index];
-                throw missingParameterValue();
-            }
-            return state;
         case State.PARAM_NAME_END:
-            if (c == ' ' || c == '\t')
-                return state;
-            if (c == '=')
-                return State.PARAM_VALUE_START;
-            if (c == ';')
-                throw missingParameterValue();
-            throw new InvalidMimeTypeException(input, "Unexpected character '" ~ c ~ "' after parameter name");
         case State.PARAM_VALUE_START:
-            if (c == ' ' || c == '\t')
-                return state;
-            if (c == ';')
-                throw missingParameterValue();
-            mark = index;
-            return c == '"' ? State.PARAM_VALUE_QUOTED : State.PARAM_VALUE_TOKEN;
         case State.PARAM_VALUE_TOKEN:
-            if (c == ';' || c == ' ' || c == '\t')
-            {
-                extractParameter(input[mark .. index]);
-                return c == ';' ? State.WHITESPACE : State.PARAM_SEPARATOR;
-            }
-            return state;
         case State.PARAM_VALUE_QUOTED:
-            if (c == '"')
-            {
-                extractParameter(input[mark .. index + 1]);
-                return State.PARAM_SEPARATOR;
-            }
-            if (c == '\\')
-                return State.PARAM_VALUE_ESCAPED;
-            return state;
         case State.PARAM_VALUE_ESCAPED:
+            return processParameter(state, c);
+        }
+    }
+
+    /// `process` for the states inside a parameter.
+    private State processParameter(State state, char c) pure
+    {
+        switch (state)
+        {
+        case State.WHITESPACE:
+            return beforeParameterName(state, c);
+        case State.PARAM_NAME:
+            return inParameterName(state, c);
+        case State.PARAM_NAME_END:
+            return afterParameterName(state, c);
+        case State.PARAM_VALUE_START:
+            return beforeParameterValue(state, c);
+        case State.PARAM_VALUE_TOKEN:
+            return inTokenValue(state, c);
+        case State.PARAM_VALUE_QUOTED:
+            return inQuotedValue(state, c);
+        default:
+            assert(state == State.PARAM_VALUE_ESCAPED);
             return State.PARAM_VALUE_QUOTED;
         }
+    }
+
+    private State initial(State state, char c) pure
+    {
+        if (c == ' ' || c == '\t')
+            return state;
+        mark = index;
+        return State.TYPE;
+    }
+
+    private State inType(State state, char c) pure
+    {
+        if (c == '/')
+        {
+            type = input[mark .. index];
+            if (type.length == 0)
+                throw new InvalidMimeTypeException(input, "'type' must not be empty");
+            mark = index + 1;
+            return State.SUBTYPE;
+        }
+        if (c == ';' || c == ' ' || c == '\t')
+        {
+            resolveBareType(input[mark .. index]);
+            return c == ';' ? State.WHITESPACE : State.PARAM_SEPARATOR;
+        }
+        return state;
+    }
+
+    private State inSubtype(State state, char c) pure
+    {
+        if (c == ';' || c == ' ' || c == '\t')
+        {
+            subtype = input[mark .. index];
+            return c == ';' ? State.WHITESPACE : State.PARAM_SEPARATOR;
+        }
+        return state;
+    }
+
+    private State afterParameter(State state, char c) pure
+    {
+        if (c == ' ' || c == '\t')
+            return state;
+        if (c == ';')
+            return State.WHITESPACE;
+        throw new InvalidMimeTypeException(input, "Unexpected character '" ~ c ~ "', expected ';'");
+    }
+
+    private State beforeParameterName(State state, char c) pure
+    {
+        if (c == ' ' || c == '\t' || c == ';')
+            return state;
+        if (c == '=')
+            throw new InvalidMimeTypeException(input, "missing parameter name before '='");
+        mark = index;
+        return State.PARAM_NAME;
+    }
+
+    private State inParameterName(State state, char c) pure
+    {
+        if (c == '=')
+        {
+            paramName = input[mark .. index];
+            return State.PARAM_VALUE_START;
+        }
+        if (c == ' ' || c == '\t')
+        {
+            paramName = input[mark .. index];
+            return State.PARAM_NAME_END;
+        }
+        if (c == ';')
+        {
+            paramName = input[mark .. index];
+            throw missingParameterValue();
+        }
+        return state;
+    }
+
+    private State afterParameterName(State state, char c) pure
+    {
+        if (c == ' ' || c == '\t')
+            return state;
+        if (c == '=')
+            return State.PARAM_VALUE_START;
+        if (c == ';')
+            throw missingParameterValue();
+        throw new InvalidMimeTypeException(input, "Unexpected character '" ~ c ~ "' after parameter name");
+    }
+
+    private State beforeParameterValue(State state, char c) pure
+    {
+        if (c == ' ' || c == '\t')
+            return state;
+        if (c == ';')
+            throw missingParameterValue();
+        mark = index;
+        return c == '"' ? State.PARAM_VALUE_QUOTED : State.PARAM_VALUE_TOKEN;
+    }
+
+    private State inTokenValue(State state, char c) pure
+    {
+        if (c == ';' || c == ' ' || c == '\t')
+        {
+            extractParameter(input[mark .. index]);
+            return c == ';' ? State.WHITESPACE : State.PARAM_SEPARATOR;
+        }
+        return state;
+    }
+
+    private State inQuotedValue(State state, char c) pure
+    {
+        if (c == '"')
+        {
+            extractParameter(input[mark .. index + 1]);
+            return State.PARAM_SEPARATOR;
+        }
+        if (c == '\\')
+            return State.PARAM_VALUE_ESCAPED;
+        return state;
     }
 
     private void onEof(State state) pure

@@ -11,7 +11,7 @@ import flint.engine.aot.proxy : AdviceChain, Advisor, Invocation, Proceed, advic
 import flint.engine.aot.query : DerivedQuery;
 import flint.engine.aot.registry : AotContractException, AotRegistry, aotContractVersion,
     checkContractVersion, installRegistry, installedRegistry;
-import flint.engine.aot_test_annotations : Component, GetMapping, Mapping, Service, Special;
+import flint.engine.aot_test_annotations : AliasFor, Component, GetMapping, Mapping, Service, Special;
 
 @safe:
 
@@ -575,4 +575,75 @@ unittest
         auto d = new Descriptor(pair[0], TypeKind.class_);
         assert(d.simpleName() == pair[1], pair[0]);
     }
+}
+
+unittest
+{
+    // Breadth first: a @Component at distance 1 beats one at distance 2 reached through an earlier annotation.
+    @Special("far") @Component("near") static final class Nearest
+    {
+    }
+
+    // Declared @Component wins; through @Service at distance 1 it would be "far".
+    assert(descriptorOf!Nearest.annotation(typeNameOf!Component).value.get!Component.value == "near");
+
+    @Special("far") @Service("near") static final class NearestMeta
+    {
+    }
+
+    // @Service declared (distance 0) beats @Special's @Service (distance 1); its @Component (distance 1) comes
+    // from it, not from @Special's chain (distance 2).
+    const component = descriptorOf!NearestMeta.annotation(typeNameOf!Component);
+    assert(component.distance == 1 && component.value.get!Component.value == "near");
+}
+
+/// An interface and a base class carrying annotations, for the supertype aggregates (contract 3).
+@Component("api") private interface AnnotatedApi
+{
+}
+
+@Service("base") private class AnnotatedBase
+{
+}
+
+private final class AnnotatedImpl : AnnotatedBase, AnnotatedApi
+{
+}
+
+unittest
+{
+    import flint.engine.aot.descriptor : findAnnotation;
+
+    // Aggregates in Spring's TYPE_HIERARCHY order: the class (0), its interfaces (1), then the superclass (2).
+    auto impl = descriptorOf!AnnotatedImpl;
+    assert(impl.annotation(typeNameOf!Component) is null); // aggregate 0 only
+    const component = findAnnotation(impl.annotations, typeNameOf!Component);
+    assert(component.aggregateIndex == 1 && component.distance == 0 && component.value.get!Component.value == "api");
+    const service = findAnnotation(impl.annotations, typeNameOf!Service);
+    assert(service.aggregateIndex == 2 && service.value.get!Service.value == "base");
+}
+
+/// `@AliasFor` naming both `attribute` and `value`: Spring's AnnotationConfigurationException.
+private struct Misconfigured
+{
+    @AliasFor(attribute : "a", value:
+            "b") string a;
+}
+
+unittest
+{
+    @Misconfigured static final class Bad
+    {
+    }
+
+    @Mapping(value : "/a", path:
+            "/b") static final class Conflicting
+    {
+    }
+
+    const bad = descriptorOf!Bad.annotations[0].error;
+    assert(bad.length && bad[0 .. 22] == "In @AliasFor declared ");
+    const conflict = descriptorOf!Conflicting.annotations[0].error;
+    assert(conflict.length && conflict[0 .. 37] == "Different @AliasFor mirror values for", conflict);
+    assert(descriptorOf!OwnerService.annotations[0].error is null);
 }

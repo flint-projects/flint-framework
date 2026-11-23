@@ -621,25 +621,20 @@ unittest
     assert(annotation.classes.length == 0);
 }
 
-// MergedAnnotation!A.missing() is @nogc, so MergedAnnotations.get!A does not compile for an annotation whose array
-// attribute has a non-empty default, as RequestMapping's `value` and `path` (`String[] value() default ""`).
-version (FlintMergedAnnotationArrayDefaults)
+/// `testGetWithTypeHierarchyWebMapping(method, expectedPath)`.
+private void assertGetWithTypeHierarchyWebMapping(alias method)(string expectedPath)
 {
-    /// `testGetWithTypeHierarchyWebMapping(method, expectedPath)`.
-    private void assertGetWithTypeHierarchyWebMapping(alias method)(string expectedPath)
-    {
-        const annotation = fromMethod!method().get!RequestMapping().synthesize();
-        assert(annotation.value == [expectedPath]);
-        assert(annotation.path == [expectedPath]);
-    }
+    const annotation = fromMethod!method().get!RequestMapping().synthesize();
+    assert(annotation.value == [expectedPath]);
+    assert(annotation.path == [expectedPath]);
+}
 
-    unittest
-    {
-        // getWithTypeHierarchyOnMethodWithSingleElementOverridingAnArrayViaConvention
-        // Convention-based annotation attribute overrides are no longer supported as of
-        // Spring Framework 7.0. Otherwise, we would expect "/test".
-        assertGetWithTypeHierarchyWebMapping!(WebController.postMappedWithPathAttribute)("");
-    }
+unittest
+{
+    // getWithTypeHierarchyOnMethodWithSingleElementOverridingAnArrayViaConvention
+    // Convention-based annotation attribute overrides are no longer supported as of
+    // Spring Framework 7.0. Otherwise, we would expect "/test".
+    assertGetWithTypeHierarchyWebMapping!(WebController.postMappedWithPathAttribute)("");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -743,90 +738,76 @@ private struct AliasedAnnotation
 {
 }
 
-// Behaviour: misconfigured @AliasFor declarations are never validated; MergedAnnotations.get merges them
-// silently instead of throwing AnnotationConfigurationException.
-version (FlintAliasForValidation)
+import flint.core.annotation.types : AnnotationConfigurationException;
+import flint.util.test_support : contains, expectThrows;
+
+private void assertOnlyOnePermitted(T)()
 {
-    import flint.core.annotation.types : AnnotationConfigurationException;
-    import flint.util.test_support : contains, expectThrows;
-
-    private void assertOnlyOnePermitted(T)()
-    {
-        const e = expectThrows!AnnotationConfigurationException(() {
-            from!T().get!AliasedAnnotation();
-        });
-        assert(e.msg.contains("but only one is permitted"), e.msg);
-    }
-
-    private void assertNonexistentBlankAttribute(T)()
-    {
-        const e = expectThrows!AnnotationConfigurationException(() {
-            from!T().get!AliasedAnnotation();
-        });
-        assert(e.msg.contains("is declared as an @AliasFor nonexistent attribute ' '"), e.msg);
-    }
-
-    unittest
-    {
-        // bothNonBlankValueAndAttribute
-        assertOnlyOnePermitted!WithBothNonBlank();
-    }
-
-    unittest
-    {
-        // bothBlankValueAndAttribute
-        assertOnlyOnePermitted!WithBothBlank();
-    }
-
-    unittest
-    {
-        // blankValueAndNonBlankAttribute
-        assertOnlyOnePermitted!WithBlankValue();
-    }
-
-    unittest
-    {
-        // nonBlankValueAndBlankAttribute
-        assertOnlyOnePermitted!WithBlankAttribute();
-    }
-
-    unittest
-    {
-        // onlyBlankValue
-        assertNonexistentBlankAttribute!WithOnlyBlankValue();
-    }
-
-    unittest
-    {
-        // onlyBlankAttribute
-        assertNonexistentBlankAttribute!WithOnlyBlankAttribute();
-    }
+    const e = expectThrows!AnnotationConfigurationException(() { from!T().get!AliasedAnnotation(); });
+    assert(e.msg.contains("but only one is permitted"), e.msg);
 }
 
-// Behaviour: an attribute aliased to a meta-annotation attribute is ignored while it holds its own default value, so
-// the meta-annotation keeps its default (onlyValue gives foo == "", not "fromValue").
-version (FlintAliasForMetaDefaultOverride)
+private void assertNonexistentBlankAttribute(T)()
 {
-    unittest
-    {
-        // onlyValue
-        const merged = from!WithOnlyValue().get!AliasedAnnotation();
-        assert(merged.synthesize().foo == "fromValue");
-    }
+    const e = expectThrows!AnnotationConfigurationException(() { from!T().get!AliasedAnnotation(); });
+    assert(e.msg.contains("is declared as an @AliasFor nonexistent attribute ' '"), e.msg);
+}
 
-    unittest
-    {
-        // onlyAttribute
-        const merged = from!WithOnlyAttribute().get!AliasedAnnotation();
-        assert(merged.synthesize().foo == "fromAttribute");
-    }
+unittest
+{
+    // bothNonBlankValueAndAttribute
+    assertOnlyOnePermitted!WithBothNonBlank();
+}
 
-    unittest
-    {
-        // neitherValueNorAttribute
-        const merged = from!WithNeitherSet().get!AliasedAnnotation();
-        assert(merged.synthesize().foo == "fromSelf");
-    }
+unittest
+{
+    // bothBlankValueAndAttribute
+    assertOnlyOnePermitted!WithBothBlank();
+}
+
+unittest
+{
+    // blankValueAndNonBlankAttribute
+    assertOnlyOnePermitted!WithBlankValue();
+}
+
+unittest
+{
+    // nonBlankValueAndBlankAttribute
+    assertOnlyOnePermitted!WithBlankAttribute();
+}
+
+unittest
+{
+    // onlyBlankValue
+    assertNonexistentBlankAttribute!WithOnlyBlankValue();
+}
+
+unittest
+{
+    // onlyBlankAttribute
+    assertNonexistentBlankAttribute!WithOnlyBlankAttribute();
+}
+
+unittest
+{
+    // onlyValue
+    const merged = from!WithOnlyValue().get!AliasedAnnotation();
+    assert(merged.synthesize().foo == "fromValue");
+}
+
+unittest
+{
+    // onlyAttribute
+    const merged = from!WithOnlyAttribute().get!AliasedAnnotation();
+    assert(merged.synthesize().foo == "fromAttribute");
+}
+
+unittest
+{
+    // neitherValueNorAttribute
+    const merged = from!WithNeitherSet().get!AliasedAnnotation();
+    assert(merged.synthesize().foo == "fromSelf");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -850,20 +831,15 @@ unittest
     assert(annotation.locations == ["test.xml"]);
 }
 
-// Behaviour: implicit aliases (attributes aliasing the same meta-annotation attribute) are not mirrored within the
-// composed annotation: only the attribute declared keeps its value (groovyScripts, locations and value stay empty).
-version (FlintImplicitAliases)
+unittest
 {
-    unittest
-    {
-        // getWithInheritedAnnotationsFromImplicitAliasesInMetaAnnotationOnComposedAnnotation
-        const annotation = from!ComposedImplicitAliasesContextConfigurationClass(SearchStrategy.INHERITED_ANNOTATIONS)
-            .get!ImplicitAliasesContextConfiguration().synthesize();
-        assert(annotation.groovyScripts == ["A.xml", "B.xml"]);
-        assert(annotation.xmlFiles == ["A.xml", "B.xml"]);
-        assert(annotation.locations == ["A.xml", "B.xml"]);
-        assert(annotation.value == ["A.xml", "B.xml"]);
-    }
+    // getWithInheritedAnnotationsFromImplicitAliasesInMetaAnnotationOnComposedAnnotation
+    const annotation = from!ComposedImplicitAliasesContextConfigurationClass(SearchStrategy.INHERITED_ANNOTATIONS)
+        .get!ImplicitAliasesContextConfiguration().synthesize();
+    assert(annotation.groovyScripts == ["A.xml", "B.xml"]);
+    assert(annotation.xmlFiles == ["A.xml", "B.xml"]);
+    assert(annotation.locations == ["A.xml", "B.xml"]);
+    assert(annotation.value == ["A.xml", "B.xml"]);
 }
 
 unittest
@@ -886,75 +862,51 @@ unittest
     assertGetWithInherited!TransitiveImplicitAliasesContextConfigurationClass("test.groovy");
 }
 
-// Behaviour: a single-element attribute aliased to an array attribute (`string pkg` for `string[] basePackages`)
-// is silently dropped; Spring wraps the value in a one-element array.
-version (FlintAliasForSingleElementToArray)
+unittest
 {
-    unittest
-    {
-        // getWithInheritedAnnotationsFromTransitiveImplicitAliasesWithSingleElementOverridingAnArrayViaAliasFor
-        assertGetWithInherited!SingleLocationTransitiveImplicitAliasesContextConfigurationClass("test.groovy");
-    }
+    // getWithInheritedAnnotationsFromTransitiveImplicitAliasesWithSingleElementOverridingAnArrayViaAliasFor
+    assertGetWithInherited!SingleLocationTransitiveImplicitAliasesContextConfigurationClass("test.groovy");
 }
 
-// Behaviour: @AliasFor(annotation: M) is applied only when M is a direct meta-annotation; an alias for a
-// meta-meta-annotation attribute (skipping a level) is ignored, so ContextConfiguration.locations stays empty.
-version (FlintAliasForSkippedLevel)
+unittest
 {
-    unittest
-    {
-        // getWithInheritedAnnotationsFromTransitiveImplicitAliasesWithSkippedLevel
-        assertGetWithInherited!TransitiveImplicitAliasesWithSkippedLevelContextConfigurationClass("test.xml");
-    }
-
-    unittest
-    {
-        // getWithInheritedAnnotationsFromTransitiveImplicitAliasesWithSkippedLevel...
-        // ...WithSingleElementOverridingAnArrayViaAliasFor (one Java test name, split at the line limit)
-        assertGetWithInherited!SingleLocationTransitiveImplicitAliasesWithSkippedLevelContextConfigurationClass(
-                "test.xml");
-    }
+    // getWithInheritedAnnotationsFromTransitiveImplicitAliasesWithSkippedLevel
+    assertGetWithInherited!TransitiveImplicitAliasesWithSkippedLevelContextConfigurationClass("test.xml");
 }
 
-version (FlintAliasForSingleElementToArray)
+unittest
 {
-    unittest
-    {
-        // getWithSingleValuePrimitiveAttributesOverridingPrimitiveArraysViaAliasFor
-        const annotation = from!ComposedPrimitiveSingleValuesClass().get!PrimitiveArrays();
-        assert(annotation.isPresent());
-        assert(annotation.synthesize().ints == [42]);
-        assert(annotation.synthesize().longs == [42L]);
-        assert(annotation.synthesize().booleans == [true]);
-        assert(annotation.synthesize().chars == ['c']);
-        assert(annotation.synthesize().doubles == [4.2]);
-    }
+    // getWithInheritedAnnotationsFromTransitiveImplicitAliasesWithSkippedLevel...
+    // ...WithSingleElementOverridingAnArrayViaAliasFor (one Java test name, split at the line limit)
+    assertGetWithInherited!SingleLocationTransitiveImplicitAliasesWithSkippedLevelContextConfigurationClass("test.xml");
 }
 
-// Behaviour: an alias override of one attribute of a mirror pair leaves the other attribute with the value the
-// meta-annotation declared: value == ["duplicateDeclaration"] while locations == ["test.xml"].
-version (FlintAliasForShadowedMirror)
+unittest
 {
-    unittest
-    {
-        // getWithInheritedAnnotationsFromShadowedAliasComposedAnnotation
-        const annotation = from!ShadowedAliasComposedContextConfigurationClass(SearchStrategy.INHERITED_ANNOTATIONS)
-            .get!ContextConfiguration().synthesize();
-        assert(annotation.locations == ["test.xml"]);
-        assert(annotation.value == ["test.xml"]);
-    }
+    // getWithSingleValuePrimitiveAttributesOverridingPrimitiveArraysViaAliasFor
+    const annotation = from!ComposedPrimitiveSingleValuesClass().get!PrimitiveArrays();
+    assert(annotation.isPresent());
+    assert(annotation.synthesize().ints == [42]);
+    assert(annotation.synthesize().longs == [42L]);
+    assert(annotation.synthesize().booleans == [true]);
+    assert(annotation.synthesize().chars == ['c']);
+    assert(annotation.synthesize().doubles == [4.2]);
 }
 
-// Behaviour: meta-annotations are merged depth first and the first one found wins, so @Transactional from
-// @TxComposedWithOverride (distance 2, qualifier "transactionManager") hides the local @Transactional (distance 1).
-version (FlintMergedAnnotationNearestMeta)
+unittest
 {
-    unittest
-    {
-        // getWithTypeHierarchyFromClassWithMetaAndLocalTxConfig
-        const annotation = from!MetaAndLocalTxConfigClass(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
-        assert(annotation.synthesize().qualifier == "localTxMgr");
-    }
+    // getWithInheritedAnnotationsFromShadowedAliasComposedAnnotation
+    const annotation = from!ShadowedAliasComposedContextConfigurationClass(SearchStrategy.INHERITED_ANNOTATIONS)
+        .get!ContextConfiguration().synthesize();
+    assert(annotation.locations == ["test.xml"]);
+    assert(annotation.value == ["test.xml"]);
+}
+
+unittest
+{
+    // getWithTypeHierarchyFromClassWithMetaAndLocalTxConfig
+    const annotation = from!MetaAndLocalTxConfigClass(SearchStrategy.TYPE_HIERARCHY).get!Transactional();
+    assert(annotation.synthesize().qualifier == "localTxMgr");
 }
 
 unittest
@@ -1004,13 +956,10 @@ unittest
     assertGetWithTypeHierarchy!ComponentScanWithBasePackagesAndValueAliasClass("com.example.app.test");
 }
 
-version (FlintAliasForSingleElementToArray)
+unittest
 {
-    unittest
-    {
-        // getWithTypeHierarchyWithSingleElementOverridingAnArrayViaAliasFor
-        assertGetWithTypeHierarchy!AliasForBasedSinglePackageComponentScanClass("com.example.app.test");
-    }
+    // getWithTypeHierarchyWithSingleElementOverridingAnArrayViaAliasFor
+    assertGetWithTypeHierarchy!AliasForBasedSinglePackageComponentScanClass("com.example.app.test");
 }
 
 unittest
@@ -1026,47 +975,42 @@ unittest
     assert(testPropSource.value == ["test.properties"]);
 }
 
-version (FlintMergedAnnotationArrayDefaults)
+unittest
 {
-    unittest
-    {
-        // getWithTypeHierarchyOnMethodWithSingleElementOverridingAnArrayViaAliasFor
-        assertGetWithTypeHierarchyWebMapping!(WebController.getMappedWithValueAttribute)("/test");
-        assertGetWithTypeHierarchyWebMapping!(WebController.getMappedWithPathAttribute)("/test");
-    }
+    // getWithTypeHierarchyOnMethodWithSingleElementOverridingAnArrayViaAliasFor
+    assertGetWithTypeHierarchyWebMapping!(WebController.getMappedWithValueAttribute)("/test");
+    assertGetWithTypeHierarchyWebMapping!(WebController.getMappedWithPathAttribute)("/test");
+}
 
-    unittest
-    {
-        // getDirectWithAttributeAliases1
-        const annotation = fromMethod!(WebController.handleMappedWithValueAttribute)().get!RequestMapping()
-            .synthesize();
-        assert(annotation.name == "foo");
-        assert(annotation.value == ["/test"]);
-        assert(annotation.path == ["/test"]);
-    }
+unittest
+{
+    // getDirectWithAttributeAliases1
+    const annotation = fromMethod!(WebController.handleMappedWithValueAttribute)().get!RequestMapping().synthesize();
+    assert(annotation.name == "foo");
+    assert(annotation.value == ["/test"]);
+    assert(annotation.path == ["/test"]);
+}
 
-    unittest
-    {
-        // getDirectWithAttributeAliases2
-        const annotation = fromMethod!(WebController.handleMappedWithPathAttribute)().get!RequestMapping()
-            .synthesize();
-        assert(annotation.name == "bar");
-        assert(annotation.value == ["/test"]);
-        assert(annotation.path == ["/test"]);
-    }
+unittest
+{
+    // getDirectWithAttributeAliases2
+    const annotation = fromMethod!(WebController.handleMappedWithPathAttribute)().get!RequestMapping().synthesize();
+    assert(annotation.name == "bar");
+    assert(annotation.value == ["/test"]);
+    assert(annotation.path == ["/test"]);
+}
 
-    unittest
-    {
-        // getDirectWithAttributeAliasesWithDifferentValues
-        import flint.core.annotation.types : AnnotationConfigurationException;
-        import flint.util.test_support : contains, expectThrows;
+unittest
+{
+    // getDirectWithAttributeAliasesWithDifferentValues
+    import flint.core.annotation.types : AnnotationConfigurationException;
+    import flint.util.test_support : contains, expectThrows;
 
-        const e = expectThrows!AnnotationConfigurationException(() {
-            fromMethod!(WebController.handleMappedWithDifferentPathAndValueAttributes)().get!RequestMapping();
-        });
-        assert(e.msg.contains("attribute 'path' and its alias 'value'"));
-        assert(e.msg.contains("values of [{/test}] and [{/enigma}]"));
-    }
+    const e = expectThrows!AnnotationConfigurationException(() {
+        fromMethod!(WebController.handleMappedWithDifferentPathAndValueAttributes)().get!RequestMapping();
+    });
+    assert(e.msg.contains("attribute 'path' and its alias 'value'"));
+    assert(e.msg.contains("values of [{/test}] and [{/enigma}]"));
 }
 
 unittest

@@ -570,18 +570,12 @@ unittest
         .get!RootAnnotation().synthesize();
     assert(!rootAnnotation.flag);
 
-    // Behaviour: an attribute aliased to a meta-annotation attribute is ignored while it holds its own default
-    // value, so the meta-annotation keeps its default (flag == false, not ComposedRootAnnotation.enabled's true).
-    version (FlintAliasForMetaDefaultOverride)
-    {
-        rootAnnotation = fromField!(__traits(getAttributes, DomainType.metaAnnotated))().get!RootAnnotation()
-            .synthesize();
-        assert(rootAnnotation.flag);
+    rootAnnotation = fromField!(__traits(getAttributes, DomainType.metaAnnotated))().get!RootAnnotation().synthesize();
+    assert(rootAnnotation.flag);
 
-        rootAnnotation = fromField!(__traits(getAttributes, DomainType.metaMetaAnnotated))().get!RootAnnotation()
-            .synthesize();
-        assert(rootAnnotation.flag);
-    }
+    rootAnnotation = fromField!(__traits(getAttributes, DomainType.metaMetaAnnotated))().get!RootAnnotation()
+        .synthesize();
+    assert(rootAnnotation.flag);
 }
 
 unittest
@@ -595,208 +589,186 @@ unittest
 // ---------------------------------------------------------------------------------------------------------------
 // @AliasFor validation
 
-// Behaviour: misconfigured @AliasFor declarations are never validated; MergedAnnotations.get merges them silently
-// instead of throwing AnnotationConfigurationException.
-version (FlintAliasForValidation)
+unittest
 {
-    unittest
-    {
-        // synthesizeWhenAliasForIsMissingAttributeDeclaration
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasForWithMissingAttributeDeclaration, AliasForWithMissingAttributeDeclarationClass)();
-        });
-        assert(e.msg.startsWith("@AliasFor declaration on attribute 'foo' in annotation"));
-        assert(e.msg.contains(typeNameOf!AliasForWithMissingAttributeDeclaration));
-        assert(e.msg.contains("points to itself"));
-    }
-
-    unittest
-    {
-        // synthesizeWhenAliasForHasDuplicateAttributeDeclaration
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasForWithDuplicateAttributeDeclaration, AliasForWithDuplicateAttributeDeclarationClass)();
-        });
-        assert(e.msg.startsWith("In @AliasFor declared on attribute 'foo' in annotation"));
-        assert(e.msg.contains(typeNameOf!AliasForWithDuplicateAttributeDeclaration));
-        assert(e.msg.contains(
-                "attribute 'attribute' and its alias 'value' are present with values of " ~ "'baz' and 'bar'"));
-    }
-
-    unittest
-    {
-        // synthesizeWhenAttributeAliasForNonexistentAttribute
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasForNonexistentAttribute, AliasForNonexistentAttributeClass)();
-        });
-        assert(e.msg.startsWith("@AliasFor declaration on attribute 'foo' in annotation"));
-        assert(e.msg.contains(typeNameOf!AliasForNonexistentAttribute));
-        assert(e.msg.contains("declares an alias for 'bar' which is not present"));
-    }
+    // synthesizeWhenAliasForIsMissingAttributeDeclaration
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasForWithMissingAttributeDeclaration, AliasForWithMissingAttributeDeclarationClass)();
+    });
+    assert(e.msg.startsWith("@AliasFor declaration on attribute 'foo' in annotation"));
+    assert(e.msg.contains(typeNameOf!AliasForWithMissingAttributeDeclaration));
+    assert(e.msg.contains("points to itself"));
 }
 
-// MergedAnnotation!A.missing() is @nogc, so MergedAnnotations.get!A does not compile for an annotation whose array
-// attribute has a non-empty default (`string[] foo = [""]`, RequestMapping's `String[] value() default ""`).
-version (FlintMergedAnnotationArrayDefaults)
+unittest
 {
-    unittest
-    {
-        // synthesizeWhenAttributeAliasWithMirroredAliasForWrongAttribute
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasForWithMirroredAliasForWrongAttribute, AliasForWithMirroredAliasForWrongAttributeClass)();
-        });
-        assert(e.msg == "@AliasFor declaration on attribute 'bar' in annotation ["
-                ~ typeNameOf!AliasForWithMirroredAliasForWrongAttribute
-                ~ "] declares an alias for 'quux' which is not present.");
-    }
-
-    unittest
-    {
-        // synthesizeWhenAttributeAliasForAttributeOfDifferentType
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasForAttributeOfDifferentType, AliasForAttributeOfDifferentTypeClass)();
-        });
-        assert(e.msg.startsWith("Misconfigured aliases"));
-        assert(e.msg.contains(typeNameOf!AliasForAttributeOfDifferentType));
-        assert(e.msg.contains("attribute 'foo'"));
-        assert(e.msg.contains("attribute 'bar'"));
-        assert(e.msg.contains("same return type"));
-    }
+    // synthesizeWhenAliasForHasDuplicateAttributeDeclaration
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasForWithDuplicateAttributeDeclaration, AliasForWithDuplicateAttributeDeclarationClass)();
+    });
+    assert(e.msg.startsWith("In @AliasFor declared on attribute 'foo' in annotation"));
+    assert(e.msg.contains(typeNameOf!AliasForWithDuplicateAttributeDeclaration));
+    assert(e.msg.contains("attribute 'attribute' and its alias 'value' are present with values of 'baz' and 'bar'"));
 }
 
-version (FlintAliasForValidation)
+unittest
 {
-    unittest
-    {
-        // synthesizeWhenAttributeAliasForAttributeWithDifferentDefaultValue
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasForAttributeWithDifferentDefaultValue, AliasForAttributeWithDifferentDefaultValueClass)();
-        });
-        assert(e.msg.startsWith("Misconfigured aliases"));
-        assert(e.msg.contains(typeNameOf!AliasForAttributeWithDifferentDefaultValue));
-        assert(e.msg.contains("attribute 'foo' in annotation"));
-        assert(e.msg.contains("attribute 'bar' in annotation"));
-        assert(e.msg.contains("same default value"));
-    }
+    // synthesizeWhenAttributeAliasForNonexistentAttribute
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasForNonexistentAttribute, AliasForNonexistentAttributeClass)();
+    });
+    assert(e.msg.startsWith("@AliasFor declaration on attribute 'foo' in annotation"));
+    assert(e.msg.contains(typeNameOf!AliasForNonexistentAttribute));
+    assert(e.msg.contains("declares an alias for 'bar' which is not present"));
+}
 
-    unittest
-    {
-        // synthesizeWhenAttributeAliasForMetaAnnotationThatIsNotMetaPresent
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AliasedComposedTestConfigurationNotMetaPresent,
-                AliasedComposedTestConfigurationNotMetaPresentClass)();
-        });
-        assert(e.msg.startsWith("@AliasFor declaration on attribute 'xmlConfigFile' in annotation"));
-        assert(e.msg.contains(typeNameOf!AliasedComposedTestConfigurationNotMetaPresent));
-        assert(e.msg.contains("declares an alias for attribute 'location' in annotation"));
-        assert(e.msg.contains(typeNameOf!TestConfiguration));
-        assert(e.msg.contains("not meta-present"));
-    }
+unittest
+{
+    // synthesizeWhenAttributeAliasWithMirroredAliasForWrongAttribute
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasForWithMirroredAliasForWrongAttribute, AliasForWithMirroredAliasForWrongAttributeClass)();
+    });
+    assert(e.msg == "@AliasFor declaration on attribute 'bar' in annotation ["
+            ~ typeNameOf!AliasForWithMirroredAliasForWrongAttribute
+            ~ "] declares an alias for 'quux' which is not present.");
+}
+
+unittest
+{
+    // synthesizeWhenAttributeAliasForAttributeOfDifferentType
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasForAttributeOfDifferentType, AliasForAttributeOfDifferentTypeClass)();
+    });
+    assert(e.msg.startsWith("Misconfigured aliases"));
+    assert(e.msg.contains(typeNameOf!AliasForAttributeOfDifferentType));
+    assert(e.msg.contains("attribute 'foo'"));
+    assert(e.msg.contains("attribute 'bar'"));
+    assert(e.msg.contains("same return type"));
+}
+
+unittest
+{
+    // synthesizeWhenAttributeAliasForAttributeWithDifferentDefaultValue
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasForAttributeWithDifferentDefaultValue, AliasForAttributeWithDifferentDefaultValueClass)();
+    });
+    assert(e.msg.startsWith("Misconfigured aliases"));
+    assert(e.msg.contains(typeNameOf!AliasForAttributeWithDifferentDefaultValue));
+    assert(e.msg.contains("attribute 'foo' in annotation"));
+    assert(e.msg.contains("attribute 'bar' in annotation"));
+    assert(e.msg.contains("same default value"));
+}
+
+unittest
+{
+    // synthesizeWhenAttributeAliasForMetaAnnotationThatIsNotMetaPresent
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AliasedComposedTestConfigurationNotMetaPresent,
+            AliasedComposedTestConfigurationNotMetaPresentClass)();
+    });
+    assert(e.msg.startsWith("@AliasFor declaration on attribute 'xmlConfigFile' in annotation"));
+    assert(e.msg.contains(typeNameOf!AliasedComposedTestConfigurationNotMetaPresent));
+    assert(e.msg.contains("declares an alias for attribute 'location' in annotation"));
+    assert(e.msg.contains(typeNameOf!TestConfiguration));
+    assert(e.msg.contains("not meta-present"));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 // Implicit aliases
 
-// Behaviour: implicit aliases (attributes aliasing the same meta-annotation attribute) are not mirrored within the
-// composed annotation: only the attribute declared keeps its value (the others stay "").
-version (FlintImplicitAliases)
+/// `testSynthesisWithImplicitAliases(T.class, expected)`.
+private void assertSynthesisWithImplicitAliases(T)(string expected)
 {
-    /// `testSynthesisWithImplicitAliases(T.class, expected)`.
-    private void assertSynthesisWithImplicitAliases(T)(string expected)
-    {
-        const config = synthesized!(ImplicitAliasesTestConfiguration, T)();
-        assert(config.value == expected, T.stringof);
-        assert(config.location1 == expected, T.stringof);
-        assert(config.xmlFile == expected, T.stringof);
-        assert(config.groovyScript == expected, T.stringof);
-    }
-
-    /// `testSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(T.class, expected)`.
-    private void assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(T)(string expected)
-    {
-        const config = synthesized!(ImplicitAliasesWithImpliedAliasNamesOmittedTestConfiguration, T)();
-        assert(config.value == expected, T.stringof);
-        assert(config.location == expected, T.stringof);
-        assert(config.xmlFile == expected, T.stringof);
-    }
-
-    unittest
-    {
-        // synthesizeWithImplicitAliases
-        assertSynthesisWithImplicitAliases!ValueImplicitAliasesTestConfigurationClass("value");
-        assertSynthesisWithImplicitAliases!Location1ImplicitAliasesTestConfigurationClass("location1");
-        assertSynthesisWithImplicitAliases!XmlImplicitAliasesTestConfigurationClass("xmlFile");
-        assertSynthesisWithImplicitAliases!GroovyImplicitAliasesSimpleTestConfigurationClass("groovyScript");
-    }
-
-    unittest
-    {
-        // synthesizeWithImplicitAliasesWithImpliedAliasNamesOmitted
-        assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted!(
-                ValueImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurationClass)("value");
-        assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted!(
-                LocationsImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurationClass)("location");
-        assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted!(
-                XmlFilesImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurationClass)("xmlFile");
-    }
-
-    unittest
-    {
-        // synthesizeWithImplicitAliasesForAliasPair
-        const config = synthesized!(ImplicitAliasesForAliasPairTestConfiguration,
-                ImplicitAliasesForAliasPairTestConfigurationClass)();
-        assert(config.xmlFile == "test.xml");
-        assert(config.groovyScript == "test.xml");
-    }
-
-    unittest
-    {
-        // synthesizeWithTransitiveImplicitAliases
-        const config = synthesized!(TransitiveImplicitAliasesTestConfiguration,
-                TransitiveImplicitAliasesTestConfigurationClass)();
-        assert(config.xml == "test.xml");
-        assert(config.groovy == "test.xml");
-    }
-
-    unittest
-    {
-        // synthesizeWithTransitiveImplicitAliasesForAliasPair
-        const config = synthesized!(TransitiveImplicitAliasesForAliasPairTestConfiguration,
-                TransitiveImplicitAliasesForAliasPairTestConfigurationClass)();
-        assert(config.xml == "test.xml");
-        assert(config.groovy == "test.xml");
-    }
+    const config = synthesized!(ImplicitAliasesTestConfiguration, T)();
+    assert(config.value == expected, T.stringof);
+    assert(config.location1 == expected, T.stringof);
+    assert(config.xmlFile == expected, T.stringof);
+    assert(config.groovyScript == expected, T.stringof);
 }
 
-version (FlintAliasForValidation)
+/// `testSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(T.class, expected)`.
+private void assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(T)(string expected)
 {
-    unittest
-    {
-        // synthesizeWithImplicitAliasesWithDifferentDefaultValues
-        alias Clazz = ImplicitAliasesWithDifferentDefaultValuesTestConfigurationClass;
-        alias AnnotationType = ImplicitAliasesWithDifferentDefaultValuesTestConfiguration;
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AnnotationType, Clazz)();
-        });
-        assert(e.msg.startsWith("Misconfigured aliases:"));
-        assert(e.msg.contains("attribute 'location1' in annotation [" ~ typeNameOf!AnnotationType ~ "]"));
-        assert(e.msg.contains("attribute 'location2' in annotation [" ~ typeNameOf!AnnotationType ~ "]"));
-        assert(e.msg.contains("same default value"));
-    }
+    const config = synthesized!(ImplicitAliasesWithImpliedAliasNamesOmittedTestConfiguration, T)();
+    assert(config.value == expected, T.stringof);
+    assert(config.location == expected, T.stringof);
+    assert(config.xmlFile == expected, T.stringof);
+}
 
-    unittest
-    {
-        // synthesizeWithImplicitAliasesWithDuplicateValues
-        alias Clazz = ImplicitAliasesWithDuplicateValuesTestConfigurationClass;
-        alias AnnotationType = ImplicitAliasesWithDuplicateValuesTestConfiguration;
-        const e = expectThrows!AnnotationConfigurationException(() {
-            synthesized!(AnnotationType, Clazz)();
-        });
-        assert(e.msg.startsWith("Different @AliasFor mirror values for annotation"));
-        assert(e.msg.contains(typeNameOf!AnnotationType));
-        assert(e.msg.contains("declared on class"));
-        assert(e.msg.contains(typeNameOf!Clazz));
-        assert(e.msg.contains("are declared with values of"));
-    }
+unittest
+{
+    // synthesizeWithImplicitAliases
+    assertSynthesisWithImplicitAliases!ValueImplicitAliasesTestConfigurationClass("value");
+    assertSynthesisWithImplicitAliases!Location1ImplicitAliasesTestConfigurationClass("location1");
+    assertSynthesisWithImplicitAliases!XmlImplicitAliasesTestConfigurationClass("xmlFile");
+    assertSynthesisWithImplicitAliases!GroovyImplicitAliasesSimpleTestConfigurationClass("groovyScript");
+}
+
+unittest
+{
+    // synthesizeWithImplicitAliasesWithImpliedAliasNamesOmitted
+    assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted!(
+            ValueImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurationClass)("value");
+    assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted!(
+            LocationsImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurationClass)("location");
+    assertSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted!(
+            XmlFilesImplicitAliasesWithImpliedAliasNamesOmittedTestConfigurationClass)("xmlFile");
+}
+
+unittest
+{
+    // synthesizeWithImplicitAliasesForAliasPair
+    const config = synthesized!(ImplicitAliasesForAliasPairTestConfiguration,
+            ImplicitAliasesForAliasPairTestConfigurationClass)();
+    assert(config.xmlFile == "test.xml");
+    assert(config.groovyScript == "test.xml");
+}
+
+unittest
+{
+    // synthesizeWithTransitiveImplicitAliases
+    const config = synthesized!(TransitiveImplicitAliasesTestConfiguration,
+            TransitiveImplicitAliasesTestConfigurationClass)();
+    assert(config.xml == "test.xml");
+    assert(config.groovy == "test.xml");
+}
+
+unittest
+{
+    // synthesizeWithTransitiveImplicitAliasesForAliasPair
+    const config = synthesized!(TransitiveImplicitAliasesForAliasPairTestConfiguration,
+            TransitiveImplicitAliasesForAliasPairTestConfigurationClass)();
+    assert(config.xml == "test.xml");
+    assert(config.groovy == "test.xml");
+}
+
+unittest
+{
+    // synthesizeWithImplicitAliasesWithDifferentDefaultValues
+    alias Clazz = ImplicitAliasesWithDifferentDefaultValuesTestConfigurationClass;
+    alias AnnotationType = ImplicitAliasesWithDifferentDefaultValuesTestConfiguration;
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AnnotationType, Clazz)();
+    });
+    assert(e.msg.startsWith("Misconfigured aliases:"));
+    assert(e.msg.contains("attribute 'location1' in annotation [" ~ typeNameOf!AnnotationType ~ "]"));
+    assert(e.msg.contains("attribute 'location2' in annotation [" ~ typeNameOf!AnnotationType ~ "]"));
+    assert(e.msg.contains("same default value"));
+}
+
+unittest
+{
+    // synthesizeWithImplicitAliasesWithDuplicateValues
+    alias Clazz = ImplicitAliasesWithDuplicateValuesTestConfigurationClass;
+    alias AnnotationType = ImplicitAliasesWithDuplicateValuesTestConfiguration;
+    const e = expectThrows!AnnotationConfigurationException(() {
+        synthesized!(AnnotationType, Clazz)();
+    });
+    assert(e.msg.startsWith("Different @AliasFor mirror values for annotation"));
+    assert(e.msg.contains(typeNameOf!AnnotationType));
+    assert(e.msg.contains("declared on class"));
+    assert(e.msg.contains(typeNameOf!Clazz));
+    assert(e.msg.contains("are declared with values of"));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -871,15 +843,12 @@ version (FlintAnnotationUtilsAttributes)
     }
 }
 
-version (FlintAliasForValidation)
+unittest
 {
-    unittest
-    {
-        // synthesizeWhenAttributeAliasesWithDifferentValues
-        expectThrows!AnnotationConfigurationException(() {
-            synthesized!(TestConfiguration, TestConfigurationMismatch)();
-        });
-    }
+    // synthesizeWhenAttributeAliasesWithDifferentValues
+    expectThrows!AnnotationConfigurationException(() {
+        synthesized!(TestConfiguration, TestConfigurationMismatch)();
+    });
 }
 
 version (FlintAnnotationUtilsAttributes)
@@ -970,65 +939,62 @@ version (FlintAnnotationUtilsAttributes)
 // ---------------------------------------------------------------------------------------------------------------
 // Equality and arrays
 
-version (FlintMergedAnnotationArrayDefaults)
+unittest
 {
-    unittest
-    {
-        // equalsForSynthesizedAnnotations
-        const webMappingWithAliases = getUDAs!(WebController.handleMappedWithPathAttribute, RequestMapping)[0];
-        const webMappingWithPathAndValue = getUDAs!(WebController.handleMappedWithSamePathAndValueAttributes,
-                RequestMapping)[0];
-        const synthesizedWebMapping1 = fromElement!(WebController.handleMappedWithPathAttribute)().get!RequestMapping()
-            .synthesize();
-        const synthesizedWebMapping2 = fromElement!(WebController.handleMappedWithSamePathAndValueAttributes)()
-            .get!RequestMapping().synthesize();
-        // Equality amongst standard annotations
-        assert(webMappingWithAliases == webMappingWithAliases);
-        assert(webMappingWithPathAndValue == webMappingWithPathAndValue);
-        // Inequality amongst standard annotations
-        assert(webMappingWithAliases != webMappingWithPathAndValue);
-        assert(webMappingWithPathAndValue != webMappingWithAliases);
-        // Equality amongst synthesized annotations
-        assert(synthesizedWebMapping1 == synthesizedWebMapping1);
-        assert(synthesizedWebMapping2 == synthesizedWebMapping2);
-        assert(synthesizedWebMapping1 == synthesizedWebMapping2);
-        assert(synthesizedWebMapping2 == synthesizedWebMapping1);
-        // Equality between standard and synthesized annotations
-        assert(synthesizedWebMapping1 == webMappingWithPathAndValue);
-        assert(webMappingWithPathAndValue == synthesizedWebMapping1);
-        // Inequality between standard and synthesized annotations
-        assert(synthesizedWebMapping1 != webMappingWithAliases);
-        assert(webMappingWithAliases != synthesizedWebMapping1);
-    }
+    // equalsForSynthesizedAnnotations
+    const webMappingWithAliases = getUDAs!(WebController.handleMappedWithPathAttribute, RequestMapping)[0];
+    const webMappingWithPathAndValue = getUDAs!(WebController.handleMappedWithSamePathAndValueAttributes,
+            RequestMapping)[0];
+    const synthesizedWebMapping1 = fromElement!(WebController.handleMappedWithPathAttribute)().get!RequestMapping()
+        .synthesize();
+    const synthesizedWebMapping2 = fromElement!(WebController.handleMappedWithSamePathAndValueAttributes)()
+        .get!RequestMapping().synthesize();
+    // Equality amongst standard annotations
+    assert(webMappingWithAliases == webMappingWithAliases);
+    assert(webMappingWithPathAndValue == webMappingWithPathAndValue);
+    // Inequality amongst standard annotations
+    assert(webMappingWithAliases != webMappingWithPathAndValue);
+    assert(webMappingWithPathAndValue != webMappingWithAliases);
+    // Equality amongst synthesized annotations
+    assert(synthesizedWebMapping1 == synthesizedWebMapping1);
+    assert(synthesizedWebMapping2 == synthesizedWebMapping2);
+    assert(synthesizedWebMapping1 == synthesizedWebMapping2);
+    assert(synthesizedWebMapping2 == synthesizedWebMapping1);
+    // Equality between standard and synthesized annotations
+    assert(synthesizedWebMapping1 == webMappingWithPathAndValue);
+    assert(webMappingWithPathAndValue == synthesizedWebMapping1);
+    // Inequality between standard and synthesized annotations
+    assert(synthesizedWebMapping1 != webMappingWithAliases);
+    assert(webMappingWithAliases != synthesizedWebMapping1);
+}
 
-    unittest
-    {
-        // hashCodeForSynthesizedAnnotations
-        const webMappingWithAliases = getUDAs!(WebController.handleMappedWithPathAttribute, RequestMapping)[0];
-        const webMappingWithPathAndValue = getUDAs!(WebController.handleMappedWithSamePathAndValueAttributes,
-                RequestMapping)[0];
-        const synthesizedWebMapping1 = fromElement!(WebController.handleMappedWithPathAttribute)().get!RequestMapping()
-            .synthesize();
-        const synthesizedWebMapping2 = fromElement!(WebController.handleMappedWithSamePathAndValueAttributes)()
-            .get!RequestMapping().synthesize();
-        // Equality amongst standard annotations
-        assert(hashOf(webMappingWithAliases) == hashOf(webMappingWithAliases));
-        assert(hashOf(webMappingWithPathAndValue) == hashOf(webMappingWithPathAndValue));
-        // Inequality amongst standard annotations
-        assert(hashOf(webMappingWithAliases) != hashOf(webMappingWithPathAndValue));
-        assert(hashOf(webMappingWithPathAndValue) != hashOf(webMappingWithAliases));
-        // Equality amongst synthesized annotations
-        assert(hashOf(synthesizedWebMapping1) == hashOf(synthesizedWebMapping1));
-        assert(hashOf(synthesizedWebMapping2) == hashOf(synthesizedWebMapping2));
-        assert(hashOf(synthesizedWebMapping1) == hashOf(synthesizedWebMapping2));
-        assert(hashOf(synthesizedWebMapping2) == hashOf(synthesizedWebMapping1));
-        // Equality between standard and synthesized annotations
-        assert(hashOf(synthesizedWebMapping1) == hashOf(webMappingWithPathAndValue));
-        assert(hashOf(webMappingWithPathAndValue) == hashOf(synthesizedWebMapping1));
-        // Inequality between standard and synthesized annotations
-        assert(hashOf(synthesizedWebMapping1) != hashOf(webMappingWithAliases));
-        assert(hashOf(webMappingWithAliases) != hashOf(synthesizedWebMapping1));
-    }
+unittest
+{
+    // hashCodeForSynthesizedAnnotations
+    const webMappingWithAliases = getUDAs!(WebController.handleMappedWithPathAttribute, RequestMapping)[0];
+    const webMappingWithPathAndValue = getUDAs!(WebController.handleMappedWithSamePathAndValueAttributes,
+            RequestMapping)[0];
+    const synthesizedWebMapping1 = fromElement!(WebController.handleMappedWithPathAttribute)().get!RequestMapping()
+        .synthesize();
+    const synthesizedWebMapping2 = fromElement!(WebController.handleMappedWithSamePathAndValueAttributes)()
+        .get!RequestMapping().synthesize();
+    // Equality amongst standard annotations
+    assert(hashOf(webMappingWithAliases) == hashOf(webMappingWithAliases));
+    assert(hashOf(webMappingWithPathAndValue) == hashOf(webMappingWithPathAndValue));
+    // Inequality amongst standard annotations
+    assert(hashOf(webMappingWithAliases) != hashOf(webMappingWithPathAndValue));
+    assert(hashOf(webMappingWithPathAndValue) != hashOf(webMappingWithAliases));
+    // Equality amongst synthesized annotations
+    assert(hashOf(synthesizedWebMapping1) == hashOf(synthesizedWebMapping1));
+    assert(hashOf(synthesizedWebMapping2) == hashOf(synthesizedWebMapping2));
+    assert(hashOf(synthesizedWebMapping1) == hashOf(synthesizedWebMapping2));
+    assert(hashOf(synthesizedWebMapping2) == hashOf(synthesizedWebMapping1));
+    // Equality between standard and synthesized annotations
+    assert(hashOf(synthesizedWebMapping1) == hashOf(webMappingWithPathAndValue));
+    assert(hashOf(webMappingWithPathAndValue) == hashOf(synthesizedWebMapping1));
+    // Inequality between standard and synthesized annotations
+    assert(hashOf(synthesizedWebMapping1) != hashOf(webMappingWithAliases));
+    assert(hashOf(webMappingWithAliases) != hashOf(synthesizedWebMapping1));
 }
 
 // Behaviour: @AliasFor mirrors are resolved only in the merged annotation itself, not in nested annotation values:
