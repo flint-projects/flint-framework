@@ -18,32 +18,16 @@
 module flint.jackson.databind.ext.javatime;
 
 import flint.engine.aot.any : Any;
-import flint.jackson.annotation : JsonFormat;
+import flint.jackson.annotation : JsonFormat, OptBoolean;
 import flint.jackson.core : JsonGenerator, JsonParser, JsonToken;
 import flint.jackson.databind.cfg : DateTimeFeature, MapperConfig;
+public import flint.jackson.databind.cfg : JavaTimeFormat;
 import flint.jackson.databind.exc : InvalidFormatException, MismatchedInputException;
 import flint.java.time : DateTimeException, Duration, Instant, LocalDate, LocalDateTime, LocalTime,
     OffsetDateTime, ZoneId, ZoneOffset, ZonedDateTime;
 import flint.java.time.format : DateTimeFormatter, DateTimeParseException;
 
 @safe:
-
-/// The parts of a property's `@JsonFormat` that the java.time serializers read.
-struct JavaTimeFormat
-{
-    /// Whether the property carries `@JsonFormat`.
-    bool present;
-    /// The `pattern` element; empty for the default ISO format.
-    string pattern;
-    /// The `shape` element.
-    JsonFormat.Shape shape = JsonFormat.Shape.ANY;
-
-    /// The java.time view of an annotation.
-    static JavaTimeFormat of(const JsonFormat format) pure nothrow @nogc
-    {
-        return JavaTimeFormat(true, format.pattern, format.shape);
-    }
-}
 
 private enum Kind
 {

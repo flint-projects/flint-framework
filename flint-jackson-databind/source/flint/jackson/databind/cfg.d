@@ -16,7 +16,51 @@
 /// Datatype features and creator detection of the mapper configuration.
 module flint.jackson.databind.cfg;
 
+import flint.engine.aot.any : Any;
+import flint.jackson.annotation : JsonFormat, OptBoolean;
+import flint.jackson.core : JsonParser;
+
 @safe:
+
+/// The parts of a property's `@JsonFormat` that the java.time and `java.util.Date` serializers read.
+struct JavaTimeFormat
+{
+    /// Whether the property carries `@JsonFormat`.
+    bool present;
+    /// The `pattern` element; empty for the default ISO format.
+    string pattern;
+    /// The `shape` element.
+    JsonFormat.Shape shape = JsonFormat.Shape.ANY;
+    /// The `locale` element, which `java.util.Date` patterns read.
+    string locale = JsonFormat.DEFAULT_LOCALE;
+    /// The `timezone` element, which `java.util.Date` reads.
+    string timezone = JsonFormat.DEFAULT_TIMEZONE;
+    /// The `lenient` element, which `java.util.Date` reads.
+    OptBoolean lenient = OptBoolean.DEFAULT;
+
+    /// The java.time view of an annotation.
+    static JavaTimeFormat of(const JsonFormat format) pure nothrow @nogc
+    {
+        return JavaTimeFormat(true, format.pattern, format.shape, format.locale, format.timezone, format.lenient);
+    }
+}
+
+/++
+Flint: how `java.util.Date` is read, and written with a `@JsonFormat` pattern. Jackson builds these in; Flint links
+them only into applications that use them, so a mapper has them once `JavaUtilDateModule` is registered: by the
+generated Jackson configuration of an application whose types hold a `Date`, by a templated `ObjectMapper` method
+whose type holds one (`readValue!T`, `convertValue!T`, `writeValueAsString!T`...), or by `addModule`. Plain writes
+(ISO-8601 text, timestamps, map keys) need no hook.
++/
+struct DateHooks
+{
+    /// Read a `Date` at the parser's current token.
+    Any function(MapperConfig config, JsonParser p, string type, JavaTimeFormat format) @safe read;
+    /// Read a `Date` map key.
+    Any function(string key, JsonParser p) @safe readKey;
+    /// Format `millis` with the format's `pattern` (`SimpleDateFormat`), or in its `timezone`.
+    string function(long millis, JavaTimeFormat format, string type) @safe formatPattern;
+}
 
 /// Configurable on/off features for date/time handling.
 enum DateTimeFeature
@@ -440,6 +484,10 @@ final class MapperConfig
     JsonFactory factory;
     /// The tree node factory.
     JsonNodeFactory nodeFactory;
+    /// Flint: the `java.util.Date` reader and pattern formatter a registered `JavaUtilDateModule` installs.
+    DateHooks dateHooks;
+    /// The registered modules (`JacksonModule`s), in registration order.
+    Object[] modules;
 
     // Introspected beans by type name. Copy-on-write: a published table is never changed, so every reactor thread
     // reads it without a lock; a miss builds the description and publishes a larger copy under the monitor.
@@ -550,6 +598,8 @@ final class MapperConfig
         c.descriptors = descriptors;
         c.factory = factory;
         c.nodeFactory = nodeFactory;
+        c.dateHooks = dateHooks;
+        c.modules = modules.dup;
         return c;
     }
 }

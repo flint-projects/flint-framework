@@ -24,6 +24,7 @@ import flint.jackson.core : JsonGenerator;
 import flint.jackson.databind.cfg : EnumFeature, MapperConfig, MapperFeature, SerializationFeature;
 import flint.jackson.databind.exc : DatabindException, InvalidDefinitionException, Reference;
 import flint.jackson.databind.ext.javatime : JavaTimeFormat, writeJavaTime;
+import flint.jackson.databind.stddateformat : dateKeyText, writeJavaUtilDate;
 import flint.jackson.databind.introspect : BeanDescription, BeanPropertyDefinition;
 import flint.jackson.databind.node : JsonNode;
 import flint.java.util : RawCollection, RawMap;
@@ -38,7 +39,8 @@ void serializeValue(MapperConfig config, ref Any value, string declaredType, Jso
     const type = value.typeName().length ? value.typeName() : declaredType;
     if (value.isNull())
         return writeNull(type, g);
-    if (writeScalar(value, type, g) || writeBytes(value, type, g) || writeJavaTime(config, value, type, g, format))
+    if (writeScalar(value, type, g) || writeBytes(value, type, g) || writeJavaTime(config, value,
+            type, g, format) || writeJavaUtilDate(config, value, type, g, format))
         return;
     if (!writeContainer(config, value, g))
         writeDescribed(config, value, type, g, format);
@@ -312,7 +314,13 @@ private string keyText(MapperConfig config, ref Any key)
     if (key.holds!string())
         return key.get!string();
     if (auto o = key.asObject())
+    {
+        import flint.java.util : Date;
+
+        if (auto date = cast(Date) o)
+            return dateKeyText(config, date);
         return objectToString(o);
+    }
     const d = config.descriptor(key.typeName());
     if (d !is null && d.kind == TypeKind.enum_)
     {

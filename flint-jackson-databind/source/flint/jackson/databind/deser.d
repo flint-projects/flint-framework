@@ -24,6 +24,7 @@ import flint.jackson.databind.cfg : DeserializationFeature, MapperConfig;
 import flint.jackson.databind.exc : DatabindException, InvalidDefinitionException, InvalidFormatException,
     MismatchedInputException, Reference, UnrecognizedPropertyException, ValueInstantiationException;
 import flint.jackson.databind.ext.javatime : JavaTimeFormat, isJavaTime, readJavaTime;
+import flint.jackson.databind.stddateformat : dateKey, isJavaUtilDate, readJavaUtilDate;
 import flint.jackson.databind.introspect : BeanDescription, BeanPropertyDefinition;
 import flint.jackson.databind.node : readTree;
 import flint.java.util : RawCollection, RawMap;
@@ -47,6 +48,8 @@ string javaTypeName(string type) pure nothrow
         return "long";
     case "ulong":
         return "java.math.BigInteger";
+    case "flint.java.util.date.Date":
+        return "java.util.Date";
     default:
         // flint.java.time.LocalDate is java.time.LocalDate.
         return type.length > 11 && type[0 .. 11] == "flint.java." ? type[6 .. $] : type;
@@ -63,6 +66,8 @@ Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existin
         return scalar.value;
     if (isJavaTime(type))
         return readJavaTime(config, p, type, format);
+    if (isJavaUtilDate(type))
+        return readJavaUtilDate(config, p, type, format);
     if (isBinary(type, t))
         return readBytes(p, type, t);
     if (isTreeType(type))
@@ -593,7 +598,8 @@ private Any readMap(MapperConfig config, JsonParser p, RawMap target, const Desc
         withPath(Reference(name, -1, null, d.name), () {
             value = deserializeValue(config, p, d.elementType);
         });
-        target.putAny(Any.of(name), value);
+        // MapDeserializer: the key deserializer of the key type converts each property name.
+        target.putAny(d.keyType.length ? keyFrom(config, name, d.keyType, p) : Any.of(name), value);
     }
     return boxed;
 }
@@ -687,6 +693,8 @@ private Any keyFrom(MapperConfig config, string name, string keyType, JsonParser
                 keyType, p.currentLocation());
     if (scalar)
         return key;
+    if (isJavaUtilDate(keyType))
+        return dateKey(config, name, p);
     const d = config.descriptor(keyType);
     if (d !is null && d.kind == TypeKind.enum_)
         foreach (i, constant; d.enumConstants)

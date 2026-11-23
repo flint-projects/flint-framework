@@ -298,6 +298,144 @@ private final class MapperWriteContext : ObjectWriteContext.Base
     }
 }
 
+/++
+Flint: whether a value of `T` can hold a `java.util.Date`: `T` is a `Date`, or an array, associative array, template
+instance (`List!Date`, `Optional!Date`, `HashMap!(string, Date)`) or aggregate whose fields hold one, at any depth.
+The templated `ObjectMapper` methods register `JavaUtilDateModule` for such types.
++/
+template holdsDate(T, Seen...)
+{
+    import flint.java.util.date : Date;
+
+    static if (seenIn!(T, Seen))
+        enum holdsDate = false;
+    else static if (is(T : const(Date)))
+        enum holdsDate = true;
+    else static if (is(T == E[], E))
+        enum holdsDate = holdsDate!(E, T, Seen);
+    else static if (is(T == V[K], V, K))
+        enum holdsDate = holdsDate!(V, T, Seen) || holdsDate!(K, T, Seen);
+    else static if (is(T == struct) || is(T == class) || is(T == union) || is(T == interface))
+        enum holdsDate = anyHoldsDate!(T, Seen);
+    else
+        enum holdsDate = false;
+}
+
+private template seenIn(T, Seen...)
+{
+    enum seenIn = () {
+        bool found;
+        static foreach (S; Seen)
+            static if (is(S == T))
+                found = true;
+        return found;
+    }();
+}
+
+// A template instance's type arguments, an aggregate's fields and a class's base classes.
+private template anyHoldsDate(T, Seen...)
+{
+    enum anyHoldsDate = () {
+        bool found;
+        static if (is(T == X!Args, alias X, Args...))
+            static foreach (A; Args)
+                static if (is(A))
+                    found = found || holdsDate!(A, T, Seen);
+        static if (!is(T == interface))
+            static foreach (F; typeof(T.tupleof))
+                found = found || holdsDate!(F, T, Seen);
+        static if (is(T == class) && is(T Bases == super))
+            static foreach (B; Bases)
+                found = found || holdsDate!(B, T, Seen);
+        return found;
+    }();
+}
+
+/++
+Jackson's `JacksonModule`: an extension a mapper builder registers (`addModule`), which configures the mapper
+through its `SetupContext`.
+
+Deviations: `version()` and `Versioned` are not ported (no `Version` type yet), and `getRegistrationId` returns a
+string, the name by default, where Java returns an `Object`.
++/
+abstract class JacksonModule
+{
+    /// The module's name, for diagnostics.
+    abstract string getModuleName();
+
+    /// What identifies the module among registrations: a module whose id is already registered is skipped.
+    string getRegistrationId()
+    {
+        return getModuleName();
+    }
+
+    /// Configure the mapper being built; called once, when the module is registered.
+    abstract void setupModule(SetupContext context);
+
+    /// Modules registered before this one.
+    JacksonModule[] getDependencies()
+    {
+        return null;
+    }
+
+    /// What a module configures the mapper through.
+    interface SetupContext
+    {
+        /// The data format: "JSON".
+        string getFormatName();
+
+        /// The builder registering the module.
+        Object getOwner();
+
+        /// Whether `f` is enabled.
+        bool isEnabled(MapperFeature f);
+
+        /// ditto
+        bool isEnabled(DeserializationFeature f);
+
+        /// ditto
+        bool isEnabled(SerializationFeature f);
+    }
+}
+
+// The context a JsonMapper.Builder registers modules with; Flint's own modules reach the configuration through it.
+package(flint.jackson.databind) final class ModuleContext : JacksonModule.SetupContext
+{
+    private Object owner;
+    package(flint.jackson.databind) MapperConfig config;
+
+    this(Object owner, MapperConfig config)
+    {
+        this.owner = owner;
+        this.config = config;
+    }
+
+    string getFormatName()
+    {
+        return "JSON";
+    }
+
+    Object getOwner()
+    {
+        return owner;
+    }
+
+    bool isEnabled(MapperFeature f)
+    {
+        return config.isEnabled(f);
+    }
+
+    bool isEnabled(DeserializationFeature f)
+    {
+        return config.isEnabled(f);
+    }
+
+    bool isEnabled(SerializationFeature f)
+    {
+        return config.isEnabled(f);
+    }
+}
+
 /**
  * ObjectMapper provides functionality for reading and writing JSON, either to
  * and from basic POJOs (Plain Old Java Objects), or to and from a
@@ -395,11 +533,33 @@ class ObjectMapper
         return _config;
     }
 
+    /// The modules registered with this mapper's builder, in registration order.
+    final JacksonModule[] registeredModules()
+    {
+        JacksonModule[] result;
+        foreach (m; _config.modules)
+            result ~= cast(JacksonModule) m;
+        return result;
+    }
+
+    // The templated methods of a type that holds a java.util.Date register JavaUtilDateModule's reader and pattern
+    // formatter, so only applications that read or format Dates link them (D-JACKSON-10). Idempotent; private, so
+    // final and linked only where a template instance calls it.
+    private void registerDates()
+    {
+        import flint.jackson.databind.stddateformat : installJavaUtilDate;
+
+        if (_config.dateHooks.read is null)
+            installJavaUtilDate(_config);
+    }
+
     // ---- writing
 
     /// Method that can be used to serialize any Java value as a String.
     string writeValueAsString(T)(T value) if (!is(T == Any))
     {
+        static if (holdsDate!T)
+            registerDates();
         return writeValueAsString(Any.of(value));
     }
 
@@ -412,6 +572,8 @@ class ObjectMapper
     /// Method that can be used to serialize any Java value as a byte array, UTF-8 encoded.
     ubyte[] writeValueAsBytes(T)(T value) if (!is(T == Any))
     {
+        static if (holdsDate!T)
+            registerDates();
         return writeValueAsBytes(Any.of(value));
     }
 
@@ -454,6 +616,8 @@ class ObjectMapper
     /// Method that can be used to serialize any Java value as JSON output, using provided `JsonGenerator`.
     void writeValue(T)(JsonGenerator g, T value) if (!is(T == Any))
     {
+        static if (holdsDate!T)
+            registerDates();
         writeValue(g, Any.of(value));
     }
 
@@ -490,18 +654,24 @@ class ObjectMapper
     /// Method to deserialize JSON content from given JSON content String (R4: the target type is a template parameter).
     T readValue(T)(string content)
     {
+        static if (holdsDate!T)
+            registerDates();
         return readValue(content, typeNameOf!T).get!T();
     }
 
     /// ditto, from UTF-8 bytes.
     T readValue(T)(const(ubyte)[] content)
     {
+        static if (holdsDate!T)
+            registerDates();
         return readValue(content, typeNameOf!T).get!T();
     }
 
     /// ditto, from a parser positioned before or at the value.
     T readValue(T)(JsonParser p)
     {
+        static if (holdsDate!T)
+            registerDates();
         return readValue(p, typeNameOf!T).get!T();
     }
 
@@ -572,6 +742,8 @@ class ObjectMapper
     /// Convenience method for doing two-step conversion from given value, into instance of given value type, by writing value into temporary buffer and reading from the buffer into specified target type.
     T convertValue(T, F)(F fromValue)
     {
+        static if (holdsDate!T || holdsDate!F)
+            registerDates();
         return convertValue(Any.of(fromValue), typeNameOf!T).get!T();
     }
 
@@ -617,6 +789,8 @@ class ObjectWriter
     /// Method that can be used to serialize any Java value as a String.
     string writeValueAsString(T)(T value) if (!is(T == Any))
     {
+        static if (holdsDate!T)
+            mapper.registerDates();
         return writeValueAsString(Any.of(value));
     }
 
@@ -807,9 +981,31 @@ class JsonMapper : ObjectMapper
             return this;
         }
 
-        /// Discover modules on the classpath: a no-op, since Flint's datatype support is built in.
+        /// Discover modules on the classpath: a no-op, since Flint's datatype support is built in and its modules
+        /// are added by the generated configuration.
         Builder findAndAddModules()
         {
+            return this;
+        }
+
+        /// Register `module_` (after its dependencies), unless a module with its registration id already is.
+        final Builder addModule(JacksonModule module_)
+        {
+            foreach (dependency; module_.getDependencies())
+                addModule(dependency);
+            foreach (registered; config.modules)
+                if ((cast(JacksonModule) registered).getRegistrationId() == module_.getRegistrationId())
+                    return this;
+            config.modules ~= module_;
+            module_.setupModule(new ModuleContext(this, config));
+            return this;
+        }
+
+        /// Register each of `modules` in order.
+        final Builder addModules(JacksonModule[] modules...)
+        {
+            foreach (m; modules)
+                addModule(m);
             return this;
         }
 
