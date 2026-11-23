@@ -1139,12 +1139,11 @@ final class StringNode : ValueNode
 
     override double asDouble(double defaultValue)
     {
-        import flint.serde.json_read : parseJsonDecimal;
-        import flint.engine.aot.text : stripWhite;
+        import flint.jackson.core.io : NumberInput;
 
-        double[1] parsed;
-        auto text = cast(const(ubyte)[]) stripWhite(_value);
-        return text.length && parseJsonDecimal(text, parsed[0]) ? parsed[0] : defaultValue;
+        // Jackson's TextNode.asDouble: NumberInput.parseAsDouble, the default for text that is not a number.
+        double parsed;
+        return NumberInput.parseDouble(_value, parsed) ? parsed : defaultValue;
     }
 
     override bool asBoolean(bool defaultValue)

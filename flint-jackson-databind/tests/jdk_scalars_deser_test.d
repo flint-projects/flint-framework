@@ -919,13 +919,8 @@ unittest
     invalidStringCoercionFail!(short[])("short");
     invalidStringCoercionFail!(int[])("int");
     invalidStringCoercionFail!(long[])("long");
-    // LIKELY BUG: "foobar" read as a float or double is not rejected: `[ "foobar" ]` binds to [6098560.0] (and
-    // `"1x"` to 82.0); Jackson throws InvalidFormatException "... from String "foobar": not a valid `double` value".
-    version (FlintJacksonFloatFromInvalidString)
-    {
-        invalidStringCoercionFail!(float[])("float");
-        invalidStringCoercionFail!(double[])("double");
-    }
+    invalidStringCoercionFail!(float[])("float");
+    invalidStringCoercionFail!(double[])("double");
 }
 
 /*

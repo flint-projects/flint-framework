@@ -1530,9 +1530,11 @@ class UTF8StreamJsonParser : JsonParser
         case JsonToken.VALUE_NULL:
             return 0.0;
         case JsonToken.VALUE_STRING:
-            double[1] value;
-            auto text = cast(const(ubyte)[]) getString();
-            return text.length && parseJsonDecimal(text, value[0]) ? value[0] : def;
+            import flint.jackson.core.io : NumberInput;
+
+            // NumberInput.parseAsDouble: the default for text that is not a number.
+            double value;
+            return NumberInput.parseDouble(getString(), value) ? value : def;
         default:
             return def;
         }

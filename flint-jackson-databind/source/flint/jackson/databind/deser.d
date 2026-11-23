@@ -416,7 +416,7 @@ private double readFloating(MapperConfig config, JsonParser p, JsonToken t, stri
     case JsonToken.VALUE_NUMBER_FLOAT:
         return p.getDoubleValue();
     case JsonToken.VALUE_STRING:
-        import flint.serde.json_read : parseJsonDecimal;
+        import flint.jackson.core.io : NumberInput;
         import flint.engine.aot.text : stripWhite;
 
         const text = stripWhite(p.getString());
@@ -429,9 +429,9 @@ private double readFloating(MapperConfig config, JsonParser p, JsonToken t, stri
         case "-Infinity", "-INF":
             return -double.infinity;
         default:
-            double[1] parsed;
-            if (text.length && parseJsonDecimal(cast(const(ubyte)[]) text, parsed[0]))
-                return parsed[0];
+            double parsed;
+            if (NumberInput.parseDouble(text, parsed))
+                return parsed;
             throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaTypeName(
                     type) ~ "` from String \"" ~ text ~ "\": not a valid `" ~ javaTypeName(type) ~ "` value",
                     text, type, p.currentLocation());
