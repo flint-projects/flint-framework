@@ -1289,8 +1289,7 @@ version (FlintJacksonGenericTypes)
         assert(content.canFind("\"type\":\"bar\""), content);
     }
 
-    @JsonTypeInfo(use : JsonTypeInfo.Id.NAME, property:
-            "type")
+    @JsonTypeInfo(use: JsonTypeInfo.Id.NAME, property: "type")
     private class ParentClass
     {
         private string parentProperty;
@@ -1676,7 +1675,7 @@ private class JacksonController : JacksonControllerBase
         return Arrays.asList!Identifiable(foo, bar);
     }
 
-    @RequestMapping(produces : [MediaType.APPLICATION_JSON_VALUE])
+    @RequestMapping(produces: [MediaType.APPLICATION_JSON_VALUE])
     @ResponseBody
     string defaultCharset()
     {

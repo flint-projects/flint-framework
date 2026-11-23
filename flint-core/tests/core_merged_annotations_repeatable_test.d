@@ -88,9 +88,9 @@ private class SubSubMyRepeatableWithAdditionalLocalDeclarationsClass
 
 private struct TestConfiguration
 {
-    @AliasFor(value : "location")
+    @AliasFor(value: "location")
     string value = "";
-    @AliasFor(value : "value")
+    @AliasFor(value: "value")
     string location = "";
 }
 

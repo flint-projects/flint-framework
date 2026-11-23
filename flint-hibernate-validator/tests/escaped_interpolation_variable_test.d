@@ -23,29 +23,25 @@ import flint.jakarta.validation.constraints : Max;
 
 private final class A
 {
-    @Max(value : 1, message:
-            "{key-1}")
+    @Max(value: 1, message: "{key-1}")
     int a = 2;
 }
 
 private final class B
 {
-    @Max(value : 1, message:
-            "{key-2}")
+    @Max(value: 1, message: "{key-2}")
     int a = 2;
 }
 
 private final class C
 {
-    @Max(value : 1, message:
-            "{key-3}")
+    @Max(value: 1, message: "{key-3}")
     int a = 2;
 }
 
 private final class D
 {
-    @Max(value : 1, message:
-            "{key-4} {")
+    @Max(value: 1, message: "{key-4} {")
     int a = 2;
 }
 

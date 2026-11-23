@@ -630,8 +630,7 @@ unittest
 /// `@AliasFor` naming both `attribute` and `value`: Spring's AnnotationConfigurationException.
 private struct Misconfigured
 {
-    @AliasFor(attribute : "a", value:
-            "b")
+    @AliasFor(attribute: "a", value: "b")
     string a;
 }
 
@@ -641,8 +640,7 @@ unittest
     {
     }
 
-    @Mapping(value : "/a", path:
-            "/b") static final class Conflicting
+    @Mapping(value: "/a", path: "/b") static final class Conflicting
     {
     }
 

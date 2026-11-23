@@ -580,8 +580,7 @@ private E thrown(E : Exception)(scope void delegate() @safe action)
 @ResponseStatus
 private struct ComposedResponseStatus
 {
-    @AliasFor(annotation : classOf!ResponseStatus, attribute:
-            "code")
+    @AliasFor(annotation: classOf!ResponseStatus, attribute: "code")
     HttpStatus responseStatus = HttpStatus.INTERNAL_SERVER_ERROR;
 }
 
@@ -597,21 +596,19 @@ private class Handler
     {
     }
 
-    @ResponseStatus(code : HttpStatus.BAD_REQUEST, reason:
-            "400 Bad Request")
+    @ResponseStatus(code: HttpStatus.BAD_REQUEST, reason: "400 Bad Request")
     string responseStatusWithReason()
     {
         return "foo";
     }
 
-    @ResponseStatus(code : HttpStatus.BAD_REQUEST, reason:
-            "BadRequest.error")
+    @ResponseStatus(code: HttpStatus.BAD_REQUEST, reason: "BadRequest.error")
     string responseStatusWithReasonCode()
     {
         return "foo";
     }
 
-    @ComposedResponseStatus(responseStatus : HttpStatus.BAD_REQUEST)
+    @ComposedResponseStatus(responseStatus: HttpStatus.BAD_REQUEST)
     void composedResponseStatus()
     {
     }
@@ -628,7 +625,7 @@ private class Handler
     {
         import flint.web.bind.annotation : RequestParam;
 
-        Any dynamicReturnValue(@RequestParam(required : false) string param)
+        Any dynamicReturnValue(@RequestParam(required: false) string param)
         {
             return param !is null ? Any.of("view") : Any.of(new RedirectView("redirectView"));
         }

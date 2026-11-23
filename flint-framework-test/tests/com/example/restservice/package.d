@@ -34,8 +34,7 @@ class GreetingController
 
     ///
     @GetMapping("/greeting")
-    Greeting greeting(@RequestParam(value : "name", defaultValue:
-            "World") string name)
+    Greeting greeting(@RequestParam(value: "name", defaultValue: "World") string name)
     {
         return Greeting(counter.incrementAndGet(), format(template_, name));
     }

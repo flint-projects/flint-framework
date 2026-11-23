@@ -201,8 +201,7 @@ private HandlerMapping handlerRow(C, alias method)()
 
 private struct Person
 {
-    @Size(min : 1, max:
-            10)
+    @Size(min: 1, max: 10)
     string name;
 
     string getName() const pure nothrow @nogc

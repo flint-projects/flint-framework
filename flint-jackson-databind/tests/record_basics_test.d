@@ -55,26 +55,26 @@ private struct SnakeRecord
 
 private struct RecordSingleWriteOnly
 {
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access: JsonProperty.Access.WRITE_ONLY)
     int id;
 }
 
 private struct RecordSomeWriteOnly
 {
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access: JsonProperty.Access.WRITE_ONLY)
     int id;
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access: JsonProperty.Access.WRITE_ONLY)
     string name;
     string email;
 }
 
 private struct RecordAllWriteOnly
 {
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access: JsonProperty.Access.WRITE_ONLY)
     int id;
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access: JsonProperty.Access.WRITE_ONLY)
     string name;
-    @JsonProperty(access : JsonProperty.Access.WRITE_ONLY)
+    @JsonProperty(access: JsonProperty.Access.WRITE_ONLY)
     string email;
 }
 
@@ -278,7 +278,7 @@ version (FlintJacksonCustomSerializers)
     private struct RecordWithJsonDeserialize
     {
         int id;
-        @JsonDeserialize(converter : classOf!StringTrimmer)
+        @JsonDeserialize(converter: classOf!StringTrimmer)
         string name;
     }
 

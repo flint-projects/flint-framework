@@ -69,7 +69,7 @@ struct UserController
 
     /// Return one user or the framework error representation.
     @Get("/:id")
-    Result!User get(@PathVariable("id") ulong id, ref scope RequestContext context)nothrow @nogc
+    Result!User get(@PathVariable("id") ulong id, ref scope RequestContext context) nothrow @nogc
     {
         return users.find(id, context);
     }

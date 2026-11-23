@@ -21,11 +21,9 @@ import flint.jakarta.validation.constraints : Size;
 
 private final class Foo
 {
-    @Size(max : 1, message:
-            "{max}")
+    @Size(max: 1, message: "{max}")
     string snafu = "12";
-    @Size(max : 2, message:
-            "${validatedValue}")
+    @Size(max: 2, message: "${validatedValue}")
     string bar = "123";
 }
 

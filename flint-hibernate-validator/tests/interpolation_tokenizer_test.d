@@ -23,8 +23,7 @@ private string interpolated(string template_)()
 {
     static final class Bean
     {
-        @Size(min : 2, message:
-                template_)
+        @Size(min: 2, message: template_)
         string v = "x";
     }
 

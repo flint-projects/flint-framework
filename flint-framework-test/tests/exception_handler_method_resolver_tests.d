@@ -288,14 +288,12 @@ private class NoExceptionController
 @Controller
 private class MediaTypeController
 {
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["application/json"])
     void handleJson()
     {
     }
 
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["text/html", "*/*"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["text/html", "*/*"])
     void handleHtml()
     {
     }
@@ -304,14 +302,12 @@ private class MediaTypeController
 @Controller
 private class AmbiguousMediaTypeController
 {
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["application/json"])
     void handleJson()
     {
     }
 
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["application/json"])
     void handleJsonToo()
     {
     }
@@ -320,8 +316,7 @@ private class AmbiguousMediaTypeController
 @Controller
 private class MixedController
 {
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["application/json"])
     void handleJson()
     {
     }
@@ -335,8 +330,7 @@ private class MixedController
 @Controller
 private class InvalidMediaTypeController
 {
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["invalid-mediatype"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["invalid-mediatype"])
     void handle()
     {
     }

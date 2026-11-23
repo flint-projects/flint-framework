@@ -32,7 +32,7 @@ private final class Pet
 }
 
 /// spring-petclinic-rest's PetAgeValidation and PetAgeValidator.
-@Constraint(validatedBy : [classOf!PetAgeValidator])
+@Constraint(validatedBy: [classOf!PetAgeValidator])
 private struct PetAgeValidation
 {
     string message = "Birth date must not be in the future or older than 50 years";
@@ -65,7 +65,7 @@ private final class PetAgeValidator : ConstraintValidator!(PetAgeValidation, Loc
 }
 
 /// A custom constraint that keeps its default violation and adds one with an attribute in its template.
-@Constraint(validatedBy : [classOf!EvenValidator])
+@Constraint(validatedBy: [classOf!EvenValidator])
 private struct Even
 {
     string message = "must be even, not ${validatedValue}";
@@ -94,31 +94,31 @@ private final class EvenValidator : ConstraintValidator!(Even, int)
 /// birth date has no D twin: a struct is never null.)
 private final class Petclinic
 {
-    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
+    @Pattern(regexp: `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
     string spanish = "Jos\u00e9 Mar\u00eda";
-    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
+    @Pattern(regexp: `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
     string chinese = "\u674e";
-    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
+    @Pattern(regexp: `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
     string supplementary = "\U0001D49Cda";
-    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
+    @Pattern(regexp: `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
     string greekDigit = "\u0395\u03bb\u03ad\u03bd\u03b7 2";
-    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
+    @Pattern(regexp: `^[\p{L}]+([ '-][\p{L}]+){0,2}$`)
     string combining = "Rene\u0301e";
-    @Pattern(regexp : `^[\p{L}]+([ '-][\p{L}]+){0,2}\.?$`)
+    @Pattern(regexp: `^[\p{L}]+([ '-][\p{L}]+){0,2}\.?$`)
     string fourParts = "Van Der Berg Smith";
-    @Pattern(regexp : `[\s\S]*\S[\s\S]*`)
+    @Pattern(regexp: `[\s\S]*\S[\s\S]*`)
     string blank = " \t ";
-    @Pattern(regexp : `[\s\S]*\S[\s\S]*`)
+    @Pattern(regexp: `[\s\S]*\S[\s\S]*`)
     string nbsp = "\u00a0";
-    @Pattern(regexp : `^[\p{L}][\p{L}\s\-']{0,79}$`)
+    @Pattern(regexp: `^[\p{L}][\p{L}\s\-']{0,79}$`)
     string petType = "\u00dcnicorn's-pet";
-    @Pattern(regexp : `^[\p{L}][\p{L}\s\-']{0,79}$`)
+    @Pattern(regexp: `^[\p{L}][\p{L}\s\-']{0,79}$`)
     string digitFirst = "9cats";
-    @Pattern(regexp : `^[\p{L}][\p{L}\s\-&/]{0,79}$`)
+    @Pattern(regexp: `^[\p{L}][\p{L}\s\-&/]{0,79}$`)
     string specialty = "dentistry & surgery/x";
-    @Pattern(regexp : `^ROLE_[A-Z][A-Z0-9_]{1,74}$`)
+    @Pattern(regexp: `^ROLE_[A-Z][A-Z0-9_]{1,74}$`)
     string role = "OWNER_ADMIN";
-    @Pattern(regexp : `\P{L}+`)
+    @Pattern(regexp: `\P{L}+`)
     string notLetters = "12\u00e9";
     @PetAgeValidation
     LocalDate future = LocalDate.of(2999, 1, 1);
@@ -134,7 +134,7 @@ private final class Petclinic
     Nullable!int nullId;
     @Even
     int odd = 7;
-    @Even(divisor : 5)
+    @Even(divisor: 5)
     int five = 10;
 }
 
@@ -144,10 +144,9 @@ private final class Owner
     string firstName = "";
     @NotNull
     string lastName;
-    @Size(min : 2, max:
-            30)
+    @Size(min: 2, max: 30)
     string city = "A";
-    @Pattern(regexp : `\d{1,10}`)
+    @Pattern(regexp: `\d{1,10}`)
     string telephone = "60855510239999";
     @Email
     string email = "not-an-email";
@@ -165,11 +164,9 @@ private final class Owner
     double balance = -0.5;
     @DecimalMax("99.5")
     double rating = 100.0;
-    @DecimalMin(value : "0", inclusive:
-            false)
+    @DecimalMin(value: "0", inclusive: false)
     double price = 0.0;
-    @Digits(integer : 3, fraction:
-            2)
+    @Digits(integer: 3, fraction: 2)
     double amount = 1234.567;
     @AssertTrue
     bool active = false;
@@ -177,19 +174,17 @@ private final class Owner
     bool deleted = true;
     @NotEmpty
     List!string tags;
-    @Size(max : 2)
+    @Size(max: 2)
     List!string nicknames;
     @Null
     string nothing = "x";
     @NotBlank
     string blankName = " \t";
-    @Size(min : 3, message:
-            "'${validatedValue}' must have at least {min} characters")
+    @Size(min: 3, message: "'${validatedValue}' must have at least {min} characters")
     string code = "ab";
-    @NotNull(message : `literal \{min\} and {min}`)
+    @NotNull(message: `literal \{min\} and {min}`)
     string escaped;
-    @Size(min : 1, max:
-            5)
+    @Size(min: 1, max: 5)
     string ok = "fine";
     @Past
     LocalDate birthDate = LocalDate.of(3000, 1, 1);
@@ -207,14 +202,13 @@ private final class Owner
     LocalDate okFuture = LocalDate.of(3000, 1, 1);
     @PastOrPresent
     Instant okNow = Instant.parse("2020-01-01T00:00:00Z");
-    @Size(min : 4)
+    @Size(min: 4)
     int[] scores = [1, 2, 3];
     @NotEmpty
     string[] aliases = [];
-    @Size(max : 1)
+    @Size(max: 1)
     int[string] limits;
-    @Size(min : 1, max:
-            3)
+    @Size(min: 1, max: 3)
     long[] okArray = [7];
     @Valid
     Pet[] petArray;

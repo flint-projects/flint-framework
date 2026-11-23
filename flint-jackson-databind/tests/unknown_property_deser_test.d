@@ -69,7 +69,7 @@ private final class IgnoreSome
     }
 }
 
-@JsonIgnoreProperties(ignoreUnknown : true)
+@JsonIgnoreProperties(ignoreUnknown: true)
 private final class IgnoreUnknown
 {
     int a;
@@ -80,7 +80,7 @@ private final class UnwrappedChild
     int a, b;
 }
 
-@JsonIgnoreProperties(ignoreUnknown : true)
+@JsonIgnoreProperties(ignoreUnknown: true)
 private final class IgnoreUnknownUnwrapped
 {
     @JsonUnwrapped
@@ -309,7 +309,7 @@ version (FlintJacksonAnySetter)
 {
     import flint.jackson.annotation : JsonAnyGetter, JsonAnySetter;
 
-    @JsonIgnoreProperties(ignoreUnknown : true)
+    @JsonIgnoreProperties(ignoreUnknown: true)
     private final class IgnoreUnknownAnySetter
     {
         Map!(string, Any) props;

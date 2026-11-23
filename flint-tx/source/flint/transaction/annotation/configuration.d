@@ -62,7 +62,7 @@ abstract class AbstractTransactionManagementConfiguration
 `@Configuration` class that registers the Spring infrastructure beans necessary to enable proxy-based
 annotation-driven transaction management.
 +/
-@Configuration(proxyBeanMethods : false)
+@Configuration(proxyBeanMethods: false)
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 class ProxyTransactionManagementConfiguration : AbstractTransactionManagementConfiguration
 {

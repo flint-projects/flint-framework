@@ -61,7 +61,7 @@ private final class NotFollowingJavaBeanNotation
     }
 }
 
-@Constraint(validatedBy : [classOf!ClassLevelConstraintValidator])
+@Constraint(validatedBy: [classOf!ClassLevelConstraintValidator])
 private struct ClassLevelConstraint
 {
     string message = "Invalid order shipment date must be after order date";
@@ -124,9 +124,8 @@ version (FlintValidationGroups)
     @GroupSequence([classOf!TestGroup, classOf!C])
     private final class C
     {
-        @Pattern(regexp : "[0-9]+", groups:
-                [classOf!TestGroup])
-        @Length(min : 2)
+        @Pattern(regexp: "[0-9]+", groups: [classOf!TestGroup])
+        @Length(min: 2)
         string id;
 
         this(string id)
@@ -138,8 +137,7 @@ version (FlintValidationGroups)
     @GroupSequence([classOf!TestGroup, classOf!E])
     private class E
     {
-        @Pattern(regexp : "[0-9]+", groups:
-                [classOf!TestGroup])
+        @Pattern(regexp: "[0-9]+", groups: [classOf!TestGroup])
         string e;
 
         this(string e)

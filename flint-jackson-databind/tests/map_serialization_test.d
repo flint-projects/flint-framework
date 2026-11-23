@@ -24,7 +24,7 @@ import std.typecons : Nullable;
 // [databind#335]
 private final class MapOrderingBean
 {
-    @JsonPropertyOrder(alphabetic : true)
+    @JsonPropertyOrder(alphabetic: true)
     LinkedHashMap!(string, Nullable!int) map;
 
     this(string[] keys...)
@@ -230,7 +230,7 @@ version (FlintJacksonObjectWriterConfig)
 // flint.jackson has no @JsonSerialize(using) nor ValueSerializer.
 version (FlintJacksonCustomSerializers)
 {
-    @JsonSerialize(using : classOf!PseudoMapSerializer)
+    @JsonSerialize(using: classOf!PseudoMapSerializer)
     private final class PseudoMap : LinkedHashMap!(string, string)
     {
         this(string[] values...)
@@ -347,13 +347,13 @@ version (FlintJacksonGenericTypes)
     import flint.jackson.annotation : JsonTypeInfo, JsonTypeName;
 
     // for [databind#691]
-    @JsonTypeInfo(use : JsonTypeInfo.Id.NAME)
+    @JsonTypeInfo(use: JsonTypeInfo.Id.NAME)
     @JsonTypeName("mymap")
     private final class MapWithTypedValues : LinkedHashMap!(string, string)
     {
     }
 
-    @JsonTypeInfo(use : JsonTypeInfo.Id.CLASS)
+    @JsonTypeInfo(use: JsonTypeInfo.Id.CLASS)
     private final class Mixin691
     {
     }
@@ -617,7 +617,7 @@ version (FlintJacksonCustomSerializers)
 
     private final class KarlBean
     {
-        @JsonSerialize(keyUsing : classOf!KarlSerializer)
+        @JsonSerialize(keyUsing: classOf!KarlSerializer)
         Map!(string, Nullable!int) map;
 
         this()
@@ -650,7 +650,7 @@ version (FlintJacksonCustomSerializers)
         }
     }
 
-    @JsonSerialize(keyUsing : classOf!ABCKeySerializer)
+    @JsonSerialize(keyUsing: classOf!ABCKeySerializer)
     private enum ABCMixin
     {
         none,

@@ -10,7 +10,7 @@ private interface Malformed
     /// Invalid declaration used to check the generator diagnostic.
     @GetExchange("/info")
     Result!HttpResponse conflictingHeaders(ref scope RequestArena arena, ref Context context,
-            @HeaderParam("X-Id") string id, @HeaderParam("x-id") string secondId)@safe nothrow @nogc;
+            @HeaderParam("X-Id") string id, @HeaderParam("x-id") string secondId) @safe nothrow @nogc;
 }
 
 private Malformed fails(ref HttpClient client) @safe

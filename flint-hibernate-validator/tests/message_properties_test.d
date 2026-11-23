@@ -32,8 +32,7 @@ private final class Bean
     double decimalMax = 4;
     @DecimalMin("3")
     double decimalMin = 2;
-    @Digits(integer : 1, fraction:
-            3)
+    @Digits(integer: 1, fraction: 3)
     double digits = 13_333.3333f;
     @Email
     string email = "invalid";
@@ -61,14 +60,13 @@ private final class Bean
     LocalDate past = LocalDate.of(2890, 10, 4);
     @PastOrPresent
     LocalDate pastOrPresent = LocalDate.of(2890, 10, 4);
-    @Pattern(regexp : "[0-9]+")
+    @Pattern(regexp: "[0-9]+")
     string pattern = "invalid";
     @Positive
     int positive = -4;
     @PositiveOrZero
     int positiveOrZero = -4;
-    @Size(min : 2, max:
-            4)
+    @Size(min: 2, max: 4)
     string size = "666666";
 
     this()

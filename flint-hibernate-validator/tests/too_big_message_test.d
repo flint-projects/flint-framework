@@ -26,7 +26,7 @@ private enum LARGE_MESSAGE = () {
 
 private final class GoldFish
 {
-    @NotNull(message : LARGE_MESSAGE)
+    @NotNull(message: LARGE_MESSAGE)
     string name;
 }
 

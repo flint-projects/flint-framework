@@ -163,21 +163,21 @@ struct RequestMapping
 
 private mixin template ComposedMapping()
 {
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string name; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string[] value; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string[] path; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string[] params; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string[] headers; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string[] consumes; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string[] produces; ///
-    @AliasFor(annotation : requestMappingRef)
+    @AliasFor(annotation: requestMappingRef)
     string version_; ///
 
     /// `@XxxMapping("/path")`.
@@ -207,35 +207,35 @@ private mixin template ComposedMapping()
 }
 
 /// `@GetMapping`: `@RequestMapping(method = GET)`.
-@RequestMapping(method : [RequestMethod.GET])
+@RequestMapping(method: [RequestMethod.GET])
 struct GetMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@PostMapping`: `@RequestMapping(method = POST)`.
-@RequestMapping(method : [RequestMethod.POST])
+@RequestMapping(method: [RequestMethod.POST])
 struct PostMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@PutMapping`: `@RequestMapping(method = PUT)`.
-@RequestMapping(method : [RequestMethod.PUT])
+@RequestMapping(method: [RequestMethod.PUT])
 struct PutMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@DeleteMapping`: `@RequestMapping(method = DELETE)`.
-@RequestMapping(method : [RequestMethod.DELETE])
+@RequestMapping(method: [RequestMethod.DELETE])
 struct DeleteMapping
 {
     mixin ComposedMapping;
 }
 
 /// `@PatchMapping`: `@RequestMapping(method = PATCH)`.
-@RequestMapping(method : [RequestMethod.PATCH])
+@RequestMapping(method: [RequestMethod.PATCH])
 struct PatchMapping
 {
     mixin ComposedMapping;
@@ -343,7 +343,7 @@ struct ExceptionHandler
 @ResponseBody
 struct RestController
 {
-    @AliasFor(annotation : controllerRef)
+    @AliasFor(annotation: controllerRef)
     string value; ///
 }
 
@@ -351,23 +351,22 @@ private mixin template AdviceAttributes(bool composed)
 {
     static if (composed)
     {
-        @AliasFor(annotation : controllerAdviceRef)
+        @AliasFor(annotation: controllerAdviceRef)
         string name; ///
-        @AliasFor(annotation : controllerAdviceRef)
+        @AliasFor(annotation: controllerAdviceRef)
         string[] value; ///
-        @AliasFor(annotation : controllerAdviceRef)
+        @AliasFor(annotation: controllerAdviceRef)
         string[] basePackages; ///
-        @AliasFor(annotation : controllerAdviceRef)
+        @AliasFor(annotation: controllerAdviceRef)
         ClassRef[] basePackageClasses; ///
-        @AliasFor(annotation : controllerAdviceRef)
+        @AliasFor(annotation: controllerAdviceRef)
         ClassRef[] assignableTypes; ///
-        @AliasFor(annotation : controllerAdviceRef)
+        @AliasFor(annotation: controllerAdviceRef)
         ClassRef[] annotations; ///
     }
     else
     {
-        @AliasFor(annotation : componentRef, attribute:
-                "value")
+        @AliasFor(annotation: componentRef, attribute: "value")
         string name; ///
         @AliasFor("basePackages")
         string[] value; ///

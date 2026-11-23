@@ -58,7 +58,7 @@ private struct Meta1
 }
 
 @Component("meta2")
-@Transactional(readOnly : true)
+@Transactional(readOnly: true)
 private struct Meta2
 {
 }

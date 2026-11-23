@@ -39,8 +39,7 @@ private final class B
     double min0 = -0.0;
     @Min(16_777_217)
     float minF = 16_777_216f;
-    @Digits(integer : 1, fraction:
-            1)
+    @Digits(integer: 1, fraction: 1)
     string digitsText = "1.10";
     @Max(10)
     string maxText = " 5";

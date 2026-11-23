@@ -308,7 +308,7 @@ version (FlintApiVersioning)
             return "foo";
         }
 
-        @GetMapping(version_ : "1.1")
+        @GetMapping(version_: "1.1")
         string foo1_1()
         {
             return "foo1_1";
@@ -325,7 +325,7 @@ version (FlintApiVersioning)
             return "foo";
         }
 
-        @GetExchange(version_ : "1.1")
+        @GetExchange(version_: "1.1")
         string foo1_1()
         {
             return "foo1_1";
@@ -468,8 +468,7 @@ version (FlintConsumesBodyRequired)
     }
 
     @RestController
-    @RequestMapping(path : ["/controller"], consumes:
-            ["application/json"])
+    @RequestMapping(path: ["/controller"], consumes: ["application/json"])
     private interface InterfaceController
     {
         @PostMapping("/postMapping")
@@ -671,16 +670,14 @@ version (FlintHttpExchange)
         {
         }
 
-        @PostExchange(url : "/custom", contentType:
-                "application/json", accept:
-                "text/plain;charset=UTF-8")
+        @PostExchange(url: "/custom", contentType: "application/json", accept: "text/plain;charset=UTF-8")
         void customValuesExchange()
         {
         }
 
-        @HttpExchange(method : "GET", url:
-                "/headers", headers:
-                ["h1=hv1", "!h2", "Accept=application/ignored"])
+        @HttpExchange(method: "GET", url: "/headers", headers: [
+            "h1=hv1", "!h2", "Accept=application/ignored"
+        ])
         string customHeadersExchange()
         {
             return "info";
@@ -852,7 +849,7 @@ version (FlintCglibProxy)
 
 // gh-31962: The presence of multiple @RequestMappings is intentional.
 @Controller
-@RequestMapping(consumes : [jsonValue])
+@RequestMapping(consumes: [jsonValue])
 @ExtraRequestMapping
 private class ComposedAnnotationController
 {
@@ -871,16 +868,14 @@ private class ComposedAnnotationController
     {
     }
 
-    @PostMapping(path : ["/post"], consumes:
-            [MediaType.APPLICATION_XML_VALUE])
+    @PostMapping(path: ["/post"], consumes: [MediaType.APPLICATION_XML_VALUE])
     void post(@RequestBody(false) Foo foo)
     {
     }
 
     // gh-31962: The presence of multiple @RequestMappings is intentional.
     @PatchMapping("/put")
-    @RequestMapping(path : ["/put"], method:
-            [RequestMethod.PUT])  // local @RequestMapping overrides meta-annotations
+    @RequestMapping(path: ["/put"], method: [RequestMethod.PUT])  // local @RequestMapping overrides meta-annotations
     @PostMapping("/put")
     void put()
     {
@@ -904,13 +899,11 @@ private struct ExtraRequestMapping
 {
 }
 
-@RequestMapping(method : [RequestMethod.POST], produces:
-        [MediaType.APPLICATION_JSON_VALUE],
-    consumes:
-        [MediaType.APPLICATION_JSON_VALUE])
+@RequestMapping(method: [RequestMethod.POST], produces: [MediaType.APPLICATION_JSON_VALUE],
+    consumes: [MediaType.APPLICATION_JSON_VALUE])
 private struct PostJson
 {
-    @AliasFor(annotation : ClassRef(typeNameOf!RequestMapping))
+    @AliasFor(annotation: ClassRef(typeNameOf!RequestMapping))
     string[] value;
 
     static PostJson opCall(string value) pure nothrow

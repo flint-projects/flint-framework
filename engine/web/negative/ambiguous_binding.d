@@ -9,7 +9,7 @@ import flint.engine.web : Get, PathVariable, QueryParam, RestController, Server,
 private struct Items
 {
     @Get("/:value")
-    void bad(@PathVariable("value") @QueryParam("value") uint value)nothrow @nogc
+    void bad(@PathVariable("value") @QueryParam("value") uint value) nothrow @nogc
     {
         assert(value != 0);
     }

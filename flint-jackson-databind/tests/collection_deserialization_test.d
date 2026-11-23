@@ -193,7 +193,7 @@ version (FlintJacksonJdkTypes)
 // flint.jackson has no @JsonDeserialize(using), custom deserializers or SimpleModule.
 version (FlintJacksonCustomSerializers)
 {
-    @JsonDeserialize(using : classOf!ListDeserializer)
+    @JsonDeserialize(using: classOf!ListDeserializer)
     private final class CustomList : LinkedList!string
     {
     }
@@ -313,7 +313,7 @@ version (FlintJacksonCustomSerializers)
     version (FlintJacksonObjectReader)
     {
         // [databind#828]
-        @JsonDeserialize(using : classOf!SomeObjectDeserializer)
+        @JsonDeserialize(using: classOf!SomeObjectDeserializer)
         private final class SomeObject
         {
         }
@@ -539,12 +539,12 @@ version (FlintJacksonCustomSerializers)
         import flint.jackson.annotation : JsonFormat;
 
         // [databind#5522]
-        @JsonFormat(with_ : [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+        @JsonFormat(with_: [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
         private final class CustomNumberList5522 : ArrayList!Any
         {
         }
 
-        @JsonFormat(with_ : [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+        @JsonFormat(with_: [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
         private final class CustomStringList5522 : ArrayList!string
         {
         }
@@ -581,7 +581,7 @@ version (FlintJacksonCustomSerializers)
 
         private final class CustomClassForListField5522
         {
-            @JsonFormat(with_ : [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
+            @JsonFormat(with_: [JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY])
             private List!string value;
 
             List!string getValue()

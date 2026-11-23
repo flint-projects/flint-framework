@@ -249,13 +249,11 @@ unittest
     @RestController static class GreetingController
     {
         @GetMapping("/greeting")
-        void greeting(@RequestParam(value : "name", defaultValue:
-                "World") string name)
+        void greeting(@RequestParam(value: "name", defaultValue: "World") string name)
         {
         }
 
-        @GetMapping(path : ["/a", "/b"], produces:
-                ["application/json"])
+        @GetMapping(path: ["/a", "/b"], produces: ["application/json"])
         void two()
         {
         }

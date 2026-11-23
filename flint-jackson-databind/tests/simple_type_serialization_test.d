@@ -546,8 +546,8 @@ unittest
 // flint.jackson ignores @JsonAutoDetect and the default visibility settings.
 version (FlintJacksonAutoDetect)
 {
-    @JsonAutoDetect(setterVisibility : JsonAutoDetect.Visibility.PUBLIC_ONLY, fieldVisibility:
-            JsonAutoDetect.Visibility.NONE)
+    @JsonAutoDetect(setterVisibility: JsonAutoDetect.Visibility.PUBLIC_ONLY, fieldVisibility: JsonAutoDetect
+            .Visibility.NONE)
     private final class NoAutoDetectBean
     {
         // not auto-detectable any more
@@ -608,7 +608,7 @@ version (FlintJacksonCustomSerializers)
         @JsonProperty
         private string id;
         // only include annotation to ensure it won't override settings
-        @JsonSerialize(typing : JsonSerialize.Typing.STATIC)
+        @JsonSerialize(typing: JsonSerialize.Typing.STATIC)
         private string state;
 
         this(string id, string state)
@@ -670,12 +670,12 @@ unittest
 // flint.jackson ignores @JsonAutoDetect and the default visibility settings.
 version (FlintJacksonAutoDetect)
 {
-    @JsonAutoDetect(fieldVisibility : JsonAutoDetect.Visibility.PROTECTED_AND_PUBLIC)
+    @JsonAutoDetect(fieldVisibility: JsonAutoDetect.Visibility.PROTECTED_AND_PUBLIC)
     private final class ProtFieldBean : FieldBean
     {
     }
 
-    @JsonAutoDetect(getterVisibility : JsonAutoDetect.Visibility.PROTECTED_AND_PUBLIC)
+    @JsonAutoDetect(getterVisibility: JsonAutoDetect.Visibility.PROTECTED_AND_PUBLIC)
     private final class ProtMethodBean : MethodBean
     {
     }
@@ -817,7 +817,7 @@ version (FlintJacksonObjectWriterConfig)
         }
     }
 
-    @JsonFormat(shape : JsonFormat.Shape.ARRAY)
+    @JsonFormat(shape: JsonFormat.Shape.ARRAY)
     private final class Selfie2501AsArray : Selfie2501
     {
         this(int id)
@@ -851,7 +851,7 @@ version (FlintJacksonJsonAppend)
 {
     import flint.jackson.databind.annotation : JsonAppend;
 
-    @JsonAppend(attrs : [
+    @JsonAppend(attrs: [
         JsonAppend.Attr("id"), JsonAppend.Attr(value: "internal", propName: "extra", required: true)
     ])
     private final class VPropSimpleBean
@@ -859,8 +859,9 @@ version (FlintJacksonJsonAppend)
         int value = 13;
     }
 
-    @JsonAppend(prepend : true, attrs:
-            [JsonAppend.Attr("id"), JsonAppend.Attr(value: "internal", propName: "extra")])
+    @JsonAppend(prepend: true, attrs: [
+        JsonAppend.Attr("id"), JsonAppend.Attr(value: "internal", propName: "extra")
+    ])
     private final class VPropSimpleBeanPrepend
     {
         int value = 13;
@@ -873,7 +874,7 @@ version (FlintJacksonJsonAppend)
         C,
     }
 
-    @JsonAppend(attrs : [JsonAppend.Attr(value: "desc", include: JsonInclude.Include.NON_EMPTY)])
+    @JsonAppend(attrs: [JsonAppend.Attr(value: "desc", include: JsonInclude.Include.NON_EMPTY)])
     private final class OptionalsBean
     {
         int value = 28;
@@ -891,8 +892,7 @@ version (FlintJacksonJsonAppend)
         }
     }
 
-    @JsonAppend(prepend : true, props:
-            [
+    @JsonAppend(prepend: true, props: [
         JsonAppend.Prop(value: classOf!CustomVProperty, name: "id"),
         JsonAppend.Prop(value: classOf!CustomVProperty, name: "extra")
     ])

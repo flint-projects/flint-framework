@@ -40,7 +40,7 @@ unittest
 private struct Checked
 {
     @Get("/:number")
-    Error path(@PathVariable("number") uint number, ref scope RequestContext context)nothrow @nogc
+    Error path(@PathVariable("number") uint number, ref scope RequestContext context) nothrow @nogc
     {
         assert(number != 0 && !context.cancellation.cancelled());
         return Error.init;

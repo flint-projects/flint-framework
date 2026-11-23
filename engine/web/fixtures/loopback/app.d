@@ -107,7 +107,7 @@ private struct Fixture
     }
 
     @Get("/typed/:id")
-    Result!Bounds typed(@PathVariable("id") long id, @QueryParam("size", true) ulong size)nothrow @nogc
+    Result!Bounds typed(@PathVariable("id") long id, @QueryParam("size", true) ulong size) nothrow @nogc
     {
         return Result!Bounds(Bounds(id, size));
     }

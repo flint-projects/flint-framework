@@ -275,9 +275,7 @@ version (FlintJacksonGenericTypes)
         assert(content.canFind("\"type\":\"bar\""), content);
     }
 
-    @JsonTypeInfo(use : JsonTypeInfo.Id.NAME, include:
-            JsonTypeInfo.As.PROPERTY, property:
-            "type")
+    @JsonTypeInfo(use: JsonTypeInfo.Id.NAME, include: JsonTypeInfo.As.PROPERTY, property: "type")
     private class ParentClass
     {
         private string parentProperty;

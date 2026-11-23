@@ -275,7 +275,7 @@ version (FlintJacksonCustomSerializers)
     import flint.java.lang : Iterable, classOf;
     import flint.java.util : Arrays;
 
-    @JsonSerialize(using : classOf!ListSerializer)
+    @JsonSerialize(using: classOf!ListSerializer)
     private final class PseudoList : ArrayList!string
     {
         this(string[] values...)
@@ -300,8 +300,7 @@ version (FlintJacksonCustomSerializers)
 
     private final class IterB
     {
-        @JsonSerialize(as : classOf!(Iterable!IterA), contentUsing:
-                classOf!IterASerializer)
+        @JsonSerialize(as: classOf!(Iterable!IterA), contentUsing: classOf!IterASerializer)
         List!IterA list;
 
         this()
@@ -421,7 +420,7 @@ version (FlintJacksonIterableTypes)
         mixin IterableDefaults!(Nullable!int);
     }
 
-    @JsonSerialize(typing : JsonSerialize.Typing.STATIC)
+    @JsonSerialize(typing: JsonSerialize.Typing.STATIC)
     private final class BeanWithIterable
     {
         private ArrayList!string values;

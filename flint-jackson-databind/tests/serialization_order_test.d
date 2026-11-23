@@ -47,8 +47,7 @@ private class BeanWithOrder
     }
 }
 
-@JsonPropertyOrder(value : ["d"], alphabetic:
-        true)
+@JsonPropertyOrder(value: ["d"], alphabetic: true)
 private final class SubBeanWithOrder : BeanWithOrder
 {
     this(int a, int b, int c, int d)
@@ -96,7 +95,7 @@ private final class BeanFor459
 }
 
 // For [databind#311]
-@JsonPropertyOrder(alphabetic : true)
+@JsonPropertyOrder(alphabetic: true)
 private final class BeanForGH311
 {
     private const int a;
@@ -127,10 +126,10 @@ private final class OrderingByIndexBean
     int r;
     int a;
 
-    @JsonProperty(index : 1)
+    @JsonProperty(index: 1)
     int b;
 
-    @JsonProperty(index : 0)
+    @JsonProperty(index: 0)
     int u;
 
     int f;

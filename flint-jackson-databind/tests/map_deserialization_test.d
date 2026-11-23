@@ -145,7 +145,7 @@ version (FlintJacksonDelegatingCreators)
             return object;
         }
 
-        @JsonCreator(mode : JsonCreator.Mode.DELEGATING)
+        @JsonCreator(mode: JsonCreator.Mode.DELEGATING)
         static ObjectWrapper jsonValue(Any object)
         {
             return new ObjectWrapper(object);
@@ -482,9 +482,7 @@ version (FlintJacksonGenericTypes)
 
     private final class EnumMapContainer
     {
-        @JsonTypeInfo(use : JsonTypeInfo.Id.CLASS, include:
-                JsonTypeInfo.As.PROPERTY, property:
-                "@class")
+        @JsonTypeInfo(use: JsonTypeInfo.Id.CLASS, include: JsonTypeInfo.As.PROPERTY, property: "@class")
         EnumMap!(KeyEnum, ITestType) testTypes;
     }
 
@@ -493,9 +491,7 @@ version (FlintJacksonGenericTypes)
         List!ITestType testTypes;
     }
 
-    @JsonTypeInfo(use : JsonTypeInfo.Id.CLASS, include:
-            JsonTypeInfo.As.PROPERTY, property:
-            "@class")
+    @JsonTypeInfo(use: JsonTypeInfo.Id.CLASS, include: JsonTypeInfo.As.PROPERTY, property: "@class")
     private interface ITestType
     {
     }
@@ -567,7 +563,7 @@ version (FlintJacksonMapKeyDeserializers)
 // flint.jackson has no @JsonDeserialize(using) nor custom StdDeserializer subclasses.
 version (FlintJacksonCustomSerializers)
 {
-    @JsonDeserialize(using : classOf!CustomMapDeserializer)
+    @JsonDeserialize(using: classOf!CustomMapDeserializer)
     private final class CustomMap : LinkedHashMap!(string, string)
     {
     }

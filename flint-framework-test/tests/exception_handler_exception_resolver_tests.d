@@ -873,8 +873,7 @@ private class AnotherTestExceptionResolver
 private class ResponseStatusTestExceptionResolver
 {
     @ExceptionHandler(classOf!SocketTimeoutException)
-    @ResponseStatus(code : HttpStatus.GATEWAY_TIMEOUT, reason:
-            "gateway.timeout")
+    @ResponseStatus(code: HttpStatus.GATEWAY_TIMEOUT, reason: "gateway.timeout")
     void handleException(SocketTimeoutException ex)
     {
     }
@@ -895,7 +894,7 @@ private class NotCalledTestExceptionResolver
     }
 }
 
-@RestControllerAdvice(assignableTypes : [classOf!WebApplicationObjectSupport])
+@RestControllerAdvice(assignableTypes: [classOf!WebApplicationObjectSupport])
 @Order(2)
 private class BasePackageTestExceptionResolver
 {
@@ -928,16 +927,14 @@ private class MediaTypeController
     {
     }
 
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["application/json"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["application/json"])
     @ResponseBody
     string handleExceptionJson()
     {
         return "jsonBody";
     }
 
-    @ExceptionHandler(exception : [classOf!IllegalArgumentException], produces:
-            ["text/html", "*/*"])
+    @ExceptionHandler(exception: [classOf!IllegalArgumentException], produces: ["text/html", "*/*"])
     string handleExceptionHtml()
     {
         return "htmlView";

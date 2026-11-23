@@ -108,7 +108,7 @@ private final class StatusClass
 
 private struct Inner
 {
-    @JsonUnwrapped(prefix : "in_")
+    @JsonUnwrapped(prefix: "in_")
     Status status;
     int level = 3;
 }
@@ -119,10 +119,9 @@ private final class Unwrapping
     @JsonUnwrapped
     Status status;
     int count = 2;
-    @JsonUnwrapped(prefix : "x_", suffix:
-            "_y")
+    @JsonUnwrapped(prefix: "x_", suffix: "_y")
     Status other;
-    @JsonUnwrapped(prefix : "deep_")
+    @JsonUnwrapped(prefix: "deep_")
     Inner inner;
     @JsonUnwrapped
     StatusClass none;

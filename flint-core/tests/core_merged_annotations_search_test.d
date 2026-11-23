@@ -100,13 +100,12 @@ private class ComposedTransactionalComponentClass
 {
 }
 
-@Transactional(qualifier : "composed1")
+@Transactional(qualifier: "composed1")
 private struct InheritedComposed
 {
 }
 
-@Transactional(qualifier : "composed2", readOnly:
-        true)
+@Transactional(qualifier: "composed2", readOnly: true)
 private struct Composed
 {
 }
@@ -123,9 +122,9 @@ private struct TxComposed
 
 private struct TestConfiguration
 {
-    @AliasFor(value : "location")
+    @AliasFor(value: "location")
     string value = "";
-    @AliasFor(value : "value")
+    @AliasFor(value: "value")
     string location = "";
 }
 
@@ -249,7 +248,7 @@ private struct Meta1
 }
 
 @Component("meta2")
-@Transactional(readOnly : true)
+@Transactional(readOnly: true)
 private struct Meta2
 {
 }
@@ -350,7 +349,7 @@ private class SubTransactionalAndOrderedClass : TransactionalAndOrderedClass
 {
 }
 
-@Resource(name : "x")
+@Resource(name: "x")
 private class ResourceHolder
 {
 }

@@ -7,20 +7,18 @@ import flint.jackson.annotation;
 
 @JsonPropertyOrder(["id", "name"])
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonIgnoreProperties(ignoreUnknown : true)
+@JsonIgnoreProperties(ignoreUnknown: true)
 private struct Owner
 {
     @JsonProperty("owner_id")
     long id;
-    @JsonProperty(value : "name", access:
-            JsonProperty.Access.READ_ONLY)
+    @JsonProperty(value: "name", access: JsonProperty.Access.READ_ONLY)
     string name;
     @JsonIgnore
     string password;
     @JsonAlias(["mail", "e-mail"])
     string email;
-    @JsonFormat(shape : JsonFormat.Shape.STRING, pattern:
-            "yyyy-MM-dd")
+    @JsonFormat(shape: JsonFormat.Shape.STRING, pattern: "yyyy-MM-dd")
     string birthDate;
 }
 

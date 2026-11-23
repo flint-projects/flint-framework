@@ -29,24 +29,21 @@ private final class User
     // Gap: Hibernate's own constraints (@Range, @DurationMin, @DurationMax) are not ported.
     version (FlintHibernateConstraints)
     {
-        @Range(min : 18, max:
-                21)
+        @Range(min: 18, max: 21)
         int age;
     }
 }
 
 private final class DoubleHolder
 {
-    @DecimalMax(value : "1.0")
+    @DecimalMax(value: "1.0")
     double inclusiveMaxDouble;
-    @DecimalMax(value : "1.0", inclusive:
-            false)
+    @DecimalMax(value: "1.0", inclusive: false)
     double exclusiveMaxDouble;
 
-    @DecimalMin(value : "1.0")
+    @DecimalMin(value: "1.0")
     double inclusiveMinDouble;
-    @DecimalMin(value : "1.0", inclusive:
-            false)
+    @DecimalMin(value: "1.0", inclusive: false)
     double exclusiveMinDouble;
 
     this()
@@ -179,16 +176,14 @@ version (FlintHibernateConstraints)
 {
     private final class DurationHolder
     {
-        @DurationMax(days : 2L)
+        @DurationMax(days: 2L)
         Duration inclusiveMaxDuration;
-        @DurationMax(days : 2L, inclusive:
-                false)
+        @DurationMax(days: 2L, inclusive: false)
         Duration exclusiveMaxDuration;
 
-        @DurationMin(days : 2L)
+        @DurationMin(days: 2L)
         Duration inclusiveMinDuration;
-        @DurationMin(days : 2L, inclusive:
-                false)
+        @DurationMin(days: 2L, inclusive: false)
         Duration exclusiveMinDuration;
 
         this()

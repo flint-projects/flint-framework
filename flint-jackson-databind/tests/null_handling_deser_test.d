@@ -205,9 +205,7 @@ version (FlintJacksonGenericTypes)
     {
         string name;
         string type;
-        @JsonTypeInfo(use : JsonTypeInfo.Id.NAME, include:
-                JsonTypeInfo.As.EXTERNAL_PROPERTY, property:
-                "type")
+        @JsonTypeInfo(use: JsonTypeInfo.Id.NAME, include: JsonTypeInfo.As.EXTERNAL_PROPERTY, property: "type")
         @JsonSubTypes([
             JsonSubTypes.Type(classOf!TypeA, "TypeA"), JsonSubTypes.Type(classOf!TypeB, "TypeB")
         ])

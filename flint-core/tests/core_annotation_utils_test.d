@@ -420,42 +420,36 @@ private enum RequestMethod
 private struct WebMapping
 {
     string name;
-    @AliasFor(value : "path")
+    @AliasFor(value: "path")
     string[] value = [""];
-    @AliasFor(attribute : "value")
+    @AliasFor(attribute: "value")
     string[] path = [""];
     RequestMethod[] method;
 }
 
-@WebMapping(method : [RequestMethod.GET], name:
-        "")
+@WebMapping(method: [RequestMethod.GET], name: "")
 private struct Get
 {
-    @AliasFor(annotation : classOf!WebMapping)
+    @AliasFor(annotation: classOf!WebMapping)
     string value = "";
-    @AliasFor(annotation : classOf!WebMapping)
+    @AliasFor(annotation: classOf!WebMapping)
     string path = "";
 }
 
 @Component("webController")
 private class WebController
 {
-    @WebMapping(value : ["/test"], name:
-            "foo")
+    @WebMapping(value: ["/test"], name: "foo")
     void handleMappedWithValueAttribute()
     {
     }
 
-    @WebMapping(path : ["/test"], name:
-            "bar", method:
-            [RequestMethod.GET, RequestMethod.POST])
+    @WebMapping(path: ["/test"], name: "bar", method: [RequestMethod.GET, RequestMethod.POST])
     void handleMappedWithPathAttribute()
     {
     }
 
-    @WebMapping(value : ["/enigma"], path:
-            ["/test"], name:
-            "baz")
+    @WebMapping(value: ["/enigma"], path: ["/test"], name: "baz")
     void handleMappedWithDifferentPathAndValueAttributes()
     {
     }
@@ -463,9 +457,9 @@ private class WebController
 
 private struct ContextConfig
 {
-    @AliasFor(value : "location")
+    @AliasFor(value: "location")
     string value = "";
-    @AliasFor(value : "value")
+    @AliasFor(value: "value")
     string location = "";
     ClassRef klass = classOf!Object;
 }
@@ -482,35 +476,28 @@ private class ConfigHierarchyTestCase
 
 private struct CharsContainer
 {
-    @AliasFor(attribute : "chars")
+    @AliasFor(attribute: "chars")
     const(char)[] value;
-    @AliasFor(attribute : "value")
+    @AliasFor(attribute: "value")
     const(char)[] chars;
 }
 
 @ContextConfig
 private struct ImplicitAliasesContextConfig
 {
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string xmlFile = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string groovyScript = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string value = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location1 = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location2 = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location3 = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "klass")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "klass")
     ClassRef configClass = classOf!Object;
     string nonAliasedAttribute = "";
 }
@@ -518,16 +505,13 @@ private struct ImplicitAliasesContextConfig
 @ContextConfig
 private struct ImplicitAliasesWithDifferentDefaultValuesContextConfig
 {
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location1 = "foo";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location2 = "bar";
 }
 
-@ImplicitAliasesWithDifferentDefaultValuesContextConfig(location1 : "1", location2:
-        "2")
+@ImplicitAliasesWithDifferentDefaultValuesContextConfig(location1: "1", location2: "2")
 private class ImplicitAliasesWithDifferentDefaultValuesContextConfigClass
 {
 }
@@ -535,16 +519,13 @@ private class ImplicitAliasesWithDifferentDefaultValuesContextConfigClass
 @ContextConfig
 private struct ImplicitAliasesWithDuplicateValuesContextConfig
 {
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location1 = "";
-    @AliasFor(annotation : classOf!ContextConfig, attribute:
-            "location")
+    @AliasFor(annotation: classOf!ContextConfig, attribute: "location")
     string location2 = "";
 }
 
-@ImplicitAliasesWithDuplicateValuesContextConfig(location1 : "1", location2:
-        "2")
+@ImplicitAliasesWithDuplicateValuesContextConfig(location1: "1", location2: "2")
 private class ImplicitAliasesWithDuplicateValuesContextConfigClass
 {
 }
@@ -559,7 +540,7 @@ private struct ComponentScan
     Filter[] excludeFilters;
 }
 
-@ComponentScan(excludeFilters : [Filter(pattern: "*Foo"), Filter(pattern: "*Bar")])
+@ComponentScan(excludeFilters: [Filter(pattern: "*Foo"), Filter(pattern: "*Bar")])
 private class ComponentScanClass
 {
 }

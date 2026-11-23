@@ -259,8 +259,7 @@ private class ServerErrorException : Exception
     }
 }
 
-@ResponseStatus(code : HttpStatus.GONE, reason:
-        "You suck!")
+@ResponseStatus(code: HttpStatus.GONE, reason: "You suck!")
 private class StatusCodeAndReasonException : Exception
 {
     this() pure nothrow @nogc
@@ -269,8 +268,7 @@ private class StatusCodeAndReasonException : Exception
     }
 }
 
-@ResponseStatus(code : HttpStatus.GONE, reason:
-        "gone.reason")
+@ResponseStatus(code: HttpStatus.GONE, reason: "gone.reason")
 private class StatusCodeAndReasonMessageException : Exception
 {
     this() pure nothrow @nogc
@@ -282,12 +280,11 @@ private class StatusCodeAndReasonMessageException : Exception
 @ResponseStatus
 private struct ComposedResponseStatus
 {
-    @AliasFor(annotation : classOf!ResponseStatus, attribute:
-            "code")
+    @AliasFor(annotation: classOf!ResponseStatus, attribute: "code")
     HttpStatus responseStatus = HttpStatus.INTERNAL_SERVER_ERROR;
 }
 
-@ComposedResponseStatus(responseStatus : HttpStatus.BAD_REQUEST)
+@ComposedResponseStatus(responseStatus: HttpStatus.BAD_REQUEST)
 private class StatusCodeFromComposedResponseStatusException : Exception
 {
     this() pure nothrow @nogc

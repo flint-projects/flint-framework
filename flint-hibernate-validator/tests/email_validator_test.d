@@ -27,8 +27,7 @@ private enum noOrgEmailAddressRegexp = `^((?!\.org).)*$`;
 
 private final class EmailContainerAnnotated
 {
-    @Email(message : "ORG addresses are not valid", regexp:
-            noOrgEmailAddressRegexp)
+    @Email(message: "ORG addresses are not valid", regexp: noOrgEmailAddressRegexp)
     string email;
 }
 

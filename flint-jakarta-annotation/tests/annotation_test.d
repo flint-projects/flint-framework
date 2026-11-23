@@ -11,11 +11,10 @@ private final class Component
 {
     @Resource
     string plain;
-    @Resource(name : "jdbc/petclinic", shareable:
-            false)
+    @Resource(name: "jdbc/petclinic", shareable: false)
     string named;
-    @Resource(lookup : "java:global/a")
-    @Resource(lookup : "java:global/b")
+    @Resource(lookup: "java:global/a")
+    @Resource(lookup: "java:global/b")
     string twice;
     @Nullable
     string optional;
