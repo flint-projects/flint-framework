@@ -14,11 +14,11 @@ module flint.mock.web;
 
 import flint.engine.aot.any : Any;
 import flint.http : HttpHeaders, MediaType;
-import flint.jakarta.servlet : DispatcherType, RequestDispatcher, ServletContext,
-    ServletInputStream, ServletOutputStream;
+import flint.jakarta.servlet : DispatcherType, Filter, FilterRegistration, RequestDispatcher,
+    Servlet, ServletContext, ServletInputStream, ServletOutputStream, ServletRegistration;
 import flint.jakarta.servlet.http : Cookie, HttpServletRequest, HttpServletResponse;
 import flint.java.io : PrintWriter, Writer;
-import flint.java.lang : IllegalStateException;
+import flint.java.lang : IllegalStateException, UnsupportedOperationException;
 
 @safe:
 
@@ -69,6 +69,18 @@ class MockServletContext : ServletContext
     int getMinorVersion()
     {
         return 1;
+    }
+
+    /// Spring's mock: dynamic registration is unsupported.
+    ServletRegistration.Dynamic addServlet(string, Servlet)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    /// ditto
+    FilterRegistration.Dynamic addFilter(string, Filter)
+    {
+        throw new UnsupportedOperationException();
     }
 }
 

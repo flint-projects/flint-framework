@@ -25,7 +25,7 @@ class ServletException : Exception
     // dfmt off
     this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line =
             __LINE__) pure nothrow @nogc
-      // dfmt on
+       // dfmt on
     {
         super(message, file, line, rootCause);
     }
@@ -151,6 +151,84 @@ interface ServletContext
     int getMajorVersion();
     /// ditto
     int getMinorVersion();
+
+    /// Adds `servlet` under `servletName`, to be mapped with `ServletRegistration.Dynamic.addMapping`. Returns null
+    /// when a servlet of that name exists; throws `IllegalStateException` once the context is initialized.
+    ServletRegistration.Dynamic addServlet(string servletName, Servlet servlet);
+
+    /// Adds `filter` under `filterName`, to be mapped with `FilterRegistration.Dynamic.addMappingForUrlPatterns`.
+    /// Returns null when a filter of that name exists; throws `IllegalStateException` once the context is
+    /// initialized.
+    FilterRegistration.Dynamic addFilter(string filterName, Filter filter);
+}
+
+/// `jakarta.servlet.Registration`: a servlet or filter registered with a `ServletContext`.
+interface Registration
+{
+    /// The servlet or filter name.
+    string getName();
+
+    /// The class name of the servlet or filter.
+    string getClassName();
+
+    /// Sets an initialization parameter unless one of that name exists; returns whether it was set.
+    bool setInitParameter(string name, string value);
+
+    /// An initialization parameter, or `null`.
+    string getInitParameter(string name);
+
+    /// `Registration.Dynamic`: configuration allowed until the context is initialized.
+    interface Dynamic : Registration
+    {
+        /// Whether the servlet or filter supports asynchronous operation.
+        void setAsyncSupported(bool isAsyncSupported);
+    }
+}
+
+/// `jakarta.servlet.ServletRegistration`. `Set<String>` is `string[]` (R10).
+interface ServletRegistration : Registration
+{
+    /// Adds URL patterns; returns those already mapped to another servlet, which are left unchanged.
+    string[] addMapping(string[] urlPatterns...);
+
+    /// The URL patterns mapped to this servlet.
+    string[] getMappings();
+
+    /// The run-as role, or `null`.
+    string getRunAsRole();
+
+    /// `ServletRegistration.Dynamic`.
+    interface Dynamic : ServletRegistration, Registration.Dynamic
+    {
+        /// The load-on-startup order; negative for lazy loading.
+        void setLoadOnStartup(int loadOnStartup);
+
+        /// Sets the run-as role.
+        void setRunAsRole(string roleName);
+    }
+}
+
+/// `jakarta.servlet.FilterRegistration`. `EnumSet<DispatcherType>` is `DispatcherType[]` and `Collection<String>`
+/// is `string[]` (R10).
+interface FilterRegistration : Registration
+{
+    /// Maps the filter to servlet names, before (`isMatchAfter` false) or after the mappings declared so far.
+    void addMappingForServletNames(DispatcherType[] dispatcherTypes, bool isMatchAfter, string[] servletNames...);
+
+    /// The servlet names the filter is mapped to.
+    string[] getServletNameMappings();
+
+    /// Maps the filter to URL patterns, before (`isMatchAfter` false) or after the mappings declared so far. A
+    /// null `dispatcherTypes` means `REQUEST`.
+    void addMappingForUrlPatterns(DispatcherType[] dispatcherTypes, bool isMatchAfter, string[] urlPatterns...);
+
+    /// The URL patterns the filter is mapped to.
+    string[] getUrlPatternMappings();
+
+    /// `FilterRegistration.Dynamic`.
+    interface Dynamic : FilterRegistration, Registration.Dynamic
+    {
+    }
 }
 
 /// `jakarta.servlet.ServletConfig`.
@@ -347,11 +425,11 @@ interface Filter
     /// Called once when the filter is taken out of service.
     void destroy();
 
-    /// Java's default methods.
+    /// Java's default methods. Names resolve where the template is mixed in, so the type is named by its module.
     mixin template Defaults()
     {
         ///
-        void init(FilterConfig filterConfig)
+        void init(imported!"flint.jakarta.servlet".FilterConfig filterConfig)
         {
         }
 

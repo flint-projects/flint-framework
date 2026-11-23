@@ -8,7 +8,8 @@ import core.time : MonoTime, dur;
 import flint.engine.aot.any : Any;
 import flint.engine.servlet : ServletEngine, ServletEngineException, ServletEngineOptions;
 import flint.engine.servlet.response : ServletEngineResponse;
-import flint.jakarta.servlet : DispatcherType, RequestDispatcher;
+import flint.jakarta.servlet : DispatcherType, Filter, FilterChain, RequestDispatcher,
+    ServletRequest, ServletResponse;
 import flint.jakarta.servlet.http : HttpServlet, HttpServletRequest, HttpServletResponse;
 import flint.java.lang : IllegalStateException;
 import std.socket : InternetAddress, Socket, SocketOption, SocketOptionLevel, TcpSocket;
@@ -438,4 +439,61 @@ unittest
     fixture.open();
     assert(fixture.engine.shutDownGracefully(5_000_000_000L));
     fixture.engine.stop();
+}
+
+/// Adds a response field naming itself, then passes the request on.
+private final class Tagging : Filter
+{
+    mixin Filter.Defaults;
+    private string tag;
+
+    this(string tag) pure nothrow @nogc
+    {
+        this.tag = tag;
+    }
+
+    void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+    {
+        (cast(HttpServletResponse) response).addHeader("X-Filter", tag);
+        chain.doFilter(request, response);
+    }
+}
+
+@("a ServletContextInitializer registers the servlet and filters through ServletContext, as Boot's beans do")
+unittest
+{
+    ServletEngineOptions options;
+    options.address = "127.0.0.1";
+    options.port = 0;
+    auto engine = new ServletEngine(options);
+    auto context = engine.getServletContext();
+    auto servlet = context.addServlet("dispatcherServlet", new Probe);
+    assert(servlet !is null && servlet.getName() == "dispatcherServlet");
+    servlet.setLoadOnStartup(1);
+    assert(servlet.addMapping("/").length == 0 && servlet.getMappings() == ["/"]);
+    assert(context.addServlet("dispatcherServlet", new Probe) is null);
+    // isMatchAfter true runs after every isMatchAfter false mapping, whatever the declaration order.
+    context.addFilter("late", new Tagging("late")).addMappingForUrlPatterns(null, true, "/*");
+    context.addFilter("early", new Tagging("early")).addMappingForUrlPatterns(null, false, "/*");
+    context.addFilter("named", new Tagging("named")).addMappingForServletNames(null, false, "dispatcherServlet");
+    context.addFilter("elsewhere", new Tagging("elsewhere")).addMappingForUrlPatterns(null, false, "/api/*");
+    assert(context.addFilter("early", new Tagging("again")) is null);
+    engine.start();
+    scope (exit)
+        engine.stop();
+    bool refused;
+    try
+        context.addServlet("late", new Probe);
+    catch (IllegalStateException)
+        refused = true;
+    assert(refused);
+
+    auto socket = new TcpSocket(new InternetAddress("127.0.0.1", cast(ushort) engine.getPort()));
+    socket.setOption(SocketOptionLevel.SOCKET, SocketOption.RCVTIMEO, dur!"msecs"(3_000));
+    scope (exit)
+        socket.close();
+    char[] pending;
+    auto reply = exchange(socket, pending, "GET /greeting HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.headWithoutDate() == "HTTP/1.1 200 \r\nX-Filter: early\r\nX-Filter: named\r\nX-Filter: late\r\n"
+            ~ "Content-Type: application/json\r\nContent-Length: 34\r\n\r\n", reply.head);
 }

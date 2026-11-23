@@ -23,8 +23,9 @@ import flint.engine.servlet.response : ServletEngineResponse;
 import flint.engine.web.fiber : FiberResponse, FiberRoute;
 import flint.engine.web.runtime : Server;
 import flint.engine.web.types : Request, RequestContext, ServerOptions, ShutdownMode;
-import flint.jakarta.servlet : DispatcherType, Filter, FilterChain, FilterConfig, RequestDispatcher,
-    Servlet, ServletConfig, ServletContext, ServletException, ServletRequest, ServletResponse;
+import flint.jakarta.servlet : DispatcherType, Filter, FilterChain, FilterConfig,
+    FilterRegistration, RequestDispatcher, Servlet,
+    ServletConfig, ServletContext, ServletException, ServletRegistration, ServletRequest, ServletResponse;
 import flint.java.lang : IllegalArgumentException, IllegalStateException;
 
 @safe:
@@ -74,8 +75,10 @@ final class ServletEngine : RequestHost
 {
     private ServletEngineOptions options;
     private EngineContext servletContext;
-    private Registration[] servlets;
-    private FilterRegistration[] filters;
+    private ServletEntry[] servlets;
+    private FilterEntry[] filters;
+    private ServletEntry defaultServlet;
+    private FilterEntry[] chainOrder;
     private Server server;
     private bool started;
     private bool stopped;
@@ -87,7 +90,7 @@ final class ServletEngine : RequestHost
         if (options.contextPath.length != 0 && (options.contextPath[0] != '/' || options.contextPath[$ - 1] == '/'))
             throw new IllegalArgumentException("ContextPath must start with '/' and must not end with '/'");
         this.options = options;
-        servletContext = new EngineContext(options.contextPath);
+        servletContext = new EngineContext(options.contextPath, this);
     }
 
     /// The servlet context shared by every servlet and filter.
@@ -96,31 +99,57 @@ final class ServletEngine : RequestHost
         return servletContext;
     }
 
-    /// Register a servlet, as `ServletRegistrationBean` does. The engine maps servlets at `/` (the default
-    /// servlet, which `DispatcherServlet` is under Boot) and `/*`.
+    /// Register a servlet and map it, as `ServletRegistrationBean` does through `ServletContext.addServlet`. The
+    /// engine maps one servlet, at `/` (the default servlet, which `DispatcherServlet` is under Boot) or `/*`.
     void addServlet(string name, Servlet servlet, string[] mappings = ["/"])
     {
-        if (started)
-            throw new IllegalStateException("servlets are registered before the engine starts");
-        if (servlet is null)
-            throw new IllegalArgumentException("Servlet must not be null");
-        foreach (mapping; mappings)
-            if (mapping != "/" && mapping != "/*")
-                throw new IllegalArgumentException("the servlet engine maps servlets at / and /* only, not " ~ mapping);
-        if (servlets.length != 0)
-            throw new IllegalStateException("a servlet is already mapped at /");
-        servlets ~= Registration(name, servlet);
+        auto registration = registerServlet(name, servlet);
+        if (registration is null)
+            throw new IllegalStateException("a servlet named '" ~ name ~ "' is already registered");
+        const conflicts = registration.addMapping(mappings);
+        if (conflicts.length != 0)
+            throw new IllegalStateException("a servlet is already mapped at " ~ conflicts[0]);
     }
 
-    /// Register a filter for `REQUEST` dispatches, in order, as `FilterRegistrationBean` does by default.
+    /// Register a filter and map it to `urlPatterns`, as `FilterRegistrationBean` does through
+    /// `ServletContext.addFilter` (`REQUEST` dispatches and `isMatchAfter` false by default).
     void addFilter(string name, Filter filter, string[] urlPatterns = ["/*"],
             DispatcherType[] dispatcherTypes = [DispatcherType.REQUEST])
     {
+        auto registration = registerFilter(name, filter);
+        if (registration is null)
+            throw new IllegalStateException("a filter named '" ~ name ~ "' is already registered");
+        registration.addMappingForUrlPatterns(dispatcherTypes, false, urlPatterns);
+    }
+
+    /// `ServletContext.addServlet`: null for a duplicate name; `IllegalStateException` once started.
+    package(flint.engine.servlet) ServletRegistration.Dynamic registerServlet(string name, Servlet servlet)
+    {
+        if (started)
+            throw new IllegalStateException("servlets are registered before the engine starts");
+        if (servlet is null || name.length == 0)
+            throw new IllegalArgumentException("Servlet name and servlet must not be empty");
+        foreach (existing; servlets)
+            if (existing.name == name)
+                return null;
+        auto entry = new ServletEntry(this, name, servlet);
+        servlets ~= entry;
+        return entry;
+    }
+
+    /// `ServletContext.addFilter`: null for a duplicate name; `IllegalStateException` once started.
+    package(flint.engine.servlet) FilterRegistration.Dynamic registerFilter(string name, Filter filter)
+    {
         if (started)
             throw new IllegalStateException("filters are registered before the engine starts");
-        if (filter is null)
-            throw new IllegalArgumentException("Filter must not be null");
-        filters ~= FilterRegistration(name, filter, urlPatterns.dup, dispatcherTypes.dup);
+        if (filter is null || name.length == 0)
+            throw new IllegalArgumentException("Filter name and filter must not be empty");
+        foreach (existing; filters)
+            if (existing.name == name)
+                return null;
+        auto entry = new FilterEntry(this, name, filter);
+        filters ~= entry;
+        return entry;
     }
 
     /// Initialize the servlets and filters, bind the port and begin serving. Returns once requests are admitted.
@@ -128,12 +157,21 @@ final class ServletEngine : RequestHost
     {
         if (started)
             return;
-        if (servlets.length == 0)
-            throw new IllegalStateException("no servlet is registered");
-        foreach (ref registration; servlets)
-            registration.servlet.init(new EngineConfig(registration.name, servletContext));
-        foreach (ref registration; filters)
-            registration.filter.init(new EngineFilterConfig(registration.name, servletContext));
+        foreach (entry; servlets)
+            if (entry.mappings.length != 0)
+                defaultServlet = entry;
+        if (defaultServlet is null)
+            throw new IllegalStateException("no servlet is mapped at / or /*");
+        // Tomcat's addFilterMapBefore and addFilterMap: mappings declared with isMatchAfter false run first, each
+        // group in declaration order.
+        foreach (after; [false, true])
+            foreach (entry; filters)
+                if (entry.mapped && entry.after == after)
+                    chainOrder ~= entry;
+        foreach (entry; servlets)
+            entry.servlet.init(new EngineConfig(entry.name, servletContext, entry.parameters));
+        foreach (entry; filters)
+            entry.filter.init(new EngineFilterConfig(entry.name, servletContext, entry.parameters));
 
         ServerOptions serverOptions;
         serverOptions.address = options.address;
@@ -363,7 +401,7 @@ final class ServletEngine : RequestHost
         if (request.getQueryString() !is null)
             request.setAttribute(RequestDispatcher.ERROR_QUERY_STRING, Any.of(request.getQueryString()));
         request.setAttribute(RequestDispatcher.ERROR_METHOD, Any.of(request.getMethod()));
-        request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME, Any.of(servlets[0].name));
+        request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME, Any.of(defaultServlet.name));
         response.prepareErrorPage();
         auto previous = request.redirect(page, null, DispatcherType.ERROR);
         scope (exit)
@@ -378,10 +416,10 @@ final class ServletEngine : RequestHost
 
     private void destroyComponents()
     {
-        foreach (ref registration; filters)
-            registration.filter.destroy();
-        foreach (ref registration; servlets)
-            registration.servlet.destroy();
+        foreach (entry; filters)
+            entry.filter.destroy();
+        foreach (entry; servlets)
+            entry.servlet.destroy();
     }
 }
 
@@ -390,26 +428,217 @@ private long nanosFromNow(long nanos)
     return Deadline.afterMillis(nanos / 1_000_000).monotonicNanoseconds;
 }
 
-private struct Registration
+/// What `Registration` keeps for a servlet or a filter.
+private abstract class EntryBase
 {
+    protected ServletEngine engine;
     string name;
-    Servlet servlet;
+    string[string] parameters;
+
+    this(ServletEngine engine, string name) pure nothrow @nogc
+    {
+        this.engine = engine;
+        this.name = name;
+    }
+
+    string getName()
+    {
+        return name;
+    }
+
+    bool setInitParameter(string parameter, string value)
+    {
+        if (parameter.length == 0 || value is null)
+            throw new IllegalArgumentException("Init parameter name and value must not be null");
+        if (engine.started)
+            throw new IllegalStateException("the engine has started");
+        if ((parameter in parameters) !is null)
+            return false;
+        parameters[parameter] = value;
+        return true;
+    }
+
+    string getInitParameter(string parameter)
+    {
+        if (auto value = parameter in parameters)
+            return *value;
+        return null;
+    }
+
+    /// The engine does not run servlets asynchronously; the setting is recorded and has no effect.
+    void setAsyncSupported(bool)
+    {
+    }
 }
 
-private struct FilterRegistration
+/// A servlet added through `ServletContext.addServlet`.
+private final class ServletEntry : EntryBase, ServletRegistration.Dynamic
 {
-    string name;
+    Servlet servlet;
+    string[] mappings;
+    private string runAsRole;
+
+    this(ServletEngine engine, string name, Servlet servlet) pure nothrow @nogc
+    {
+        super(engine, name);
+        this.servlet = servlet;
+    }
+
+    override string getName()
+    {
+        return name;
+    }
+
+    override bool setInitParameter(string parameter, string value)
+    {
+        return super.setInitParameter(parameter, value);
+    }
+
+    override string getInitParameter(string parameter)
+    {
+        return super.getInitParameter(parameter);
+    }
+
+    override void setAsyncSupported(bool supported)
+    {
+        super.setAsyncSupported(supported);
+    }
+
+    string getClassName()
+    {
+        return typeid(servlet).name;
+    }
+
+    string[] addMapping(string[] urlPatterns...)
+    {
+        if (engine.started)
+            throw new IllegalStateException("the engine has started");
+        string[] conflicts;
+        foreach (pattern; urlPatterns)
+        {
+            if (pattern != "/" && pattern != "/*")
+                throw new IllegalArgumentException("the servlet engine maps a servlet at / or /* only, not " ~ pattern);
+            bool taken;
+            foreach (other; engine.servlets)
+                taken = taken || (other !is this && other.mappings.length != 0);
+            if (taken)
+                conflicts ~= pattern;
+            else
+                mappings ~= pattern;
+        }
+        return conflicts;
+    }
+
+    string[] getMappings()
+    {
+        return mappings.dup;
+    }
+
+    string getRunAsRole()
+    {
+        return runAsRole;
+    }
+
+    /// Every servlet is initialized when the engine starts.
+    void setLoadOnStartup(int)
+    {
+    }
+
+    void setRunAsRole(string roleName)
+    {
+        runAsRole = roleName;
+    }
+}
+
+/// A filter added through `ServletContext.addFilter`.
+private final class FilterEntry : EntryBase, FilterRegistration.Dynamic
+{
     Filter filter;
     string[] urlPatterns;
+    string[] servletNames;
     DispatcherType[] dispatcherTypes;
+    bool after;
+    bool mapped;
 
-    bool applies(string servletPath, DispatcherType type) const
+    this(ServletEngine engine, string name, Filter filter) pure nothrow @nogc
+    {
+        super(engine, name);
+        this.filter = filter;
+    }
+
+    override string getName()
+    {
+        return name;
+    }
+
+    override bool setInitParameter(string parameter, string value)
+    {
+        return super.setInitParameter(parameter, value);
+    }
+
+    override string getInitParameter(string parameter)
+    {
+        return super.getInitParameter(parameter);
+    }
+
+    override void setAsyncSupported(bool supported)
+    {
+        super.setAsyncSupported(supported);
+    }
+
+    string getClassName()
+    {
+        return typeid(filter).name;
+    }
+
+    void addMappingForServletNames(DispatcherType[] types, bool isMatchAfter, string[] names...)
+    {
+        map(types, isMatchAfter);
+        servletNames ~= names;
+    }
+
+    string[] getServletNameMappings()
+    {
+        return servletNames.dup;
+    }
+
+    void addMappingForUrlPatterns(DispatcherType[] types, bool isMatchAfter, string[] patterns...)
+    {
+        map(types, isMatchAfter);
+        urlPatterns ~= patterns;
+    }
+
+    string[] getUrlPatternMappings()
+    {
+        return urlPatterns.dup;
+    }
+
+    private void map(DispatcherType[] types, bool isMatchAfter)
+    {
+        if (engine.started)
+            throw new IllegalStateException("the engine has started");
+        foreach (type; types.length != 0 ? types : [DispatcherType.REQUEST])
+        {
+            bool known;
+            foreach (existing; dispatcherTypes)
+                known = known || existing == type;
+            if (!known)
+                dispatcherTypes ~= type;
+        }
+        after = isMatchAfter;
+        mapped = true;
+    }
+
+    bool applies(string servletPath, DispatcherType type, string servletName) const
     {
         bool typed;
         foreach (candidate; dispatcherTypes)
             typed = typed || candidate == type;
         if (!typed)
             return false;
+        foreach (candidate; servletNames)
+            if (candidate == servletName || candidate == "*")
+                return true;
         foreach (pattern; urlPatterns)
             if (urlPatternMatches(pattern, servletPath))
                 return true;
@@ -454,16 +683,16 @@ private final class Chain : FilterChain
     {
         auto http = cast(ServletEngineRequest) request;
         const servletPath = http is null ? "/" : http.getServletPath();
-        while (next < engine.filters.length)
+        while (next < engine.chainOrder.length)
         {
-            auto registration = &engine.filters[next++];
-            if (registration.applies(servletPath, type))
+            auto entry = engine.chainOrder[next++];
+            if (entry.applies(servletPath, type, engine.defaultServlet.name))
             {
-                registration.filter.doFilter(request, response, this);
+                entry.filter.doFilter(request, response, this);
                 return;
             }
         }
-        engine.servlets[0].servlet.service(request, response);
+        engine.defaultServlet.servlet.service(request, response);
     }
 }
 
@@ -529,11 +758,23 @@ private final class EngineDispatcher : RequestDispatcher
 private final class EngineContext : ServletContext
 {
     private string contextPath;
+    private ServletEngine engine;
     private Any[string] attributes;
 
-    this(string contextPath) pure nothrow @nogc
+    this(string contextPath, ServletEngine engine) pure nothrow @nogc
     {
         this.contextPath = contextPath;
+        this.engine = engine;
+    }
+
+    ServletRegistration.Dynamic addServlet(string servletName, Servlet servlet)
+    {
+        return engine.registerServlet(servletName, servlet);
+    }
+
+    FilterRegistration.Dynamic addFilter(string filterName, Filter filter)
+    {
+        return engine.registerFilter(filterName, filter);
     }
 
     string getContextPath()
@@ -591,11 +832,13 @@ private final class EngineConfig : ServletConfig
 {
     private string name;
     private ServletContext context;
+    private const(string[string]) parameters;
 
-    this(string name, ServletContext context) pure nothrow @nogc
+    this(string name, ServletContext context, const(string[string]) parameters) pure nothrow @nogc
     {
         this.name = name;
         this.context = context;
+        this.parameters = parameters;
     }
 
     string getServletName()
@@ -608,14 +851,16 @@ private final class EngineConfig : ServletConfig
         return context;
     }
 
-    string getInitParameter(string)
+    string getInitParameter(string parameter)
     {
+        if (auto value = parameter in parameters)
+            return *value;
         return null;
     }
 
     string[] getInitParameterNames()
     {
-        return null;
+        return parameters.keys;
     }
 }
 
@@ -623,11 +868,13 @@ private final class EngineFilterConfig : FilterConfig
 {
     private string name;
     private ServletContext context;
+    private const(string[string]) parameters;
 
-    this(string name, ServletContext context) pure nothrow @nogc
+    this(string name, ServletContext context, const(string[string]) parameters) pure nothrow @nogc
     {
         this.name = name;
         this.context = context;
+        this.parameters = parameters;
     }
 
     string getFilterName()
@@ -640,13 +887,15 @@ private final class EngineFilterConfig : FilterConfig
         return context;
     }
 
-    string getInitParameter(string)
+    string getInitParameter(string parameter)
     {
+        if (auto value = parameter in parameters)
+            return *value;
         return null;
     }
 
     string[] getInitParameterNames()
     {
-        return null;
+        return parameters.keys;
     }
 }
