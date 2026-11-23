@@ -83,6 +83,14 @@ unittest
             options.maxNativeWatchesPerCore = watches;
             auto owner = Reactor.create(options);
             assert(owner.ok);
+            version (FlintNativeLiburing)
+            {
+                import std.process : environment;
+
+                // With the pinned liburing linked, automatic selection is io_uring unless the test denies it.
+                if (backend == Backend.automatic && environment.get("FLINT_TEST_URING_DENIED") != "1")
+                    assert(owner.value.activeBackend() == Backend.ioUring);
+            }
             auto fixture = new Heartbeat;
             assert(owner.value.postStartup(0, &fixture.ticker).code == Status.ok);
             assert(owner.value.postStartup(0, &fixture.caller).code == Status.ok);

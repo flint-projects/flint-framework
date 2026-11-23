@@ -94,6 +94,14 @@ unittest
         options.mailboxCapacity = fibers;
         auto owner = Reactor.create(options);
         assert(owner.ok);
+        version (FlintNativeLiburing)
+        {
+            import std.process : environment;
+
+            // With the pinned liburing linked, automatic selection is io_uring unless the test denies it.
+            if (backend == Backend.automatic && environment.get("FLINT_TEST_URING_DENIED") != "1")
+                assert(owner.value.activeBackend() == Backend.ioUring);
+        }
         auto fixture = new Interleaved;
         foreach (index; 0 .. fibers)
             assert(owner.value.postStartup(0, &fixture.play, TaskContext(index)).code == Status.ok);
