@@ -211,11 +211,11 @@ final class TokenStreamLocation
     /// Description of the location: `line: 1, column: 15`.
     string offsetDescription() const pure nothrow
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         if (lineNr < 0)
             return "UNKNOWN";
-        return "line: " ~ lineNr.to!string ~ ", column: " ~ columnNr.to!string;
+        return "line: " ~ decimal(lineNr) ~ ", column: " ~ decimal(columnNr);
     }
 
     override string toString() const pure nothrow
@@ -382,7 +382,7 @@ abstract class TokenStreamContext
     /// The path from the root as a JSON Pointer (`/visits/0/date`), for reporting.
     final string pathAsPointer() const pure nothrow
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         if (_parent is null || inRoot())
             return "";
@@ -391,7 +391,7 @@ abstract class TokenStreamContext
         if (inObject() && _currentName !is null)
             step = "/" ~ _currentName;
         else if (inArray() && _index >= 0)
-            step = "/" ~ _index.to!string;
+            step = "/" ~ decimal(_index);
         return _parent.pathAsPointer() ~ step;
     }
 

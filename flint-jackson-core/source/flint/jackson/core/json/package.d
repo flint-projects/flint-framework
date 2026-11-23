@@ -802,13 +802,13 @@ class UTF8JsonGenerator : JsonGenerator
 
     private size_t escapeNonAscii(scope const(ubyte)[] bytes, size_t i)
     {
-        import std.utf : decode;
+        import flint.engine.aot.text : decodeUtf8;
 
+        const text = cast(const(char)[]) bytes;
         size_t next = i;
-        dchar c;
-        try
-            c = decode(cast(const(char)[]) bytes, next);
-        catch (Exception)
+        const c = decodeUtf8(text, next);
+        // A malformed sequence reads as U+FFFD; it is escaped as one, and output resumes at the next byte.
+        if (c == 0xFFFD && text[i .. next] != "\uFFFD")
         {
             unicodeEscape(0xFFFD);
             return i + 1;
@@ -1550,9 +1550,9 @@ class UTF8StreamJsonParser : JsonParser
         case JsonToken.VALUE_NULL:
             return false;
         case JsonToken.VALUE_STRING:
-            import std.string : strip;
+            import flint.engine.aot.text : stripWhite;
 
-            const text = getString().strip();
+            const text = stripWhite(getString());
             if (text == "true")
                 return true;
             if (text == "false" || text == "null")
@@ -1566,9 +1566,9 @@ class UTF8StreamJsonParser : JsonParser
     // NumberInput.parseAsLong: trimmed decimal digits, else the default.
     private static long parseAsLong(string text, long def) pure nothrow
     {
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite;
 
-        const s = text.strip();
+        const s = stripWhite(text);
         if (s.length == 0)
             return def;
         size_t i = s[0] == '-' || s[0] == '+' ? 1 : 0;
@@ -1611,10 +1611,10 @@ class UTF8StreamJsonParser : JsonParser
 
     private JacksonException unexpected(ubyte c, string comment, bool whole = false)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         // Concatenation, not std.format: format alone instantiated about 4,000 templates in this module.
-        const code = "code " ~ (cast(uint) c).to!string;
+        const code = "code " ~ decimal(cast(uint) c);
         const printable = c >= 0x20 && c < 0x7F;
         auto description = printable ? "'" ~ cast(char) c ~ "' (" ~ code ~ ")" : "(CTRL-CHAR, " ~ code ~ ")";
         if (whole)
