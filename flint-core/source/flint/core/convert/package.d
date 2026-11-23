@@ -52,6 +52,10 @@ final class TypeDescriptor
     private const(MergedAnnotation)[] annotations_;
     private const(Descriptor) descriptor_;
     private string[] supertypes_;
+    // valueOf's element and key descriptors, built on demand so nested types keep their own element types (a
+    // pointer rather than a value, so a type whose element type is itself does not recurse at compile time).
+    private TypeDescriptor function() @safe elementOf_;
+    private TypeDescriptor function() @safe keyOf_;
 
     /// A descriptor for the type named `typeName`, with its AOT `descriptor` when known.
     this(string typeName, const Descriptor descriptor = null, const(MergedAnnotation)[] annotations = null)
@@ -81,14 +85,24 @@ final class TypeDescriptor
         {
             auto result = new TypeDescriptor(typeNameOf!U);
             static if (__traits(compiles, U.__flintElementType.init))
+            {
                 result.elementType_ = typeNameOf!(U.__flintElementType);
+                result.elementOf_ = &valueOf!(U.__flintElementType);
+            }
             static if (__traits(compiles, U.__flintKeyType.init))
+            {
                 result.keyType_ = typeNameOf!(U.__flintKeyType);
+                result.keyOf_ = &valueOf!(U.__flintKeyType);
+            }
             static if (is(U == V[K], V, K))
             {
                 result.elementType_ = typeNameOf!V;
                 result.keyType_ = typeNameOf!K;
+                result.elementOf_ = &valueOf!V;
+                result.keyOf_ = &valueOf!K;
             }
+            else static if (is(U == E[], E) && !is(U : const(char)[]))
+                result.elementOf_ = &valueOf!E;
             static if (is(U == class))
             {
                 static foreach (S; BaseClassesTuple!U)
@@ -131,19 +145,25 @@ final class TypeDescriptor
     /// The element type of an array or collection, or null.
     TypeDescriptor getElementTypeDescriptor() const
     {
+        if (elementOf_ !is null)
+            return elementOf_();
         return elementType_.length ? new TypeDescriptor(elementType_) : null;
     }
 
     /// The key type of a map, or null.
     TypeDescriptor getMapKeyTypeDescriptor() const
     {
+        if (keyOf_ !is null)
+            return keyOf_();
         return keyType_.length ? new TypeDescriptor(keyType_) : null;
     }
 
     /// The value type of a map, or null.
     TypeDescriptor getMapValueTypeDescriptor() const
     {
-        return keyType_.length && elementType_.length ? new TypeDescriptor(elementType_) : null;
+        if (keyType_.length == 0)
+            return null;
+        return getElementTypeDescriptor();
     }
 
     /// Whether this is a D array other than `string`.

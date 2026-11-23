@@ -552,8 +552,7 @@ unittest
     assert(!typeDescriptor.isArray());
     assert(typeDescriptor.getType() == typeNameOf!(List!(List!string)));
     assert(typeDescriptor.getElementTypeDescriptor().getType() == typeNameOf!(List!string));
-    version (FlintTypeDescriptorNestedElementTypes) // nested element descriptors lose their own element types
-        assert(typeDescriptor.getElementTypeDescriptor().getElementTypeDescriptor().getType() == "string");
+    assert(typeDescriptor.getElementTypeDescriptor().getElementTypeDescriptor().getType() == "string");
     assert(typeDescriptor.toString() == "flint.java.util.List!(List!string)");
 }
 
@@ -572,8 +571,7 @@ unittest
     auto typeDescriptor = TypeDescriptor.valueOf!(typeof(Fields.arrayOfListOfString));
     assert(typeDescriptor.isArray());
     assert(typeDescriptor.getElementTypeDescriptor().getType() == typeNameOf!(List!string));
-    version (FlintTypeDescriptorNestedElementTypes) // nested element descriptors lose their own element types
-        assert(typeDescriptor.getElementTypeDescriptor().getElementTypeDescriptor().getType() == "string");
+    assert(typeDescriptor.getElementTypeDescriptor().getElementTypeDescriptor().getType() == "string");
     assert(typeDescriptor.toString() == "flint.java.util.List!string[]");
 }
 
@@ -584,8 +582,7 @@ unittest
     assert(typeDescriptor.isMap());
     assert(typeDescriptor.getMapKeyTypeDescriptor().getType() == "string");
     assert(typeDescriptor.getMapValueTypeDescriptor().getType() == typeNameOf!(List!int));
-    version (FlintTypeDescriptorNestedElementTypes) // nested element descriptors lose their own element types
-        assert(typeDescriptor.getMapValueTypeDescriptor().getElementTypeDescriptor().getType() == "int");
+    assert(typeDescriptor.getMapValueTypeDescriptor().getElementTypeDescriptor().getType() == "int");
     assert(typeDescriptor.toString() == "flint.java.util.Map!(string, List!int)");
 }
 
@@ -594,11 +591,8 @@ unittest
 {
     auto desc = TypeDescriptor.valueOf!(typeof(Fields.fieldMap));
     assert(desc.isMap());
-    version (FlintTypeDescriptorNestedElementTypes) // nested element descriptors lose their own element types
-    {
-        assert(desc.getMapKeyTypeDescriptor().getElementTypeDescriptor().getType() == "int");
-        assert(desc.getMapValueTypeDescriptor().getElementTypeDescriptor().getType() == "long");
-    }
+    assert(desc.getMapKeyTypeDescriptor().getElementTypeDescriptor().getType() == "int");
+    assert(desc.getMapValueTypeDescriptor().getElementTypeDescriptor().getType() == "long");
 }
 
 // fieldAnnotated
@@ -995,8 +989,7 @@ unittest
     assert(td.isMap());
     assert(td.getMapKeyTypeDescriptor().getType() == "string");
     assert(td.getMapValueTypeDescriptor().getType() == typeNameOf!(List!int));
-    version (FlintTypeDescriptorNestedElementTypes) // nested element descriptors lose their own element types
-        assert(td.getMapValueTypeDescriptor().getElementTypeDescriptor().getType() == "int");
+    assert(td.getMapValueTypeDescriptor().getElementTypeDescriptor().getType() == "int");
 }
 
 // passDownGeneric
@@ -1004,11 +997,8 @@ unittest
 {
     auto td = TypeDescriptor.valueOf!(typeof(Fields.passDownGeneric));
     assert(td.getElementTypeDescriptor().getType() == typeNameOf!(List!(Set!int)));
-    version (FlintTypeDescriptorNestedElementTypes) // nested element descriptors lose their own element types
-    {
-        assert(td.getElementTypeDescriptor().getElementTypeDescriptor().getType() == typeNameOf!(Set!int));
-        assert(td.getElementTypeDescriptor().getElementTypeDescriptor().getElementTypeDescriptor().getType() == "int");
-    }
+    assert(td.getElementTypeDescriptor().getElementTypeDescriptor().getType() == typeNameOf!(Set!int));
+    assert(td.getElementTypeDescriptor().getElementTypeDescriptor().getElementTypeDescriptor().getType() == "int");
 }
 
 // upcast
