@@ -17,6 +17,8 @@ module flint.java.lang;
 
 import flint.engine.aot.objects : objectEquals, objectToHash, objectToString;
 import flint.java.util : Iterator; // module scope: a template-scoped import breaks -i builds (forward references)
+import flint.engine.aot.any : Any;
+import flint.java.util.formatter : formatJava;
 
 @safe:
 
@@ -408,6 +410,25 @@ bool javaEquals(T)(T a, T b)
 
 // ---------------------------------------------------------------------------------------------------------------
 // String.valueOf and boxed-number statics
+
+/++
+Java's `String` statics that have no D counterpart: `String.format`. A `string` is Java's `String` (R14); this
+struct only namespaces the static methods, so `String.format(template, name)` reads as in Java.
++/
+struct String
+{
+    @disable this();
+
+    /// `String.format(format, args...)`: Java's `Formatter` syntax (`flint.java.util.formatter`). The arguments
+    /// are boxed on the stack and formatted by one non-template engine (rule R7), not by `std.format`.
+    static string format(Args...)(string format, Args args)
+    {
+        Any[Args.length] boxed;
+        static foreach (i; 0 .. Args.length)
+            boxed[i] = Any.of(args[i]);
+        return formatJava(format, boxed[]);
+    }
+}
 
 /// Java's `String.valueOf`: `"null"` for null, decimal numbers, `true`/`false`, and `toString()` otherwise.
 string valueOf(T)(T value)
