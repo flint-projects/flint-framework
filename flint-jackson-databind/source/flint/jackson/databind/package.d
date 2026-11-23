@@ -97,7 +97,7 @@ final class PropertyNamingStrategies
         override string translate(string input)
         {
             import flint.engine.aot.text : decodeUtf8, utf8;
-            import std.uni : toUpper;
+            import flint.jackson.databind.casing : toUpper = toUpperCase;
 
             if (input.length == 0)
                 return input;
@@ -204,7 +204,7 @@ final class PropertyNamingStrategies
 private string snakeCase(string beanName) pure
 {
     import flint.engine.aot.text : decodeUtf8, utf8;
-    import std.uni : isUpper, toLower;
+    import flint.jackson.databind.casing : isUpper = isUpperCase, toLower = toLowerCase;
 
     string result;
     bool wasPrevTranslated;
@@ -235,7 +235,7 @@ private string snakeCase(string beanName) pure
 private string lowerCaseWithSeparator(string beanName, char separator) pure
 {
     import flint.engine.aot.text : decodeUtf8, utf8;
-    import std.uni : toLower;
+    import flint.jackson.databind.casing : toLower = toLowerCase;
 
     if (beanName.length == 0)
         return beanName;
@@ -269,7 +269,7 @@ private string lowerCaseWithSeparator(string beanName, char separator) pure
 package(flint.jackson.databind) string lowerCase(string text) pure
 {
     import flint.engine.aot.text : decodeUtf8, utf8;
-    import std.uni : toLower;
+    import flint.jackson.databind.casing : toLower = toLowerCase;
 
     string result;
     size_t i;
