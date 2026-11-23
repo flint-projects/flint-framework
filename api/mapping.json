@@ -9698,6 +9698,7 @@
 "org.springframework.transaction.interceptor.DelegatingTransactionAttribute#getLabels()":{"status":"ported","d":"flint.transaction.interceptor.DelegatingTransactionAttribute.getLabels"},
 "org.springframework.transaction.interceptor.DelegatingTransactionAttribute#getQualifier()":{"status":"ported","d":"flint.transaction.interceptor.DelegatingTransactionAttribute.getQualifier"},
 "org.springframework.transaction.interceptor.DelegatingTransactionAttribute#rollbackOn(Throwable)":{"status":"ported","d":"flint.transaction.interceptor.DelegatingTransactionAttribute.rollbackOn"},
+"org.springframework.transaction.interceptor.MethodMapTransactionAttributeSource#setBeanClassLoader(ClassLoader)":{"status":"excluded","category":"jvm-runtime"},
 "org.springframework.transaction.interceptor.NoRollbackRuleAttribute":{"status":"ported","d":"flint.transaction.interceptor.NoRollbackRuleAttribute"},
 "org.springframework.transaction.interceptor.NoRollbackRuleAttribute#<init>(Class)":{"status":"adapted","rules":["R4"],"d":"flint.transaction.interceptor.NoRollbackRuleAttribute.this"},
 "org.springframework.transaction.interceptor.NoRollbackRuleAttribute#<init>(String)":{"status":"ported","d":"flint.transaction.interceptor.NoRollbackRuleAttribute.this"},
