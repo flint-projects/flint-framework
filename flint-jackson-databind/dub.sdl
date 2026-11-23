@@ -1,0 +1,22 @@
+name "jackson-databind"
+description "Jackson 3.1 databind for Flint: ObjectMapper/JsonMapper, JsonNode, features and naming, driven by Flint AOT descriptors (tools.jackson.databind)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:engine-aot" version="*"
+dependency "flint:jackson-annotations" version="*"
+dependency "flint:jackson-core" version="*"
+dependency "flint:java" version="*"
+dependency "flint:serde" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+    stringImportPaths "tests/golden"
+}
