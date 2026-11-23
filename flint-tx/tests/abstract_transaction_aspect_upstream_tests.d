@@ -576,34 +576,28 @@ private void doTestRollbackOnException(Exception ex, bool shouldRollback, bool r
     }
 }
 
-// TransactionAspectSupport skips cleanupTransactionInfo when completing after an exception throws (the rollback
-// or commit fails), so the task keeps a stale TransactionInfo; Spring cleans up in a finally block. These cases
-// pass their own assertions but leave that state behind for later tests (likely bug).
-version (FlintTransactionInfoCleanupOnCompletionFailure)
+@("AbstractTransactionAspectTests.rollbackOnCheckedExceptionWithRollbackException")
+unittest
 {
-    @("AbstractTransactionAspectTests.rollbackOnCheckedExceptionWithRollbackException")
-    unittest
-    {
-        doTestRollbackOnException(new Exception(""), true, true);
-    }
+    doTestRollbackOnException(new Exception(""), true, true);
+}
 
-    @("AbstractTransactionAspectTests.noRollbackOnCheckedExceptionWithRollbackException")
-    unittest
-    {
-        doTestRollbackOnException(new Exception(""), false, true);
-    }
+@("AbstractTransactionAspectTests.noRollbackOnCheckedExceptionWithRollbackException")
+unittest
+{
+    doTestRollbackOnException(new Exception(""), false, true);
+}
 
-    @("AbstractTransactionAspectTests.rollbackOnUncheckedExceptionWithRollbackException")
-    unittest
-    {
-        doTestRollbackOnException(new RuntimeException(), true, true);
-    }
+@("AbstractTransactionAspectTests.rollbackOnUncheckedExceptionWithRollbackException")
+unittest
+{
+    doTestRollbackOnException(new RuntimeException(), true, true);
+}
 
-    @("AbstractTransactionAspectTests.noRollbackOnUncheckedExceptionWithRollbackException")
-    unittest
-    {
-        doTestRollbackOnException(new RuntimeException(), false, true);
-    }
+@("AbstractTransactionAspectTests.noRollbackOnUncheckedExceptionWithRollbackException")
+unittest
+{
+    doTestRollbackOnException(new RuntimeException(), false, true);
 }
 
 /// Simulate a transaction infrastructure failure. Shouldn't invoke target method.

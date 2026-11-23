@@ -707,10 +707,12 @@ abstract class TransactionAspectSupport
             invocation();
         catch (Exception ex)
         {
-            // target invocation exception
+            // target invocation exception; the binding is reset even when completing throws (Spring's finally)
             completed = true;
-            completeTransactionAfterThrowing(txInfo, ex);
-            cleanupTransactionInfo(txInfo);
+            try
+                completeTransactionAfterThrowing(txInfo, ex);
+            finally
+                cleanupTransactionInfo(txInfo);
             throw ex;
         }
         cleanupTransactionInfo(txInfo);
