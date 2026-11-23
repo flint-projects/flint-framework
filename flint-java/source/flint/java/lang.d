@@ -240,6 +240,34 @@ class InstantiationException : RuntimeException
     mixin JavaExceptionConstructors;
 }
 
+/++
+Java's `AssertionError`. Java's `Error`s that application code catches map to D `Exception`s (rule R8), because
+D's `Error` skips cleanup.
++/
+class AssertionError : Exception
+{
+    private Throwable cause_;
+
+    /// `message`, and optionally a `cause`.
+    this(string message = null, Throwable cause = null, string file = __FILE__, size_t line = __LINE__) pure nothrow
+    {
+        super(message, file, line);
+        cause_ = cause;
+    }
+
+    /// The detail message; null when there is none.
+    string getMessage() const pure nothrow @nogc
+    {
+        return msg;
+    }
+
+    /// The cause; null when unknown.
+    inout(Throwable) getCause() inout pure nothrow @nogc
+    {
+        return cause_;
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Core interfaces
 

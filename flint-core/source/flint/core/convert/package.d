@@ -292,6 +292,13 @@ interface ConversionService
         return convertErased(source, sourceType, targetType);
     }
 
+    /// Convert `source` to the type named `targetType` (a canonical D name), as generated code and the web layer
+    /// do for values whose target is known only by name.
+    final Any convert(Any source, string targetType)
+    {
+        return convertErased(source, TypeDescriptor.forObject(source), new TypeDescriptor(targetType));
+    }
+
     /// Whether `S` can be converted to `T`.
     bool canConvert(S, T)()
     {

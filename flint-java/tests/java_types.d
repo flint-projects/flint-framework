@@ -481,3 +481,47 @@ unittest
     assert(optionals.unwrap(none).isNull);
     assert(descriptorOf!(Set!string).fromElements([Any.of("x")]).get!(Set!string).contains("x"));
 }
+
+unittest
+{
+    // java.net.URI, java.nio.charset, atomics, AssertionError and the writers the web layer uses.
+    import flint.java.io : ByteArrayOutputStream, PrintWriter, StringWriter;
+    import flint.java.lang : AssertionError;
+    import flint.java.net : URI;
+    import flint.java.nio.charset : Charset, StandardCharsets, UnsupportedCharsetException;
+    import flint.java.util.concurrent.atomic : AtomicBoolean, AtomicInteger, AtomicLong;
+
+    auto uri = URI.create("http://localhost:8080/owners/é");
+    assert(uri.isAbsolute() && uri.getScheme() == "http");
+    assert(uri.toASCIIString() == "http://localhost:8080/owners/%C3%A9");
+    assert(!URI.create("/owners").isAbsolute() && URI.create("/a") == URI.create("/a"));
+    bool threw;
+    try
+        URI.create("a b");
+    catch (IllegalArgumentException)
+        threw = true;
+    assert(threw);
+    assert(Charset.forName("utf8") == StandardCharsets.UTF_8 && Charset.forName("latin1").name() == "ISO-8859-1");
+    threw = false;
+    try
+        Charset.forName("EBCDIC-x");
+    catch (UnsupportedCharsetException e)
+        threw = e.getCharsetName() == "EBCDIC-x";
+    assert(threw);
+    auto counter = new AtomicLong;
+    assert(counter.incrementAndGet() == 1 && counter.getAndIncrement() == 1 && counter.get() == 2);
+    assert(counter.compareAndSet(2, 10) && counter.addAndGet(5) == 15 && counter.toString() == "15");
+    assert(new AtomicInteger(3).incrementAndGet() == 4);
+    auto flag = new AtomicBoolean;
+    assert(flag.compareAndSet(false, true) && flag.get());
+    assert(new AssertionError("expected 2").getMessage() == "expected 2");
+    auto text = new StringWriter;
+    auto out_ = new PrintWriter(text);
+    out_.print("a");
+    out_.println(42);
+    out_.append("b").write('é');
+    assert(text.toString() == "a42\nbé");
+    auto bytes = new ByteArrayOutputStream;
+    new PrintWriter(bytes).print("hi");
+    assert(bytes.toString() == "hi" && bytes.size() == 2);
+}

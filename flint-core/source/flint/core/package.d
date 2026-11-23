@@ -549,6 +549,130 @@ Throwable causeOf(Throwable t) pure nothrow @nogc
     return t is null ? null : t.next;
 }
 
+/++
+A method parameter as Flint AOT describes it (Spring's `MethodParameter`): a handler parameter's `ArgumentSpec`
+(contract section 4.5) with its index, name, declared type name and merged annotations, instead of reflection.
+`Class`-typed accessors return canonical type names (R4).
++/
+final class MethodParameter
+{
+    import flint.engine.aot.descriptor : MergedAnnotation, MethodDescriptor, findAnnotation;
+    import flint.engine.aot.mapping : ArgumentSpec;
+
+    private ArgumentSpec argument;
+    private int index;
+    private string owner;
+    private const(MethodDescriptor)* executable;
+
+    /// Parameter `index` (-1 for a return type) described by `argument`, of the method `owner` names.
+    this(ArgumentSpec argument, int index, string owner = null, const(MethodDescriptor)* executable = null) pure nothrow
+    {
+        this.argument = argument;
+        this.index = index;
+        this.owner = owner;
+        this.executable = executable;
+    }
+
+    /// The parameter's position; -1 for a return type.
+    int getParameterIndex() const pure nothrow @nogc
+    {
+        return index;
+    }
+
+    /// The parameter name.
+    string getParameterName() const pure nothrow @nogc
+    {
+        return argument.name;
+    }
+
+    /// The canonical declared type (Java's `getParameterType()`, a `Class`; R4).
+    string getParameterType() const pure nothrow @nogc
+    {
+        return argument.type;
+    }
+
+    /// The type after unwrapping `Optional!T` (Java's `getNestedParameterType()`).
+    string getNestedParameterType() const pure nothrow
+    {
+        if (argument.elementType.length && isOptionalType(argument.type))
+            return argument.elementType;
+        enum prefix = "flint.java.util.Optional!";
+        const type = argument.type;
+        if (!isOptionalType(type))
+            return type;
+        auto rest = type[prefix.length .. $];
+        return rest.length > 1 && rest[0] == '(' && rest[$ - 1] == ')' ? rest[1 .. $ - 1] : rest;
+    }
+
+    private static bool isOptionalType(string type) pure nothrow @nogc
+    {
+        enum prefix = "flint.java.util.Optional!";
+        return type.length > prefix.length && type[0 .. prefix.length] == prefix;
+    }
+
+    /// Whether the parameter is `Optional!T`.
+    bool isOptional() const pure nothrow @nogc
+    {
+        return isOptionalType(argument.type);
+    }
+
+    /// The parameter's merged annotations.
+    const(MergedAnnotation)[] getParameterAnnotations() const pure nothrow @nogc
+    {
+        return argument.annotations;
+    }
+
+    /// The merged annotation named `type`, or null.
+    const(MergedAnnotation)* getParameterAnnotation(string type) const nothrow @nogc
+    {
+        return findAnnotation(argument.annotations, type);
+    }
+
+    /// The annotation `A`, or `A.init` with `found` false.
+    const(A) getParameterAnnotation(A)(out bool found) const
+    {
+        import flint.engine.aot.name : typeNameOf;
+
+        auto merged = getParameterAnnotation(typeNameOf!A);
+        found = merged !is null;
+        return found ? merged.value.get!(const A) : A.init;
+    }
+
+    /// Whether the annotation `A` is present.
+    bool hasParameterAnnotation(A)() const
+    {
+        import flint.engine.aot.name : typeNameOf;
+
+        return getParameterAnnotation(typeNameOf!A) !is null;
+    }
+
+    /// The AOT argument record.
+    ref const(ArgumentSpec) getArgumentSpec() const return pure nothrow @nogc
+    {
+        return argument;
+    }
+
+    /// The declaring method's description (`OwnerController.getOwner`), for messages.
+    string getExecutable() const pure nothrow @nogc
+    {
+        return owner;
+    }
+
+    /// The declaring method's descriptor, when known.
+    const(MethodDescriptor)* getMethod() const pure nothrow @nogc
+    {
+        return executable;
+    }
+
+    /// `method 'owner' parameter index`, as Spring prints it.
+    override string toString() const
+    {
+        import flint.java.lang : valueOf;
+
+        return "method '" ~ owner ~ "' parameter " ~ valueOf(index);
+    }
+}
+
 /// The version of the Spring Framework API this module ports (Spring's `SpringVersion`).
 struct FlintVersion
 {

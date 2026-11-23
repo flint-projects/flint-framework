@@ -2,6 +2,7 @@
 `java.io` as `flint.core.io.Resource` exposes it: the checked `IOException` family, `InputStream`, and `File`.
 
 `IOException` is checked in Java; in D it is an `Exception` and the `throws` clauses are dropped (deviation D-8).
+`OutputStream`, `Writer`, `StringWriter`, `OutputStreamWriter` and `PrintWriter` carry UTF-8 text.
 `File` wraps a path and answers the questions `Resource` asks (`exists`, `isFile`, `length`, `lastModified`); it
 does not open streams itself.
 +/
@@ -102,6 +103,228 @@ abstract class InputStream
     /// Release the stream. The default does nothing.
     void close()
     {
+    }
+}
+
+/// Java's `OutputStream`: a sink of bytes.
+abstract class OutputStream
+{
+    /// Write one byte (the low 8 bits of `b`).
+    abstract void write(int b);
+
+    /// Write every byte of `b`.
+    void write(scope const(ubyte)[] b)
+    {
+        foreach (value; b)
+            write(value);
+    }
+
+    /// Write `len` bytes of `b` from `off`.
+    void write(scope const(ubyte)[] b, int off, int len)
+    {
+        write(b[off .. off + len]);
+    }
+
+    /// Flush buffered bytes. The default does nothing.
+    void flush()
+    {
+    }
+
+    /// Release the stream. The default does nothing.
+    void close()
+    {
+    }
+}
+
+/// An `OutputStream` collecting bytes in memory.
+class ByteArrayOutputStream : OutputStream
+{
+    private ubyte[] bytes;
+
+    override void write(int b)
+    {
+        bytes ~= cast(ubyte) b;
+    }
+
+    override void write(scope const(ubyte)[] b)
+    {
+        bytes ~= b;
+    }
+
+    /// A copy of the bytes written.
+    ubyte[] toByteArray() const pure nothrow
+    {
+        return bytes.dup;
+    }
+
+    /// How many bytes were written.
+    int size() const pure nothrow @nogc
+    {
+        return cast(int) bytes.length;
+    }
+
+    /// Discard the bytes written.
+    void reset() pure nothrow @nogc
+    {
+        bytes = null;
+    }
+
+    /// The bytes as UTF-8 text.
+    override string toString() const
+    {
+        return cast(string) bytes.idup;
+    }
+}
+
+/// Java's `Writer`: a sink of characters (UTF-8 text in Flint).
+abstract class Writer
+{
+    /// Write `text`.
+    abstract void write(scope const(char)[] text);
+
+    /// Write one character.
+    void write(dchar c)
+    {
+        import std.utf : encode;
+
+        char[4] buffer;
+        const n = encode(buffer, c);
+        write(buffer[0 .. n]);
+    }
+
+    /// Write `text`; this writer.
+    Writer append(scope const(char)[] text)
+    {
+        write(text);
+        return this;
+    }
+
+    /// Flush. The default does nothing.
+    void flush()
+    {
+    }
+
+    /// Close. The default does nothing.
+    void close()
+    {
+    }
+}
+
+/// A `Writer` collecting text in memory.
+class StringWriter : Writer
+{
+    private string buffer;
+
+    alias write = Writer.write;
+
+    override void write(scope const(char)[] text)
+    {
+        buffer ~= text;
+    }
+
+    /// The text written.
+    override string toString() const
+    {
+        return buffer;
+    }
+}
+
+/// A `Writer` encoding UTF-8 text onto an `OutputStream`.
+class OutputStreamWriter : Writer
+{
+    private OutputStream output;
+
+    /// A writer over `output`.
+    this(OutputStream output) pure nothrow @nogc
+    {
+        this.output = output;
+    }
+
+    alias write = Writer.write;
+
+    override void write(scope const(char)[] text)
+    {
+        output.write(cast(const(ubyte)[]) text);
+    }
+
+    override void flush()
+    {
+        output.flush();
+    }
+
+    override void close()
+    {
+        output.close();
+    }
+}
+
+/// Java's `PrintWriter`: formatted text over a `Writer` or an `OutputStream`.
+class PrintWriter : Writer
+{
+    private Writer target;
+
+    /// A print writer over `target`.
+    this(Writer target) pure nothrow @nogc
+    {
+        this.target = target;
+    }
+
+    /// A print writer over `output`, encoding UTF-8.
+    this(OutputStream output) pure nothrow
+    {
+        target = new OutputStreamWriter(output);
+    }
+
+    alias write = Writer.write;
+
+    override void write(scope const(char)[] text)
+    {
+        target.write(text);
+    }
+
+    /// Java's `print(String)`.
+    void print(scope const(char)[] text)
+    {
+        write(text);
+    }
+
+    /// Java's `print` of any value: `String.valueOf(value)`.
+    void print(T)(T value) if (!is(T : const(char)[]))
+    {
+        import flint.java.lang : valueOf;
+
+        write(valueOf(value));
+    }
+
+    /// Java's `println(String)`; a line separator alone without an argument.
+    void println(scope const(char)[] text = null)
+    {
+        write(text);
+        write("\n");
+    }
+
+    /// Java's `println` of any value.
+    void println(T)(T value) if (!is(T : const(char)[]))
+    {
+        print(value);
+        write("\n");
+    }
+
+    /// Java's `append(CharSequence)`.
+    override PrintWriter append(scope const(char)[] text)
+    {
+        write(text);
+        return this;
+    }
+
+    override void flush()
+    {
+        target.flush();
+    }
+
+    override void close()
+    {
+        target.close();
     }
 }
 

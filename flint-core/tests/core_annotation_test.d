@@ -50,3 +50,25 @@ unittest
     assert(comparator.compare(first, service) < 0 && comparator.compare(service, plain) < 0);
     assert(OrderComparator.INSTANCE().compare(service, plain) == 0);
 }
+
+unittest
+{
+    // MethodParameter over an AOT ArgumentSpec, and conversion to a type known by name.
+    import flint.core : MethodParameter;
+    import flint.core.convert.support : DefaultConversionService;
+    import flint.engine.aot.any : Any;
+    import flint.engine.aot.descriptor : MergedAnnotation;
+    import flint.engine.aot.mapping : ArgumentKind, ArgumentSpec;
+
+    ArgumentSpec spec = {
+        kind: ArgumentKind.requestParam, name: "id", type: "flint.java.util.Optional!long",
+        annotations: [MergedAnnotation("flint.core.annotation.Order", Any.of(Order(3)), 0)]
+    };
+    auto parameter = new MethodParameter(spec, 0, "OwnerController.getOwner");
+    assert(parameter.getParameterName() == "id" && parameter.isOptional());
+    assert(parameter.getNestedParameterType() == "long" && parameter.hasParameterAnnotation!Order);
+    assert(parameter.getParameterAnnotation("flint.core.annotation.Order").value.get!(const Order).value == 3);
+    assert(parameter.toString() == "method 'OwnerController.getOwner' parameter 0");
+    auto service = new DefaultConversionService;
+    assert(service.convert(Any.of("42"), "int").get!int == 42);
+}
