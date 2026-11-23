@@ -332,3 +332,42 @@ unittest
     catch (DateTimeParseException e)
         assert(e.getErrorIndex() == 5);
 }
+
+@("java.time parses from any characters: nothing keeps the text, an error copies it")
+unittest
+{
+    import flint.java.time : Instant, LocalDate, LocalDateTime, LocalTime;
+    import flint.java.time.format : DateTimeFormatter, DateTimeParseException;
+
+    char[] buffer = "2026-01-15".dup;
+    const date = LocalDate.parse(buffer);
+    buffer[] = 'x';
+    assert(date == LocalDate.of(2026, 1, 15));
+
+    buffer = "10:15:30".dup;
+    const time = LocalTime.parse(buffer);
+    buffer[] = '0';
+    assert(time == LocalTime.of(10, 15, 30));
+
+    buffer = "2026-01-15T10:15".dup;
+    const dateTime = LocalDateTime.parse(buffer, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    buffer[] = '9';
+    assert(dateTime == LocalDateTime.of(2026, 1, 15, 10, 15));
+
+    buffer = "2026-01-15T10:15:30Z".dup;
+    const instant = Instant.parse(buffer);
+    buffer[] = '1';
+    assert(instant == Instant.parse("2026-01-15T10:15:30Z"));
+
+    buffer = "2026-13-01".dup;
+    try
+    {
+        LocalDate.parse(buffer);
+        assert(false);
+    }
+    catch (DateTimeParseException e)
+    {
+        buffer[] = '#';
+        assert(e.getParsedString() == "2026-13-01" && e.msg[0 .. 18] == "Text '2026-13-01' ", e.msg);
+    }
+}

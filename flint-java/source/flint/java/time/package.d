@@ -248,8 +248,22 @@ struct LocalDate
         return parse(text, DateTimeFormatter.ISO_LOCAL_DATE);
     }
 
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static LocalDate parse(scope const(char)[] text)
+    {
+        import flint.java.time.format : DateTimeFormatter;
+
+        return parse(text, DateTimeFormatter.ISO_LOCAL_DATE);
+    }
+
     /// Obtains an instance from a text string using a specific formatter.
     static LocalDate parse(string text, imported!"flint.java.time.format".DateTimeFormatter formatter)
+    {
+        return parse(cast(const(char)[]) text, formatter);
+    }
+
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static LocalDate parse(scope const(char)[] text, imported!"flint.java.time.format".DateTimeFormatter formatter)
     {
         return formatter.parse(text).toLocalDate(text);
     }
@@ -546,8 +560,22 @@ struct LocalTime
         return parse(text, DateTimeFormatter.ISO_LOCAL_TIME);
     }
 
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static LocalTime parse(scope const(char)[] text)
+    {
+        import flint.java.time.format : DateTimeFormatter;
+
+        return parse(text, DateTimeFormatter.ISO_LOCAL_TIME);
+    }
+
     /// Obtains an instance from a text string using a specific formatter.
     static LocalTime parse(string text, imported!"flint.java.time.format".DateTimeFormatter formatter)
+    {
+        return parse(cast(const(char)[]) text, formatter);
+    }
+
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static LocalTime parse(scope const(char)[] text, imported!"flint.java.time.format".DateTimeFormatter formatter)
     {
         return formatter.parse(text).toLocalTime(text);
     }
@@ -757,8 +785,22 @@ struct LocalDateTime
         return parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
     }
 
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static LocalDateTime parse(scope const(char)[] text)
+    {
+        import flint.java.time.format : DateTimeFormatter;
+
+        return parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    }
+
     /// Obtains an instance from a text string using a specific formatter.
     static LocalDateTime parse(string text, imported!"flint.java.time.format".DateTimeFormatter formatter)
+    {
+        return parse(cast(const(char)[]) text, formatter);
+    }
+
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static LocalDateTime parse(scope const(char)[] text, imported!"flint.java.time.format".DateTimeFormatter formatter)
     {
         auto fields = formatter.parse(text);
         return LocalDateTime(fields.toLocalDate(text, "LocalDateTime"), fields.toLocalTime(text, "LocalDateTime"));
@@ -1268,6 +1310,12 @@ struct Instant
 
     /// Obtains an instance from a text string such as 2007-12-03T10:15:30.00Z (`ISO_INSTANT`, offsets accepted).
     static Instant parse(string text)
+    {
+        return parse(cast(const(char)[]) text);
+    }
+
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`.
+    static Instant parse(scope const(char)[] text)
     {
         import flint.java.time.format : DateTimeFormatter;
 

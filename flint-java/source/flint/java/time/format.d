@@ -217,10 +217,18 @@ struct Fields
         return hasOffset_;
     }
 
-    private DateTimeParseException unresolved(string text, string type) const
+    private DateTimeParseException unresolved(scope const(char)[] text, string type) const
     {
-        return new DateTimeParseException("Text '" ~ text ~ "' could not be parsed: Unable to obtain "
-                ~ type ~ " from TemporalAccessor: " ~ describe() ~ " of type java.time.format.Parsed", text, 0);
+        const copy = text.idup;
+        return new DateTimeParseException("Text '" ~ copy ~ "' could not be parsed: Unable to obtain "
+                ~ type ~ " from TemporalAccessor: " ~ describe() ~ " of type java.time.format.Parsed", copy, 0);
+    }
+
+    // The DateTimeParseException for a resolution error: a copy of the text, never the caller's slice.
+    private static DateTimeParseException failed(scope const(char)[] text, DateTimeException e)
+    {
+        const copy = text.idup;
+        return new DateTimeParseException("Text '" ~ copy ~ "' could not be parsed: " ~ e.msg, copy, 0, e);
     }
 
     private bool hasDate() const pure nothrow @nogc
@@ -283,7 +291,7 @@ struct Fields
     }
 
     /// Resolves the date fields into a `LocalDate`; throws `DateTimeParseException` when they are missing or invalid.
-    LocalDate toLocalDate(string text, string type = "LocalDate") const
+    LocalDate toLocalDate(scope const(char)[] text, string type = "LocalDate") const
     {
         import flint.engine.aot.text : decimal;
 
@@ -323,11 +331,11 @@ struct Fields
         catch (DateTimeParseException e)
             throw e;
         catch (DateTimeException e)
-            throw new DateTimeParseException("Text '" ~ text ~ "' could not be parsed: " ~ e.msg, text, 0, e);
+            throw failed(text, e);
     }
 
     /// Resolves the time fields into a `LocalTime`; missing minutes, seconds and nanos are zero.
-    LocalTime toLocalTime(string text, string type = "LocalTime") const
+    LocalTime toLocalTime(scope const(char)[] text, string type = "LocalTime") const
     {
         try
         {
@@ -352,18 +360,18 @@ struct Fields
         catch (DateTimeParseException e)
             throw e;
         catch (DateTimeException e)
-            throw new DateTimeParseException("Text '" ~ text ~ "' could not be parsed: " ~ e.msg, text, 0, e);
+            throw failed(text, e);
     }
 
     /// The parsed offset; throws `DateTimeParseException` when none was parsed.
-    ZoneOffset toOffset(string text, string type = "ZoneOffset") const
+    ZoneOffset toOffset(scope const(char)[] text, string type = "ZoneOffset") const
     {
         if (!hasOffset_)
             throw unresolved(text, type);
         try
             return ZoneOffset.ofTotalSeconds(offsetSeconds_);
         catch (DateTimeException e)
-            throw new DateTimeParseException("Text '" ~ text ~ "' could not be parsed: " ~ e.msg, text, 0, e);
+            throw failed(text, e);
     }
 }
 
@@ -581,16 +589,29 @@ struct DateTimeFormatter
     /// Parses the text into fields; throws `DateTimeParseException` with the error index when it does not match.
     Fields parse(string text) const
     {
-        auto parser = Parser(text);
+        return parse(cast(const(char)[]) text);
+    }
+
+    /// ditto, from any characters (Java's `CharSequence`): nothing keeps `text`; only an error copies it.
+    Fields parse(scope const(char)[] text) const
+    {
+        Fields fields;
+        auto parser = Parser(text, &fields);
         const end = parser.run(elements_, 0);
         if (end < 0)
-            throw new DateTimeParseException("Text '" ~ text ~ "' could not be parsed at index " ~ indexText(~end),
-                    text, ~end);
+        {
+            const copy = text.idup;
+            throw new DateTimeParseException("Text '" ~ copy ~ "' could not be parsed at index " ~ indexText(~end),
+                    copy, ~end);
+        }
         if (end != text.length)
+        {
+            const copy = text.idup;
             throw new DateTimeParseException(
-                    "Text '" ~ text ~ "' could not be parsed, unparsed text found at index " ~ indexText(end),
-                    text, end);
-        return parser.fields;
+                    "Text '" ~ copy ~ "' could not be parsed, unparsed text found at index " ~ indexText(end),
+                    copy, end);
+        }
+        return fields;
     }
 
     /// The printer-parsers, described as Java's `DateTimeFormatter.toString` describes them.
@@ -948,12 +969,12 @@ private string formatOffset(int totalSeconds, string pattern, string noOffsetTex
 
 private struct Parser
 {
-    string text;
-    Fields fields;
+    const(char)[] text;
+    Fields* fields; // the caller's: the parser borrows `text`, so the result lives outside it
     bool caseInsensitive;
 
     // Parses the elements from `position`; returns the end position, or `~errorIndex` on failure.
-    int run(scope const(Element)[] elements, int position)
+    int run(scope const(Element)[] elements, int position) scope
     {
         for (size_t i = 0; i < elements.length; ++i)
         {
@@ -961,12 +982,12 @@ private struct Parser
             if (e.op == Op.optionalStart)
             {
                 const end = sectionEnd(elements, i);
-                const saved = fields;
+                const saved = *fields;
                 const savedCase = caseInsensitive;
                 const next = run(elements[i + 1 .. end], position);
                 if (next < 0)
                 {
-                    fields = saved;
+                    *fields = saved;
                     caseInsensitive = savedCase;
                 }
                 else
@@ -981,7 +1002,7 @@ private struct Parser
         return position;
     }
 
-    int control(const Element e, int position) pure nothrow @nogc
+    int control(const Element e, int position) scope pure nothrow @nogc
     {
         if (e.op == Op.caseInsensitive)
             caseInsensitive = true;
@@ -990,7 +1011,7 @@ private struct Parser
         return position;
     }
 
-    int parseOne(const Element e, scope const(Element)[] following, int position)
+    int parseOne(const Element e, scope const(Element)[] following, int position) scope
     {
         if (e.op >= Op.optionalStart)
             return control(e, position);
@@ -1038,7 +1059,7 @@ private struct Parser
     }
 
     // The sign at `position`: 0 for none, 1 for '+', -1 for '-', or 2 when the sign style rejects it.
-    int sign(const Element e, int position) const pure nothrow @nogc
+    int sign(const Element e, int position) scope const pure nothrow @nogc
     {
         const present = position < text.length && (text[position] == '+' || text[position] == '-');
         if (!present)
@@ -1054,7 +1075,7 @@ private struct Parser
         return (plus && digits <= minWidth) || (!signed && digits > minWidth);
     }
 
-    int parseNumber(const Element e, scope const(Element)[] following, int position)
+    int parseNumber(const Element e, scope const(Element)[] following, int position) scope
     {
         const signValue = sign(e, position);
         if (signValue == 2)
@@ -1077,7 +1098,7 @@ private struct Parser
         return pos + take;
     }
 
-    int parseReducedYear(const Element e, int position)
+    int parseReducedYear(const Element e, int position) scope
     {
         if (position + 2 > text.length || !digit(text[position]) || !digit(text[position + 1]))
             return ~position;
@@ -1085,7 +1106,7 @@ private struct Parser
         return position + 2;
     }
 
-    int parseFraction(const Element e, int position)
+    int parseFraction(const Element e, int position) scope
     {
         int pos = position;
         if (e.lenient)
@@ -1107,7 +1128,7 @@ private struct Parser
         return pos + count;
     }
 
-    bool matches(string expected, int position) const pure nothrow @nogc
+    bool matches(string expected, int position) scope const pure nothrow @nogc
     {
         if (position + expected.length > text.length)
             return false;
@@ -1120,12 +1141,12 @@ private struct Parser
         return true;
     }
 
-    int parseLiteral(string expected, int position) pure nothrow @nogc
+    int parseLiteral(string expected, int position) scope pure nothrow @nogc
     {
         return matches(expected, position) ? position + cast(int) expected.length : ~position;
     }
 
-    int parseText(const Element e, int position)
+    int parseText(const Element e, int position) scope
     {
         const full = e.text == "full";
         static immutable string[2] amPm = ["AM", "PM"];
@@ -1143,7 +1164,7 @@ private struct Parser
         return ~position;
     }
 
-    int twoDigits(int position) const pure nothrow @nogc
+    int twoDigits(int position) scope const pure nothrow @nogc
     {
         if (position + 2 > text.length || !digit(text[position]) || !digit(text[position + 1]))
             return -1;
@@ -1151,7 +1172,7 @@ private struct Parser
     }
 
     // One optional `[:]dd` group of an offset; returns the new position, unchanged when absent.
-    int offsetGroup(int position, bool colon, ref int value) const pure nothrow @nogc
+    int offsetGroup(int position, bool colon, ref int value) scope const pure nothrow @nogc
     {
         int pos = position;
         if (colon && (pos >= text.length || text[pos] != ':'))
@@ -1165,7 +1186,7 @@ private struct Parser
         return pos + 2;
     }
 
-    int parseOffset(const Element e, int position)
+    int parseOffset(const Element e, int position) scope
     {
         if (e.noOffsetText.length && matches(e.noOffsetText, position))
         {
@@ -1190,7 +1211,7 @@ private struct Parser
 
     // The minutes and seconds groups after an offset's hours; returns the end, or -1 when a required group is
     // missing.
-    int offsetMinutesSeconds(const Element e, int pos, ref int[2] parts) const pure nothrow @nogc
+    int offsetMinutesSeconds(const Element e, int pos, ref int[2] parts) scope const pure nothrow @nogc
     {
         const shape = offsetShape(e.text);
         if (!shape.minutes && !e.lenient)
@@ -1206,7 +1227,7 @@ private struct Parser
         return after;
     }
 
-    int parseZone(int position)
+    int parseZone(int position) scope
     {
         int end = position;
         while (end < text.length && zoneChar(text[end]))
@@ -1214,7 +1235,7 @@ private struct Parser
         if (end == position)
             return ~position;
         try
-            fields.zoneId_ = ZoneId.of(text[position .. end]).getId();
+            fields.zoneId_ = ZoneId.of(text[position .. end].idup).getId();
         catch (DateTimeException)
             return ~position;
         fields.zoneIsRegion_ = !ZoneId.of(fields.zoneId_).isOffset();
