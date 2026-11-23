@@ -6,7 +6,8 @@ Modified by the Flint authors: JUnit and AssertJ assertions become D unittests a
 are Flint type names (`typeNameOf!MyBean`, `Map.class` is `Map!(string, Any)`), bodies go in and out as `Any`; the
 `converter` field is a local whose mapper holds the Flint AOT descriptors of the test beans, built by hand as the
 AOT registry would (MyBean's descriptor carries MyBase's inherited accessors); bean fields named after D keywords
-take a trailing underscore; `String.getBytes(UTF_8)` is a cast; the mocks come from
+take a trailing underscore; `String.getBytes(UTF_8)` is a cast; an untyped JSON array reads as a `JsonNode` array,
+which flint.jackson's UntypedObjectDeserializer builds where Jackson builds an `ArrayList`; the mocks come from
 `flint.http.testfixture.mock_http_messages`. Cases that need parts of the converter or of flint.jackson that are not
 ported yet wait behind versions.
 +/
@@ -21,6 +22,7 @@ import flint.http.converter : HttpMessageNotReadableException;
 import flint.http.converter.json : JacksonJsonHttpMessageConverter;
 import flint.http.testfixture.mock_http_messages : MockHttpInputMessage, MockHttpOutputMessage;
 import flint.jackson.databind : JsonMapper;
+import flint.jackson.databind.node : JsonNode;
 import flint.java.nio.charset : StandardCharsets;
 import flint.java.util : HashMap, Map;
 import std.algorithm.searching : canFind;
@@ -141,8 +143,7 @@ private DescriptorTable table()
         t.add(descriptorOf!JacksonViewBean());
     version (FlintJacksonFilters)
         t.add(descriptorOf!JacksonFilteredBean());
-    version (FlintJacksonRead)
-        t.add(beanWithNoDefaultConstructorDescriptor());
+    t.add(beanWithNoDefaultConstructorDescriptor());
     version (FlintJacksonCustomizers)
         foreach (d; [descriptorOf!MyCustomizedBean(), descriptorOf!MyCustomEnum()])
             t.add(d);
@@ -565,104 +566,103 @@ version (FlintJacksonEncodings)
     }
 }
 
-// flint.http's JacksonJsonHttpMessageConverter cannot read yet (readInternal always throws).
-version (FlintJacksonRead)
+@("JacksonJsonHttpMessageConverterTests.readTyped")
+unittest
 {
-    @("JacksonJsonHttpMessageConverterTests.readTyped")
-    unittest
+    auto converter = newConverter();
+    auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) myBeanJson);
+    inputMessage.getHeaders().setContentType(MediaType("application", "json"));
+    auto result = converter.read(typeNameOf!MyBean, inputMessage).get!MyBean;
+    assert(result.getString() == "Foo");
+    assert(result.getNumber() == 42);
+    assert(result.getFraction() == 42F);
+    assert(result.getArray() == ["Foo", "Bar"]);
+    assert(result.isBool());
+    assert(result.getBytes() == [0x1, 0x2]);
+}
+
+@("JacksonJsonHttpMessageConverterTests.readUntyped")
+unittest
+{
+    auto converter = newConverter();
+    auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) myBeanJson);
+    inputMessage.getHeaders().setContentType(MediaType("application", "json"));
+    auto result = converter.read(typeNameOf!(HashMap!(string, Any)), inputMessage).get!(HashMap!(string, Any));
+    assert(result.get("string").get!string == "Foo");
+    assert(result.get("number").get!int == 42);
+    assert(result.get("fraction").get!double == 42.0);
+    auto array = result.get("array").get!JsonNode;
+    assert(array.isArray() && array.size() == 2);
+    assert(array.get(0).stringValue() == "Foo" && array.get(1).stringValue() == "Bar");
+    assert(result.get("bool").get!bool == true);
+    assert(result.get("bytes").get!string == "AQI=");
+}
+
+@("JacksonJsonHttpMessageConverterTests.readValidJsonWithUnknownProperty")
+unittest
+{
+    auto converter = newConverter();
+    const json = "{\"string\":\"string\",\"unknownProperty\":\"value\"}";
+    auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) json);
+    inputMessage.getHeaders().setContentType(MediaType("application", "json"));
+    converter.read(typeNameOf!MyBean, inputMessage);
+    // Assert no HttpMessageNotReadableException is thrown
+}
+
+private class BeanWithNoDefaultConstructor
+{
+    private const string property1;
+    private const string property2;
+
+    this(string property1, string property2)
     {
-        auto converter = newConverter();
-        auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) myBeanJson);
-        inputMessage.getHeaders().setContentType(MediaType("application", "json"));
-        auto result = converter.read(typeNameOf!MyBean, inputMessage).get!MyBean;
-        assert(result.getString() == "Foo");
-        assert(result.getNumber() == 42);
-        assert(result.getFraction() == 42F);
-        assert(result.getArray() == ["Foo", "Bar"]);
-        assert(result.isBool());
-        assert(result.getBytes() == [0x1, 0x2]);
+        this.property1 = property1;
+        this.property2 = property2;
     }
 
-    @("JacksonJsonHttpMessageConverterTests.readUntyped")
-    unittest
+    string getProperty1() const
     {
-        import flint.java.util : List;
-
-        auto converter = newConverter();
-        auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) myBeanJson);
-        inputMessage.getHeaders().setContentType(MediaType("application", "json"));
-        auto result = converter.read(typeNameOf!(HashMap!(string, Any)), inputMessage).get!(HashMap!(string, Any));
-        assert(result.get("string").get!string == "Foo");
-        assert(result.get("number").get!int == 42);
-        assert(result.get("fraction").get!double == 42.0);
-        auto array = result.get("array").get!(List!Any);
-        assert(array.size() == 2 && array.get(0).get!string == "Foo" && array.get(1).get!string == "Bar");
-        assert(result.get("bool").get!bool == true);
-        assert(result.get("bytes").get!string == "AQI=");
+        return property1;
     }
 
-    @("JacksonJsonHttpMessageConverterTests.readValidJsonWithUnknownProperty")
-    unittest
+    string getProperty2() const
     {
-        auto converter = newConverter();
-        const json = "{\"string\":\"string\",\"unknownProperty\":\"value\"}";
-        auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) json);
-        inputMessage.getHeaders().setContentType(MediaType("application", "json"));
-        converter.read(typeNameOf!MyBean, inputMessage);
-        // Assert no HttpMessageNotReadableException is thrown
+        return property2;
     }
+}
 
-    private class BeanWithNoDefaultConstructor
-    {
-        private const string property1;
-        private const string property2;
+private Any invokeBeanWithNoDefaultConstructor(scope Any[] arguments) @safe
+{
+    return Any.of(new BeanWithNoDefaultConstructor(arguments[0].get!string(), arguments[1].get!string()));
+}
 
-        this(string property1, string property2)
-        {
-            this.property1 = property1;
-            this.property2 = property2;
-        }
+/// The single public constructor, with its parameter names, as Flint AOT records it.
+private Descriptor beanWithNoDefaultConstructorDescriptor()
+{
+    auto d = descriptorOf!BeanWithNoDefaultConstructor();
+    d.constructors = ConstructorDescriptor([
+        ParameterDescriptor("property1", "string"), ParameterDescriptor("property2", "string")
+    ], null, &invokeBeanWithNoDefaultConstructor) ~ d.constructors;
+    return d;
+}
 
-        string getProperty1() const
-        {
-            return property1;
-        }
+// gh-27511
+@("JacksonJsonHttpMessageConverterTests.readWithNoDefaultConstructor")
+unittest
+{
+    auto converter = newConverter();
+    const json = "{\"property1\":\"foo\",\"property2\":\"bar\"}";
+    auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) json);
+    inputMessage.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+    const bean = converter.read(typeNameOf!BeanWithNoDefaultConstructor, inputMessage)
+        .get!BeanWithNoDefaultConstructor;
+    assert(bean.property1 == "foo");
+    assert(bean.property2 == "bar");
+}
 
-        string getProperty2() const
-        {
-            return property2;
-        }
-    }
-
-    private Any invokeBeanWithNoDefaultConstructor(scope Any[] arguments) @safe
-    {
-        return Any.of(new BeanWithNoDefaultConstructor(arguments[0].get!string(), arguments[1].get!string()));
-    }
-
-    /// The single public constructor, with its parameter names, as Flint AOT records it.
-    private Descriptor beanWithNoDefaultConstructorDescriptor()
-    {
-        auto d = descriptorOf!BeanWithNoDefaultConstructor();
-        d.constructors = ConstructorDescriptor([
-            ParameterDescriptor("property1", "string"), ParameterDescriptor("property2", "string")
-        ], null, &invokeBeanWithNoDefaultConstructor) ~ d.constructors;
-        return d;
-    }
-
-    // gh-27511
-    @("JacksonJsonHttpMessageConverterTests.readWithNoDefaultConstructor")
-    unittest
-    {
-        auto converter = newConverter();
-        const json = "{\"property1\":\"foo\",\"property2\":\"bar\"}";
-        auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) json);
-        inputMessage.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        const bean = converter.read(typeNameOf!BeanWithNoDefaultConstructor, inputMessage)
-            .get!BeanWithNoDefaultConstructor;
-        assert(bean.property1 == "foo");
-        assert(bean.property2 == "bar");
-    }
-
+// flint.http reads a JSON body as UTF-8 bytes; it does not decode a non-Unicode charset as Spring's Reader does.
+version (FlintJacksonNonUnicodeRead)
+{
     @("JacksonJsonHttpMessageConverterTests.readNonUnicode")
     unittest
     {
@@ -676,29 +676,29 @@ version (FlintJacksonRead)
         assert(result.size() == 1);
         assert(result.get("føø").get!string == "bår");
     }
+}
 
-    @("JacksonJsonHttpMessageConverterTests.readAscii")
-    unittest
-    {
-        auto converter = newConverter();
-        const json = "{\"foo\":\"bar\"}";
-        const charset = StandardCharsets.US_ASCII;
-        auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) json);
-        inputMessage.getHeaders().setContentType(MediaType("application", "json", charset));
-        auto result = converter.read(typeNameOf!(HashMap!(string, Any)), inputMessage).get!(HashMap!(string, Any));
+@("JacksonJsonHttpMessageConverterTests.readAscii")
+unittest
+{
+    auto converter = newConverter();
+    const json = "{\"foo\":\"bar\"}";
+    const charset = StandardCharsets.US_ASCII;
+    auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) json);
+    inputMessage.getHeaders().setContentType(MediaType("application", "json", charset));
+    auto result = converter.read(typeNameOf!(HashMap!(string, Any)), inputMessage).get!(HashMap!(string, Any));
 
-        assert(result.size() == 1);
-        assert(result.get("foo").get!string == "bar");
-    }
+    assert(result.size() == 1);
+    assert(result.get("foo").get!string == "bar");
+}
 
-    @("JacksonJsonHttpMessageConverterTests.readEmptyAsNull")
-    unittest
-    {
-        auto converter = newConverter();
-        auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) "null");
-        inputMessage.getHeaders().setContentType(MediaType("application", "json"));
-        assert(converter.read(typeNameOf!(Map!(string, Any)), inputMessage).isNull());
-    }
+@("JacksonJsonHttpMessageConverterTests.readEmptyAsNull")
+unittest
+{
+    auto converter = newConverter();
+    auto inputMessage = new MockHttpInputMessage(cast(const(ubyte)[]) "null");
+    inputMessage.getHeaders().setContentType(MediaType("application", "json"));
+    assert(converter.read(typeNameOf!(Map!(string, Any)), inputMessage).isNull());
 }
 
 // flint.http has no ResolvableType write overload for INDENT_OUTPUT beans, nor the SSE `data:` line prefix.
