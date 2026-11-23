@@ -341,7 +341,42 @@ void writeBean(MapperConfig config, BeanDescription bean, ref Any value, JsonGen
             writeProperty(config, p, v, g);
         });
     }
+    if (bean.anyGetter !is null)
+        writeAnyGetter(config, bean, value, g);
     g.writeEndObject();
+}
+
+// AnyGetterWriter: the map's entries, in its iteration order, as further properties; nothing for a null map.
+private void writeAnyGetter(MapperConfig config, BeanDescription bean, ref Any value, JsonGenerator g)
+{
+    auto map = bean.anyGetter.accessor.get(value);
+    if (map.isNull())
+        return;
+    Any[] keys, values;
+    if (auto raw = cast(RawMap) map.asObject())
+    {
+        keys = raw.keysAsAny();
+        foreach (ref key; keys)
+            values ~= raw.getAny(key);
+    }
+    else if (auto d = config.descriptor(map.typeName()))
+    {
+        if (d.toKeys is null || d.toValues is null)
+            throw new InvalidDefinitionException("@JsonAnyGetter property `" ~ bean.anyGetter.internalName
+                    ~ "` of " ~ bean.descriptor.name ~ " is not a map", bean.descriptor.name);
+        keys = d.toKeys(map);
+        values = d.toValues(map);
+    }
+    foreach (i, ref key; keys)
+    {
+        if (!includeContent(config, values[i]))
+            continue;
+        const name = keyText(config, key);
+        g.writeName(name);
+        withPath(Reference(name, -1, bean.descriptor.simpleName()), () {
+            serializeValue(config, values[i], null, g);
+        });
+    }
 }
 
 private void writeProperty(MapperConfig config, BeanPropertyDefinition p, ref Any v, JsonGenerator g)

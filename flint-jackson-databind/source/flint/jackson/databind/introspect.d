@@ -22,7 +22,8 @@ import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, MergedAn
     PropertyDescriptor, TypeKind, findAnnotation;
 import flint.engine.aot.name : typeNameOf;
 import std.traits : isDynamicArray;
-import flint.jackson.annotation : JsonAlias, JsonCreator, JsonFormat, JsonGetter, JsonIgnore, JsonIgnoreProperties,
+import flint.jackson.annotation : JsonAlias, JsonAnyGetter, JsonCreator, JsonFormat, JsonGetter,
+    JsonIgnore, JsonIgnoreProperties,
     JsonInclude, JsonIncludeProperties, JsonProperty, JsonPropertyOrder, JsonRawValue, JsonSetter, JsonValue;
 import flint.jackson.databind.annotation : JsonNaming;
 import flint.jackson.databind.exc : InvalidDefinitionException;
@@ -74,6 +75,8 @@ final class BeanPropertyDefinition
     bool rawValue;
     /// `@JsonValue`.
     bool jsonValue;
+    /// `@JsonAnyGetter`: a map whose entries are written as properties of the containing object.
+    bool anyGetter;
     /// `@JsonProperty(required)`.
     bool required;
     /// `@JsonProperty(index)`.
@@ -116,6 +119,8 @@ final class BeanDescription
     JsonInclude.Include inclusion = JsonInclude.Include.USE_DEFAULTS;
     /// The `@JsonValue` property, if any.
     BeanPropertyDefinition jsonValue;
+    /// The `@JsonAnyGetter` property, if any: written after the regular properties, not as one of them.
+    BeanPropertyDefinition anyGetter;
 
     ///
     this(const Descriptor descriptor) pure nothrow @nogc
@@ -170,9 +175,17 @@ struct POJOPropertiesCollector
         removeIgnored(bean);
         rename(bean);
         sort(bean);
+        BeanPropertyDefinition[] regular;
         foreach (p; bean.properties)
+        {
             if (p.jsonValue)
                 bean.jsonValue = p;
+            if (p.anyGetter && bean.anyGetter is null)
+                bean.anyGetter = p;
+            else
+                regular ~= p;
+        }
+        bean.properties = regular;
         return bean;
     }
 
@@ -216,6 +229,8 @@ struct POJOPropertiesCollector
         def.rawValue = annotation(annotations, raw) && raw.value;
         JsonValue value;
         def.jsonValue = annotation(annotations, value) && value.value;
+        JsonAnyGetter any;
+        def.anyGetter = annotation(annotations, any) && any.enabled;
     }
 
     private static void rename(BeanPropertyDefinition def, string name)
