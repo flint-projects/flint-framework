@@ -240,7 +240,7 @@ private void writeDuration(MapperConfig config, Duration duration, JsonGenerator
  */
 string decimalSeconds(long seconds, int nanos) pure nothrow
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     if (seconds == 0 && nanos == 0)
         return "0.0";
@@ -250,18 +250,19 @@ string decimalSeconds(long seconds, int nanos) pure nothrow
     const whole = borrow ? -(seconds + 1) : negative ? -seconds : seconds;
     const fraction = borrow ? 1_000_000_000 - nanos : nanos;
     const sign = negative ? "-" : "";
-    auto digits = fraction.to!string;
+    auto digits = decimal(cast(long) fraction);
     while (digits.length < 9)
         digits = "0" ~ digits;
     if (whole != 0)
-        return sign ~ whole.to!string ~ "." ~ digits;
-    const significant = fraction.to!string;
+        return sign ~ decimal(cast(long) whole) ~ "." ~ digits;
+    const significant = decimal(cast(long) fraction);
     const adjusted = cast(int) significant.length - 10;
     if (adjusted >= -6)
         return sign ~ "0." ~ digits;
     // Trailing zeros of the unscaled value stay in BigDecimal's mantissa: 0.000000500 is "5.00E-7".
     const mantissa = significant;
-    return sign ~ mantissa[0 .. 1] ~ (mantissa.length > 1 ? "." ~ mantissa[1 .. $] : "") ~ "E" ~ adjusted.to!string;
+    return sign ~ mantissa[0 .. 1] ~ (mantissa.length > 1 ? "." ~ mantissa[1 .. $] : "") ~ "E" ~ decimal(
+            cast(long) adjusted);
 }
 
 /// Read a java.time value at the parser's current token; `type` must satisfy `isJavaTime`.
@@ -320,9 +321,9 @@ private DateTimeFormatter defaultFormatter(Kind kind) pure nothrow @nogc
 
 private Any readText(MapperConfig config, JsonParser p, Kind kind, string type, JavaTimeFormat format)
 {
-    import std.string : strip;
+    import flint.engine.aot.text : stripWhite;
 
-    const text = p.getString().strip;
+    const text = stripWhite(p.getString());
     if (text.length == 0)
         return Any.init;
     const custom = format.pattern.length != 0;

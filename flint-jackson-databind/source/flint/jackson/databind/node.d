@@ -285,11 +285,12 @@ abstract class JsonNode
     /// Like `get(index)`, but throws when there is no such element.
     JsonNode required(int index)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         auto node = get(index);
+        const at = decimal(cast(long) index);
         if (node is null)
-            throw new JsonNodeException("No value at index #" ~ index.to!string ~ " of `" ~ className() ~ "`");
+            throw new JsonNodeException("No value at index #" ~ at ~ " of `" ~ className() ~ "`");
         return node;
     }
 
@@ -979,12 +980,12 @@ final class ArrayNode : ContainerNode
     /// Replace the element at `index`, returning the earlier one.
     JsonNode set(int index, JsonNode value)
     {
+        import flint.engine.aot.text : decimal;
         import flint.java.lang : IndexOutOfBoundsException;
-        import std.conv : to;
 
         if (index < 0 || index >= elements.length)
-            throw new IndexOutOfBoundsException("Illegal index " ~ index.to!string ~ ", array size " ~ size()
-                    .to!string);
+            throw new IndexOutOfBoundsException(
+                    "Illegal index " ~ decimal(cast(long) index) ~ ", array size " ~ decimal(cast(long) size()));
         auto old = elements[index];
         elements[index] = value is null ? _nodeFactory.nullNode() : value;
         return old;
@@ -1122,41 +1123,35 @@ final class StringNode : ValueNode
 
     override int asInt(int defaultValue)
     {
-        import std.conv : to;
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite, tryParseInt;
 
-        try
-            return _value.strip().to!int;
-        catch (Exception)
-            return defaultValue;
+        const parsed = tryParseInt(stripWhite(_value));
+        return parsed.ok ? cast(int) parsed.value : defaultValue;
     }
 
     override long asLong(long defaultValue)
     {
-        import std.conv : to;
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite, tryParseLong;
 
-        try
-            return _value.strip().to!long;
-        catch (Exception)
-            return defaultValue;
+        const parsed = tryParseLong(stripWhite(_value));
+        return parsed.ok ? parsed.value : defaultValue;
     }
 
     override double asDouble(double defaultValue)
     {
         import flint.serde.json_read : parseJsonDecimal;
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite;
 
         double[1] parsed;
-        auto text = cast(const(ubyte)[]) _value.strip();
+        auto text = cast(const(ubyte)[]) stripWhite(_value);
         return text.length && parseJsonDecimal(text, parsed[0]) ? parsed[0] : defaultValue;
     }
 
     override bool asBoolean(bool defaultValue)
     {
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite;
 
-        const text = _value.strip();
+        const text = stripWhite(_value);
         if (text == "true")
             return true;
         if (text == "false")
@@ -1284,9 +1279,9 @@ final class IntNode : NumericNode
 
     override string asString()
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        return _value.to!string;
+        return decimal(cast(long) _value);
     }
 
     override int asInt(int)
@@ -1380,9 +1375,9 @@ final class ShortNode : NumericNode
 
     override string asString()
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        return _value.to!string;
+        return decimal(cast(long) _value);
     }
 
     override int asInt(int)
@@ -1493,9 +1488,9 @@ final class LongNode : NumericNode
 
     override string asString()
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        return _value.to!string;
+        return decimal(cast(long) _value);
     }
 
     override int asInt(int)

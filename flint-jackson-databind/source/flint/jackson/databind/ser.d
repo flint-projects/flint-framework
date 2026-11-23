@@ -183,9 +183,9 @@ private bool writeScalar(ref Any value, string type, JsonGenerator g)
         g.writeNumber(value.get!long());
         return true;
     case "ulong":
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        g.writeNumber(value.get!ulong().to!string);
+        g.writeNumber(decimal(value.get!ulong()));
         return true;
     case "float":
         g.writeNumber(cast(float) value.get!double());
@@ -231,7 +231,7 @@ size_t enumIndex(const Descriptor d, ref Any value)
 
 private void writeEnum(MapperConfig config, const Descriptor d, ref Any value, JsonGenerator g)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
     import std.uni : toLower;
 
     const index = enumIndex(d, value);
@@ -241,8 +241,8 @@ private void writeEnum(MapperConfig config, const Descriptor d, ref Any value, J
         return;
     }
     if (index >= d.enumConstants.length)
-        throw new InvalidDefinitionException(
-                "Enum value " ~ index.to!string ~ " of " ~ d.name ~ " has no constant name in its descriptor", d.name);
+        throw new InvalidDefinitionException("Enum value " ~ decimal(
+                cast(ulong) index) ~ " of " ~ d.name ~ " has no constant name in its descriptor", d.name);
     const name = d.enumConstants[index];
     g.writeString(config.isEnabled(EnumFeature.WRITE_ENUMS_TO_LOWERCASE) ? name.toLower() : name);
 }
@@ -294,7 +294,7 @@ private bool includeContent(MapperConfig config, ref Any value)
 private string keyText(MapperConfig config, ref Any key)
 {
     import flint.engine.aot.objects : objectToString;
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     if (key.isNull())
         return "null";
@@ -312,7 +312,7 @@ private string keyText(MapperConfig config, ref Any key)
     if (key.holds!bool())
         return key.get!bool() ? "true" : "false";
     if (key.holds!long())
-        return key.get!long().to!string;
+        return decimal(key.get!long());
     return key.toString();
 }
 

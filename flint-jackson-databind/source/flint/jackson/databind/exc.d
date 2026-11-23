@@ -33,10 +33,10 @@ struct Reference
     /// `Type["name"]` or `Type[3]`, as Jackson prints a reference.
     string description() const pure
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         return (from.length ? from : "UNKNOWN") ~ (propertyName !is null
-                ? "[\"" ~ propertyName ~ "\"]" : "[" ~ index.to!string ~ "]");
+                ? "[\"" ~ propertyName ~ "\"]" : "[" ~ decimal(cast(long) index) ~ "]");
     }
 }
 

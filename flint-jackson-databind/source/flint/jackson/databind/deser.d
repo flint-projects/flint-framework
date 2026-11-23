@@ -280,9 +280,9 @@ private bool readBoolean(MapperConfig config, JsonParser p, JsonToken t)
     case JsonToken.VALUE_NUMBER_INT:
         return p.getLongValue() != 0;
     case JsonToken.VALUE_STRING:
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite;
 
-        const text = p.getString().strip();
+        const text = stripWhite(p.getString());
         if (text == "true" || text == "True" || text == "TRUE")
             return true;
         if (text == "false" || text == "False" || text == "FALSE")
@@ -356,16 +356,15 @@ private Any readIntegral(MapperConfig config, JsonParser p, JsonToken t, string 
 
 private long parseIntegral(JsonParser p, string type)
 {
-    import std.conv : to;
-    import std.string : strip;
+    import flint.engine.aot.text : stripWhite, tryParseLong;
 
-    const text = p.getString().strip();
-    try
-        return text.to!long;
-    catch (Exception)
-        throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaTypeName(
-                type) ~ "` from String \"" ~ text ~ "\": not a valid `" ~ javaTypeName(type) ~ "` value",
-                text, type, p.currentLocation());
+    const text = stripWhite(p.getString());
+    const parsed = tryParseLong(text);
+    if (parsed.ok)
+        return parsed.value;
+    throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaTypeName(
+            type) ~ "` from String \"" ~ text ~ "\": not a valid `" ~ javaTypeName(type) ~ "` value",
+            text, type, p.currentLocation());
 }
 
 // The Java range each integral type accepts; Java's byte accepts -128 to 255, as Jackson's does.
@@ -384,12 +383,12 @@ private long[2] integralRange(string type) pure nothrow @nogc
 
 private Any boxIntegral(long value, string type, JsonParser p)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     const range = integralRange(type);
     if (value < range[0] || value > range[1])
-        throw new InvalidFormatException("Numeric value (" ~ value.to!string ~ ") out of range of `" ~ javaTypeName(
-                type) ~ "`", value.to!string, type, p.currentLocation());
+        throw new InvalidFormatException("Numeric value (" ~ decimal(
+                value) ~ ") out of range of `" ~ javaTypeName(type) ~ "`", decimal(value), type, p.currentLocation());
     switch (type)
     {
     case "byte":
@@ -418,9 +417,9 @@ private double readFloating(MapperConfig config, JsonParser p, JsonToken t, stri
         return p.getDoubleValue();
     case JsonToken.VALUE_STRING:
         import flint.serde.json_read : parseJsonDecimal;
-        import std.string : strip;
+        import flint.engine.aot.text : stripWhite;
 
-        const text = p.getString().strip();
+        const text = stripWhite(p.getString());
         switch (text)
         {
         case "NaN":
@@ -583,28 +582,16 @@ private Any readEntries(MapperConfig config, JsonParser p, const Descriptor d, J
 
 private Any keyFrom(MapperConfig config, string name, string keyType, JsonParser p)
 {
-    import std.conv : ConvException, to;
-
     if (keyType == "string")
         return Any.of(name);
-    try
-    {
-        switch (keyType)
-        {
-        case "int":
-            return Any.of(name.to!int);
-        case "long":
-            return Any.of(name.to!long);
-        case "bool":
-            return Any.of(name.to!bool);
-        default:
-            break;
-        }
-    }
-    catch (ConvException)
+    bool scalar, valid;
+    auto key = scalarKey(name, keyType, scalar, valid);
+    if (scalar && !valid)
         throw new InvalidFormatException("Cannot deserialize Map key of type `" ~ javaTypeName(
                 keyType) ~ "` from String \"" ~ name ~ "\": not a valid representation", name,
                 keyType, p.currentLocation());
+    if (scalar)
+        return key;
     const d = config.descriptor(keyType);
     if (d !is null && d.kind == TypeKind.enum_)
         foreach (i, constant; d.enumConstants)
@@ -625,16 +612,17 @@ private Any enumConstant(const Descriptor d, size_t index)
 // stringified index; Jackson's messages list the names in CompactStringObjectMap order.
 private Any readEnum(JsonParser p, const Descriptor d, JsonToken t)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     if (t == JsonToken.VALUE_NUMBER_INT)
     {
         const index = p.getLongValue();
         if (index >= 0 && index < d.enumConstants.length)
             return enumConstant(d, cast(size_t) index);
-        throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaTypeName(
-                d.name) ~ "` from number " ~ index.to!string ~ ": index value outside legal index range [0.." ~ (
-                cast(long) d.enumConstants.length - 1).to!string ~ "]", index.to!string, d.name, p.currentLocation());
+        throw new InvalidFormatException(
+                "Cannot deserialize value of type `" ~ javaTypeName(d.name) ~ "` from number " ~ decimal(
+                index) ~ ": index value outside legal index range [0.." ~ decimal(
+                cast(long) d.enumConstants.length - 1) ~ "]", decimal(index), d.name, p.currentLocation());
     }
     if (t != JsonToken.VALUE_STRING)
         throw mismatch(d.name, t);
@@ -643,9 +631,9 @@ private Any readEnum(JsonParser p, const Descriptor d, JsonToken t)
 
 private Any enumFromString(JsonParser p, const Descriptor d, string text)
 {
-    import std.string : strip;
+    import flint.engine.aot.text : stripWhite;
 
-    const name = text.strip;
+    const name = stripWhite(text);
     foreach (i, constant; d.enumConstants)
         if (constant == text || constant == name)
             return enumConstant(d, i);
@@ -821,10 +809,10 @@ private void unknown(MapperConfig config, JsonParser p, BeanDescription bean, st
     string list;
     foreach (i, k; known)
         list ~= (i ? ", " : "") ~ "\"" ~ k ~ "\"";
-    import std.conv : to;
+    import flint.engine.aot.text : decimal;
 
     throw new UnrecognizedPropertyException("Unrecognized property \"" ~ name ~ "\" (class " ~ bean.descriptor.name
-            ~ "), not marked as ignorable (" ~ known.length.to!string ~ " known properties: " ~ list ~ "])",
+            ~ "), not marked as ignorable (" ~ decimal(cast(ulong) known.length) ~ " known properties: " ~ list ~ "])",
             name, bean.descriptor.name, known, p.currentLocation());
 }
 
@@ -847,4 +835,38 @@ private void withPath(Reference reference, scope void delegate() @safe action)
         action();
     catch (DatabindException e)
         throw e.prependPath(reference);
+}
+
+// ASCII case-insensitive equality with a lower-case `expected`.
+private bool asciiLowerEquals(scope const(char)[] text, string expected) pure nothrow @nogc
+{
+    if (text.length != expected.length)
+        return false;
+    foreach (i, c; text)
+        if ((c >= 'A' && c <= 'Z' ? cast(char)(c + 32) : c) != expected[i])
+            return false;
+    return true;
+}
+
+// An int, long or bool Map key read as to!int, to!long and to!bool read it; `scalar` is false for other key types.
+private Any scalarKey(string name, string keyType, out bool scalar, out bool valid)
+{
+    import flint.engine.aot.text : tryParseInt, tryParseLong;
+
+    scalar = keyType == "int" || keyType == "long" || keyType == "bool";
+    if (keyType == "int")
+    {
+        const parsed = tryParseInt(name);
+        valid = parsed.ok;
+        return valid ? Any.of(cast(int) parsed.value) : Any.init;
+    }
+    if (keyType == "long")
+    {
+        const parsed = tryParseLong(name);
+        valid = parsed.ok;
+        return valid ? Any.of(parsed.value) : Any.init;
+    }
+    // to!bool: "true" or "false" in any case.
+    valid = asciiLowerEquals(name, "true") || asciiLowerEquals(name, "false");
+    return valid ? Any.of(asciiLowerEquals(name, "true")) : Any.init;
 }
