@@ -307,7 +307,8 @@ private Any readText(MapperConfig config, JsonParser p, Kind kind, string type, 
 {
     import flint.engine.aot.text : stripWhite;
 
-    const text = stripWhite(p.getString());
+    // The text as the parser holds it: only an error message copies it.
+    const text = stripWhite(p.getStringCharacters());
     if (text.length == 0)
         return Any.init;
     const custom = format.pattern.length != 0;
@@ -319,36 +320,39 @@ private Any readText(MapperConfig config, JsonParser p, Kind kind, string type, 
         const formatName = kind >= Kind.duration ? "[default format]" : formatter.toString();
         const exceptionName = cast(DateTimeParseException) e ? "java.time.format.DateTimeParseException"
             : "java.time.DateTimeException";
+        const copy = text.idup;
         throw new InvalidFormatException("Cannot deserialize value of type `" ~ javaName(
-                type) ~ "` from String \"" ~ text ~ "\": Failed to deserialize `" ~ javaName(
-                type) ~ "` (with format '" ~ formatName ~ "'): (" ~ exceptionName ~ ") " ~ e.msg, text,
+                type) ~ "` from String \"" ~ copy ~ "\": Failed to deserialize `" ~ javaName(
+                type) ~ "` (with format '" ~ formatName ~ "'): (" ~ exceptionName ~ ") " ~ e.msg, copy,
                 type, p.currentLocation());
     }
 }
 
-private Any parseText(MapperConfig config, Kind kind, string text, DateTimeFormatter formatter, bool custom)
+// The parsers with slice overloads (LocalDate, LocalTime, LocalDateTime, Instant) read `text` in place; the others
+// get a copy.
+private Any parseText(MapperConfig config, Kind kind, scope const(char)[] text, DateTimeFormatter dtf, bool custom)
 {
     switch (kind)
     {
     case Kind.localDate:
     case Kind.localTime:
     case Kind.localDateTime:
-        return parseLocal(kind, text, formatter, custom);
+        return parseLocal(kind, text, dtf, custom);
     case Kind.duration:
-        return Any.of(Duration.parse(text));
+        return Any.of(Duration.parse(text.idup));
     case Kind.zoneOffset:
-        return Any.of(ZoneOffset.of(text));
+        return Any.of(ZoneOffset.of(text.idup));
     case Kind.zoneId:
-        return Any.of(ZoneId.of(text));
+        return Any.of(ZoneId.of(text.idup));
     default:
         if (!custom && numeric(text))
             return instantAs(kind, readDecimal(text, true));
-        return parseInstant(config, kind, text, formatter, custom);
+        return parseInstant(config, kind, text, dtf, custom);
     }
 }
 
 // Jackson's lenient ISO readers: a date-time where a date or time is expected, a 'Z' where none is.
-private Any parseLocal(Kind kind, string text, DateTimeFormatter formatter, bool custom)
+private Any parseLocal(Kind kind, scope const(char)[] text, DateTimeFormatter formatter, bool custom)
 {
     const isoDateTime = !custom && text.length > 10 && text[10] == 'T';
     if (kind == Kind.localDate)
@@ -360,13 +364,16 @@ private Any parseLocal(Kind kind, string text, DateTimeFormatter formatter, bool
     return Any.of(LocalDateTime.parse(text, formatter));
 }
 
-private Any parseInstant(MapperConfig config, Kind kind, string text, DateTimeFormatter formatter, bool custom)
+private Any parseInstant(MapperConfig config, Kind kind, scope const(char)[] text,
+        DateTimeFormatter formatter, bool custom)
 {
+    if (kind == Kind.instant && !custom)
+        return Any.of(Instant.parse(text));
     if (kind == Kind.instant)
-        return Any.of(custom ? OffsetDateTime.parse(text, formatter).toInstant() : Instant.parse(text));
+        return Any.of(OffsetDateTime.parse(text.idup, formatter).toInstant());
     if (kind == Kind.offsetDateTime)
-        return Any.of(adjust(config, OffsetDateTime.parse(text, formatter)));
-    return Any.of(adjust(config, ZonedDateTime.parse(text, formatter)));
+        return Any.of(adjust(config, OffsetDateTime.parse(text.idup, formatter)));
+    return Any.of(adjust(config, ZonedDateTime.parse(text.idup, formatter)));
 }
 
 // An instant as an Instant, or as an OffsetDateTime or ZonedDateTime at UTC.
@@ -380,7 +387,7 @@ private Any instantAs(Kind kind, Instant instant)
 }
 
 // A local date-time from ISO text: an instant read at UTC when it ends in 'Z'.
-private LocalDateTime utcOrLocal(string text)
+private LocalDateTime utcOrLocal(scope const(char)[] text)
 {
     if (text[$ - 1] == 'Z')
         return LocalDateTime.ofInstant(Instant.parse(text), ZoneOffset.UTC.toZoneId());
@@ -402,7 +409,7 @@ private ZonedDateTime adjust(MapperConfig config, ZonedDateTime value)
 }
 
 // Text a timestamp could be: digits with an optional leading '-' and at most one '.'.
-private bool numeric(string text) pure nothrow @nogc
+private bool numeric(scope const(char)[] text) pure nothrow @nogc
 {
     size_t periods;
     foreach (i, c; text)
@@ -416,7 +423,7 @@ private bool numeric(string text) pure nothrow @nogc
 }
 
 // A decimal number of seconds, the fraction truncated to nanoseconds; or of milliseconds when not `seconds`.
-private Instant readDecimal(string text, bool seconds) pure nothrow
+private Instant readDecimal(scope const(char)[] text, bool seconds) pure nothrow
 {
     const negative = text[0] == '-';
     long whole, nanos;

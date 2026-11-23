@@ -821,8 +821,16 @@ class UTF8JsonGenerator : JsonGenerator
         }
     }
 
+    // A closed generator writes nothing: it may already be recycled, or its sink gone.
+    private void verifyOpen()
+    {
+        if (_closed)
+            throw new StreamWriteException(this, "Generator closed: cannot write after close()");
+    }
+
     private void verifyValueWrite(string typeMsg)
     {
+        verifyOpen();
         immutable status = _streamWriteContext.writeValue();
         if (status == JsonWriteContext.STATUS_EXPECT_NAME)
             throw new StreamWriteException(this,
@@ -886,6 +894,7 @@ class UTF8JsonGenerator : JsonGenerator
 
     override JsonGenerator writeEndObject()
     {
+        verifyOpen();
         if (!_streamWriteContext.inObject())
             throw new StreamWriteException(this, "Current context not an Object but " ~ _streamWriteContext.typeDesc());
         if (_cfgPrettyPrinter !is null)
@@ -910,6 +919,7 @@ class UTF8JsonGenerator : JsonGenerator
 
     override JsonGenerator writeEndArray()
     {
+        verifyOpen();
         if (!_streamWriteContext.inArray())
             throw new StreamWriteException(this, "Current context not an Array but " ~ _streamWriteContext.typeDesc());
         if (_cfgPrettyPrinter !is null)
@@ -922,6 +932,7 @@ class UTF8JsonGenerator : JsonGenerator
 
     override JsonGenerator writeName(string name)
     {
+        verifyOpen();
         immutable status = _streamWriteContext.writeName(name);
         if (status == JsonWriteContext.STATUS_EXPECT_VALUE)
             throw new StreamWriteException(this, "Can not write a property name, expecting a value");
@@ -1097,12 +1108,14 @@ class UTF8JsonGenerator : JsonGenerator
 
     override JsonGenerator writeRaw(string text)
     {
+        verifyOpen();
         put(text);
         return this;
     }
 
     override JsonGenerator writeRaw(char c)
     {
+        verifyOpen();
         put(cast(ubyte) c);
         return this;
     }
@@ -1581,6 +1594,14 @@ class UTF8StreamJsonParser : JsonParser
     private string name(JsonTextToken token)
     {
         return _factory.internName(text(token));
+    }
+
+    // The string token's text without a copy: a slice of the document, or of the scratch buffer when it had escapes.
+    override const(char)[] getStringCharacters()
+    {
+        if (_currToken != JsonToken.VALUE_STRING)
+            return getString();
+        return _textCached ? _textCache : text(_text);
     }
 
     override string getString()

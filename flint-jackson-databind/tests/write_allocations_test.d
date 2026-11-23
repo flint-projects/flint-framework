@@ -103,3 +103,30 @@ unittest
     assert(GC.stats().allocatedInCurrentThread - before == own);
     assert(read.firstName == "Ada" && read.city == "London");
 }
+
+@("a generator user code keeps after close() fails loudly, and never touches another write")
+unittest
+{
+    import flint.jackson.core.exc : StreamWriteException;
+
+    auto mapper = greetingMapper();
+    auto mine = new Response();
+    // createGenerator is public, so it never hands out a recycled generator.
+    auto g = mapper.tokenStreamFactory().createGenerator(&mine.writeBody);
+    g.writeStartObject();
+    g.writeEndObject();
+    g.close();
+
+    auto other = new Response();
+    mapper.writeValue(&other.writeBody, Any.of(Greeting(2, "pooled")));
+    try
+    {
+        g.writeString("late");
+        assert(false, "a closed generator must refuse to write");
+    }
+    catch (StreamWriteException e)
+        assert(e.msg == "Generator closed: cannot write after close()", e.msg);
+    assert(cast(string) mine.buffer[0 .. mine.length] == "{}");
+    assert(cast(string) other.buffer[0 .. other.length] == `{"id":2,"content":"pooled"}`);
+    assert(mapper.tokenStreamFactory().createGenerator(&mine.writeBody) !is g);
+}

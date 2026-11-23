@@ -1037,6 +1037,26 @@ abstract class JsonParser
     /// Textual representation of the current token: string contents, number text, literal or name.
     abstract string getString();
 
+    /// The characters of the current token's text, valid only until the next token: Jackson's
+    /// `getStringCharacters`, with the offset and length folded into the slice. A parser over a complete document
+    /// returns a slice of it, so a reader that only parses the text (a date, a number) copies nothing. Here: a copy.
+    const(char)[] getStringCharacters()
+    {
+        return getString();
+    }
+
+    /// The offset of the text in `getStringCharacters`: always 0, since the slice starts there.
+    int getStringOffset()
+    {
+        return 0;
+    }
+
+    /// The length of the text in `getStringCharacters`.
+    int getStringLength()
+    {
+        return cast(int) getStringCharacters().length;
+    }
+
     /// Numeric value of the current number token as a Java int, with Jackson's range check.
     abstract int getIntValue();
 
