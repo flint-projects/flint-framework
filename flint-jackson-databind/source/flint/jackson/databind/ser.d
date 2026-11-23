@@ -47,6 +47,18 @@ void serializeValue(MapperConfig config, ref Any value, string declaredType, Jso
 // Values serialized through their descriptor: Optional, arrays, associative arrays, enums and beans.
 private void writeDescribed(MapperConfig config, ref Any value, string type, JsonGenerator g, JavaTimeFormat format)
 {
+    if (auto o = value.asObject())
+    {
+        // BeanSerializerFactory: a value of a non-final declared type is written by its runtime class, when that
+        // class is described (an ObjectError in a List!MessageSourceResolvable writes ObjectError's properties).
+        const runtime = typeid(o).name;
+        if (runtime != type)
+            if (auto actual = config.descriptor(runtime))
+            {
+                auto exact = Any.ofObject(o, runtime);
+                return writeDescribed(config, exact, runtime, g, format);
+            }
+    }
     const d = config.descriptor(type);
     if (d is null)
         throw new InvalidDefinitionException("No serializer found for class " ~ type
