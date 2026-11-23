@@ -34,6 +34,22 @@ private struct Attribute
     Any value;
 }
 
+private struct Parameter
+{
+    string name;
+    string first;
+    string[] rest;
+
+    /// A new array of every value, as `getParameterValues` returns.
+    string[] values() const pure nothrow
+    {
+        auto all = new string[1 + rest.length];
+        all[0] = first;
+        all[1 .. $] = rest[];
+        return all;
+    }
+}
+
 /// The request a servlet sees for one exchange on the servlet engine.
 final class ServletEngineRequest : HttpServletRequest
 {
@@ -54,8 +70,11 @@ final class ServletEngineRequest : HttpServletRequest
     private Attribute[] attributeSlots;
     private size_t attributeCount;
     private string characterEncoding;
-    private string[][string] parameters;
-    private string[] parameterOrder;
+    // Parameters in the order they arrive (Tomcat's LinkedHashMap order), found by a scan while there are few and
+    // through an index once there are many, so a request with thousands of names stays linear.
+    private Parameter[] parameterSlots;
+    private size_t parameterCount;
+    private size_t[string] parameterIndex;
     private bool parametersParsed;
     private bool inputUsed;
 
@@ -168,31 +187,32 @@ final class ServletEngineRequest : HttpServletRequest
     string getParameter(string name)
     {
         parseParameters();
-        if (auto list = name in parameters)
-            return (*list).length != 0 ? (*list)[0] : null;
-        return null;
+        const index = parameterAt(name);
+        return index < parameterCount ? parameterSlots[index].first : null;
     }
 
     string[] getParameterNames()
     {
         parseParameters();
-        return parameterOrder.dup;
+        auto names = new string[parameterCount];
+        foreach (index, ref parameter; parameterSlots[0 .. parameterCount])
+            names[index] = parameter.name;
+        return names;
     }
 
     string[] getParameterValues(string name)
     {
         parseParameters();
-        if (auto list = name in parameters)
-            return (*list).dup;
-        return null;
+        const index = parameterAt(name);
+        return index < parameterCount ? parameterSlots[index].values() : null;
     }
 
     string[][string] getParameterMap()
     {
         parseParameters();
         string[][string] copy;
-        foreach (name; parameterOrder)
-            copy[name] = parameters[name].dup;
+        foreach (ref parameter; parameterSlots[0 .. parameterCount])
+            copy[parameter.name] = parameter.values();
         return copy;
     }
 
@@ -580,14 +600,37 @@ final class ServletEngineRequest : HttpServletRequest
             // Tomcat skips a parameter whose name or value is not valid percent-encoding.
             if (name is null || value is null || name.length == 0)
                 continue;
-            if (auto list = name in parameters)
-                *list ~= value;
-            else
+            const index = parameterAt(name);
+            if (index < parameterCount)
             {
-                parameters[name] = [value];
-                parameterOrder ~= name;
+                parameterSlots[index].rest ~= value;
+                continue;
             }
+            if (parameterCount == parameterSlots.length)
+                parameterSlots.length = parameterCount == 0 ? 8 : parameterCount * 2;
+            parameterSlots[parameterCount++] = Parameter(name, value);
+            if (parameterIndex !is null)
+                parameterIndex[name] = parameterCount - 1;
+            else if (parameterCount > indexedParameters)
+                foreach (at, ref parameter; parameterSlots[0 .. parameterCount])
+                    parameterIndex[parameter.name] = at;
         }
+    }
+
+    private enum indexedParameters = 16;
+
+    private size_t parameterAt(scope const(char)[] name) const pure nothrow
+    {
+        if (parameterIndex !is null)
+        {
+            if (auto found = name in parameterIndex)
+                return *found;
+            return parameterCount;
+        }
+        foreach (index, ref parameter; parameterSlots[0 .. parameterCount])
+            if (parameter.name == name)
+                return index;
+        return parameterCount;
     }
 }
 

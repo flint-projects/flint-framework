@@ -81,13 +81,18 @@ class ContentNegotiationManager : ContentNegotiationStrategy
 
     MediaType[] resolveMediaTypes(NativeWebRequest request)
     {
+        MediaType[] all;
         foreach (strategy; strategies)
         {
             auto mediaTypes = strategy.resolveMediaTypes(request);
-            if (mediaTypes == MEDIA_TYPE_ALL_LIST())
+            // Spring compares with MEDIA_TYPE_ALL_LIST; comparing in place saves building that list per request.
+            if (mediaTypes.length == 1 && mediaTypes[0] == MediaType.ALL)
+            {
+                all = mediaTypes;
                 continue;
+            }
             return mediaTypes;
         }
-        return MEDIA_TYPE_ALL_LIST();
+        return all !is null ? all : MEDIA_TYPE_ALL_LIST();
     }
 }

@@ -324,6 +324,13 @@ unittest
             reply.head);
     reply = exchange(socket, pending, "GET /greeting?name=again HTTP/1.1\r\nHost: localhost\r\n\r\n");
     assert(reply.content == `{"id":6,"content":"Hello, again!"}`, reply.content);
+
+    // Past 16 names the parameters are indexed; values still join in arrival order.
+    string query = "name=x";
+    foreach (index; 0 .. 20)
+        query ~= "&p" ~ decimal(index) ~ "=" ~ decimal(index);
+    reply = exchange(socket, pending, "GET /greeting?" ~ query ~ "&name=y HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert(reply.content == `{"id":7,"content":"Hello, x,y!"}`, reply.content);
 }
 
 @("flushBuffer commits with chunked framing and freezes the fields; a full buffer commits too")

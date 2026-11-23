@@ -433,15 +433,44 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
         auto attribute = request.getAttribute(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
         if (!attribute.isNull() && attribute.get!(MediaType[]).length != 0)
             return attribute.get!(MediaType[]);
+        // Usually one converter can write the value: its list is the result as it is (Spring's LinkedHashSet
+        // copy only matters when lists are merged or repeat a type).
         MediaType[] result;
+        bool merged;
         foreach (converter; messageConverters)
-            if (converter.canWrite(valueType, null))
-                foreach (mediaType; converter.getSupportedMediaTypes(valueType))
-                    if (!contains(result, mediaType))
-                        result ~= mediaType;
+        {
+            if (!converter.canWrite(valueType, null))
+                continue;
+            auto supported = converter.getSupportedMediaTypes(valueType);
+            if (result.length == 0 && !merged && distinct(supported))
+            {
+                result = supported;
+                continue;
+            }
+            if (!merged)
+            {
+                MediaType[] copy;
+                foreach (mediaType; result)
+                    if (!contains(copy, mediaType))
+                        copy ~= mediaType;
+                result = copy;
+                merged = true;
+            }
+            foreach (mediaType; supported)
+                if (!contains(result, mediaType))
+                    result ~= mediaType;
+        }
         if (result.length == 0)
             result ~= MediaType.ALL;
         return result;
+    }
+
+    private static bool distinct(const MediaType[] types)
+    {
+        foreach (index, ref type; types)
+            if (contains(types[0 .. index], type))
+                return false;
+        return true;
     }
 
     private static bool contains(const MediaType[] types, const MediaType mediaType)
@@ -455,17 +484,22 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
     private static void determineCompatibleMediaTypes(MediaType[] acceptableTypes,
             MediaType[] producibleTypes, ref MediaType[] mediaTypesToUse)
     {
+        // At most one result per pair: one allocation, filled in place, instead of growing by appends.
+        MediaType[] found;
+        size_t count;
         foreach (requestedType; acceptableTypes)
             foreach (producibleType; producibleTypes)
                 if (requestedType.isCompatibleWith(producibleType))
                 {
                     auto mediaType = getMostSpecificMediaType(requestedType, producibleType);
-                    bool seen;
-                    foreach (existing; mediaTypesToUse)
-                        seen = seen || existing == mediaType;
-                    if (!seen)
-                        mediaTypesToUse ~= mediaType;
+                    if (contains(mediaTypesToUse, mediaType) || contains(found[0 .. count], mediaType))
+                        continue;
+                    if (found is null)
+                        found = new MediaType[acceptableTypes.length * producibleTypes.length];
+                    found[count++] = mediaType;
                 }
+        if (count != 0)
+            mediaTypesToUse = mediaTypesToUse.length == 0 ? found[0 .. count] : mediaTypesToUse ~ found[0 .. count];
     }
 
     private static MediaType getMostSpecificMediaType(MediaType acceptType, MediaType produceType)
@@ -760,15 +794,14 @@ class ServletInvocableHandlerMethod : InvocableHandlerMethod
         mavContainer.setRequestHandled(false);
         auto returnType = getReturnType();
         // Spring orders ResponseEntity/HttpHeaders handlers before @ResponseBody, and view names after it.
+        // supportsReturnType first: it is cheap, and the interface-to-class casts run only when it holds.
         foreach (handler; returnValueHandlers.getHandlers())
         {
-            if (cast(HttpEntityMethodProcessor) handler || cast(HttpHeadersReturnValueHandler) handler)
+            if (handler.supportsReturnType(returnType) && (cast(HttpEntityMethodProcessor) handler
+                    || cast(HttpHeadersReturnValueHandler) handler))
             {
-                if (handler.supportsReturnType(returnType))
-                {
-                    handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
-                    return;
-                }
+                handler.handleReturnValue(returnValue, returnType, mavContainer, webRequest);
+                return;
             }
         }
         if (isResponseBody() && responseBodyHandler !is null)
