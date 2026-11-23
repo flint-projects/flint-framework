@@ -1,5 +1,5 @@
 {"schema":"flint.api-coverage-baseline/1",
-"unclassified":26375,
+"unclassified":22561,
 "upstreams":{
 "hibernate-validator@9.1.6.Final":{"unclassified":0,"modules":{
 "hibernate-validator":0
@@ -16,8 +16,8 @@
 "jakarta-annotation@3.0.0":{"unclassified":0,"modules":{
 "jakarta-annotation":0
 }},
-"jakarta-persistence@3.2.0":{"unclassified":1424,"modules":{
-"jakarta-persistence":1424
+"jakarta-persistence@3.2.0":{"unclassified":0,"modules":{
+"jakarta-persistence":0
 }},
 "jakarta-servlet@6.1.0":{"unclassified":551,"modules":{
 "jakarta-servlet":551
@@ -25,8 +25,8 @@
 "jakarta-validation@3.1.1":{"unclassified":0,"modules":{
 "jakarta-validation":0
 }},
-"micrometer-core@1.18.0":{"unclassified":2390,"modules":{
-"micrometer-core":2390
+"micrometer-core@1.18.0":{"unclassified":0,"modules":{
+"micrometer-core":0
 }},
 "slf4j-api@2.0.20":{"unclassified":0,"modules":{
 "slf4j-api":0
