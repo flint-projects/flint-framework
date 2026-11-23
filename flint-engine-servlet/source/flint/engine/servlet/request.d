@@ -600,21 +600,26 @@ final class ServletEngineRequest : HttpServletRequest
             // Tomcat skips a parameter whose name or value is not valid percent-encoding.
             if (name is null || value is null || name.length == 0)
                 continue;
-            const index = parameterAt(name);
-            if (index < parameterCount)
-            {
-                parameterSlots[index].rest ~= value;
-                continue;
-            }
-            if (parameterCount == parameterSlots.length)
-                parameterSlots.length = parameterCount == 0 ? 8 : parameterCount * 2;
-            parameterSlots[parameterCount++] = Parameter(name, value);
-            if (parameterIndex !is null)
-                parameterIndex[name] = parameterCount - 1;
-            else if (parameterCount > indexedParameters)
-                foreach (at, ref parameter; parameterSlots[0 .. parameterCount])
-                    parameterIndex[parameter.name] = at;
+            addParameter(name, value);
         }
+    }
+
+    private void addParameter(string name, string value)
+    {
+        const index = parameterAt(name);
+        if (index < parameterCount)
+        {
+            parameterSlots[index].rest ~= value;
+            return;
+        }
+        if (parameterCount == parameterSlots.length)
+            parameterSlots.length = parameterCount == 0 ? 8 : parameterCount * 2;
+        parameterSlots[parameterCount++] = Parameter(name, value);
+        if (parameterIndex !is null)
+            parameterIndex[name] = parameterCount - 1;
+        else if (parameterCount > indexedParameters)
+            foreach (at, ref parameter; parameterSlots[0 .. parameterCount])
+                parameterIndex[parameter.name] = at;
     }
 
     private enum indexedParameters = 16;
