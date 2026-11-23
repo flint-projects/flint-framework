@@ -90,6 +90,7 @@ public class GoldenTimeFormat {
             "yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'", "uuuu", "yyyy",
         };
         for (String f : formatters) {
+            lines.add("describe\t" + f + "\t-\t" + formatter(f));
             for (Object[] v : values) {
                 format(f, (String) v[0], v[1]);
             }

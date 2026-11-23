@@ -23,14 +23,17 @@ import flint.jackson.annotation : JsonFormat, JsonInclude;
 import flint.jackson.core : JsonGenerator;
 import flint.jackson.databind.cfg : EnumFeature, MapperConfig, SerializationFeature;
 import flint.jackson.databind.exc : DatabindException, InvalidDefinitionException, Reference;
+import flint.jackson.databind.ext.javatime : JavaTimeFormat, writeJavaTime;
 import flint.jackson.databind.introspect : BeanDescription, BeanPropertyDefinition;
 import flint.jackson.databind.node : JsonNode;
 import flint.java.util : RawCollection, RawMap;
 
 @safe:
 
-/// Serialize `value`, whose declared Flint type is `declaredType`, through `g`.
-void serializeValue(MapperConfig config, ref Any value, string declaredType, JsonGenerator g)
+/// Serialize `value`, whose declared Flint type is `declaredType`, through `g`; `format` is the property's
+/// `@JsonFormat`, which the java.time serializers read.
+void serializeValue(MapperConfig config, ref Any value, string declaredType, JsonGenerator g,
+        JavaTimeFormat format = JavaTimeFormat.init)
 {
     if (value.isNull())
     {
@@ -38,7 +41,9 @@ void serializeValue(MapperConfig config, ref Any value, string declaredType, Jso
         return;
     }
     const type = value.typeName().length ? value.typeName() : declaredType;
-    if (writeScalar(value, type, g) || writeContainer(config, value, g))
+    if (writeScalar(value, type, g) || writeJavaTime(config, value, type, g, format))
+        return;
+    if (writeContainer(config, value, g))
         return;
     const d = config.descriptor(type);
     if (d is null)
@@ -261,7 +266,7 @@ private void writeProperty(MapperConfig config, BeanPropertyDefinition p, ref An
         g.writeString(scalarText(v));
         return;
     }
-    serializeValue(config, v, p.type, g);
+    serializeValue(config, v, p.type, g, p.hasFormat ? JavaTimeFormat.of(p.format) : JavaTimeFormat.init);
 }
 
 private bool isNumberOrBoolean(ref Any v)

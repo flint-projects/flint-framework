@@ -473,6 +473,24 @@ private immutable Element[] instantParse = [op(Op.caseInsensitive)] ~ isoLocalDa
     num(Field.secondOfMinute, 2), fraction(0, 9, true), isoOffset
 ];
 
+// Java's descriptions of the ISO formatters, as `DateTimeFormatter.toString` returns them.
+private enum describeDate = `Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)`;
+private enum describeTime = `Value(HourOfDay,2)':'Value(MinuteOfHour,2)`
+    ~ `[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]`;
+private enum describeOffset = `ParseStrict(false)Offset(+HH:MM:ss,'Z')ParseStrict(true)`;
+private enum describeRegion = `['['ParseCaseSensitive(true)ZoneRegionId()']']`;
+private enum describeIsoLocalDate = describeDate;
+private enum describeIsoLocalTime = describeTime;
+private enum describeIsoLocalDateTime = `ParseCaseSensitive(false)(` ~ describeDate ~ `)'T'(` ~ describeTime ~ `)`;
+private enum describeIsoOffsetDateTime = `ParseCaseSensitive(false)(` ~ describeIsoLocalDateTime ~ `)` ~ describeOffset;
+private enum describeIsoZonedDateTime = `(` ~ describeIsoOffsetDateTime ~ `)` ~ describeRegion;
+private enum describeIsoDateTime = `(` ~ describeIsoLocalDateTime ~ `)[Offset(+HH:MM:ss,'Z')` ~ describeRegion ~ `]`;
+private enum describeIsoDate = `ParseCaseSensitive(false)(` ~ describeDate ~ `)[Offset(+HH:MM:ss,'Z')]`;
+private enum describeIsoTime = `ParseCaseSensitive(false)(` ~ describeTime ~ `)[Offset(+HH:MM:ss,'Z')]`;
+private enum describeIsoInstant = `ParseCaseSensitive(false)Instant()`;
+private enum describeBasicIsoDate = `ParseCaseSensitive(false)Value(Year,4)Value(MonthOfYear,2)Value(DayOfMonth,2)`
+    ~ `[ParseStrict(false)Offset(+HHMMss,'Z')ParseStrict(true)]`;
+
 /++
 Formatter for printing and parsing date-time objects. Java's `DateTimeFormatter` is an immutable final class;
 Flint's is an immutable value (ADR-030, R11), so the ISO constants are `static immutable` values.
@@ -485,27 +503,29 @@ struct DateTimeFormatter
     private ZoneId zone_;
 
     /// The ISO date formatter that formats or parses a date without an offset, such as '2011-12-03'.
-    static immutable DateTimeFormatter ISO_LOCAL_DATE = DateTimeFormatter(isoLocalDate, "ISO_LOCAL_DATE");
+    static immutable DateTimeFormatter ISO_LOCAL_DATE = DateTimeFormatter(isoLocalDate, describeIsoLocalDate);
     /// The ISO time formatter that formats or parses a time without an offset, such as '10:15' or '10:15:30'.
-    static immutable DateTimeFormatter ISO_LOCAL_TIME = DateTimeFormatter(isoLocalTime, "ISO_LOCAL_TIME");
+    static immutable DateTimeFormatter ISO_LOCAL_TIME = DateTimeFormatter(isoLocalTime, describeIsoLocalTime);
     /// The ISO date-time formatter without an offset, such as '2011-12-03T10:15:30'.
-    static immutable DateTimeFormatter ISO_LOCAL_DATE_TIME = DateTimeFormatter(isoLocalDateTime, "ISO_LOCAL_DATE_TIME");
+    static immutable DateTimeFormatter ISO_LOCAL_DATE_TIME = DateTimeFormatter(isoLocalDateTime,
+            describeIsoLocalDateTime);
     /// The ISO date-time formatter with an offset, such as '2011-12-03T10:15:30+01:00'.
     static immutable DateTimeFormatter ISO_OFFSET_DATE_TIME = DateTimeFormatter(isoOffsetDateTime,
-            "ISO_OFFSET_DATE_TIME");
+            describeIsoOffsetDateTime);
     /// The ISO-like date-time formatter with an offset and a bracketed region zone, such as
     /// '2011-12-03T10:15:30+01:00[Europe/Paris]'.
-    static immutable DateTimeFormatter ISO_ZONED_DATE_TIME = DateTimeFormatter(isoZonedDateTime, "ISO_ZONED_DATE_TIME");
+    static immutable DateTimeFormatter ISO_ZONED_DATE_TIME = DateTimeFormatter(isoZonedDateTime,
+            describeIsoZonedDateTime);
     /// The ISO-like date-time formatter with the offset and zone if available.
-    static immutable DateTimeFormatter ISO_DATE_TIME = DateTimeFormatter(isoDateTime, "ISO_DATE_TIME");
+    static immutable DateTimeFormatter ISO_DATE_TIME = DateTimeFormatter(isoDateTime, describeIsoDateTime);
     /// The ISO date formatter with the offset if available, such as '2011-12-03' or '2011-12-03+01:00'.
-    static immutable DateTimeFormatter ISO_DATE = DateTimeFormatter(isoDate, "ISO_DATE");
+    static immutable DateTimeFormatter ISO_DATE = DateTimeFormatter(isoDate, describeIsoDate);
     /// The ISO time formatter with the offset if available, such as '10:15:30' or '10:15:30+01:00'.
-    static immutable DateTimeFormatter ISO_TIME = DateTimeFormatter(isoTime, "ISO_TIME");
+    static immutable DateTimeFormatter ISO_TIME = DateTimeFormatter(isoTime, describeIsoTime);
     /// The ISO instant formatter in UTC, such as '2011-12-03T10:15:30Z'.
-    static immutable DateTimeFormatter ISO_INSTANT = DateTimeFormatter(isoInstant, "ISO_INSTANT");
+    static immutable DateTimeFormatter ISO_INSTANT = DateTimeFormatter(isoInstant, describeIsoInstant);
     /// The ISO date formatter without punctuation, such as '20111203'.
-    static immutable DateTimeFormatter BASIC_ISO_DATE = DateTimeFormatter(basicIsoDate, "BASIC_ISO_DATE");
+    static immutable DateTimeFormatter BASIC_ISO_DATE = DateTimeFormatter(basicIsoDate, describeBasicIsoDate);
 
     private this(immutable(Element)[] elements, string description) pure nothrow @nogc
     {
@@ -520,7 +540,8 @@ struct DateTimeFormatter
      */
     static DateTimeFormatter ofPattern(string pattern)
     {
-        return DateTimeFormatter(compilePattern(pattern).idup, pattern);
+        auto elements = compilePattern(pattern);
+        return DateTimeFormatter(elements.idup, describeElements(elements));
     }
 
     /// A copy of this formatter that converts an instant to a date-time in `zone` before formatting.
@@ -570,11 +591,61 @@ struct DateTimeFormatter
         return parser.fields;
     }
 
-    /// The pattern or the name of the ISO constant.
+    /// The printer-parsers, described as Java's `DateTimeFormatter.toString` describes them.
     string toString() const pure nothrow @nogc
     {
         return description_;
     }
+}
+
+private immutable string[SignStyle.max + 1] signNames = [
+    "NORMAL", "ALWAYS", "NEVER", "NOT_NEGATIVE", "EXCEEDS_PAD"
+];
+
+// Java's toString of the printer-parsers of `ofPattern`.
+private string describeElements(scope const(Element)[] elements) pure
+{
+    string text;
+    foreach (e; elements)
+        text ~= describeElement(e);
+    return text;
+}
+
+private string describeElement(const Element e) pure
+{
+    import std.array : replace;
+
+    if (e.op == Op.number || e.op == Op.fraction)
+        return describeNumber(e);
+    if (e.op >= Op.optionalStart)
+        return e.op == Op.optionalStart ? "[" : e.op == Op.optionalEnd ? "]" : "";
+    switch (e.op)
+    {
+    case Op.reducedYear:
+        return "ReducedValue(" ~ fieldNames[e.field] ~ ",2,2,2000-01-01)";
+    case Op.literal:
+        return e.text == "'" ? "''" : "'" ~ e.text.replace("'", "''") ~ "'";
+    case Op.text:
+        return "Text(" ~ fieldNames[e.field] ~ (e.text == "full" ? ")" : ",SHORT)");
+    case Op.offset:
+        return "Offset(" ~ e.text ~ ",'" ~ e.noOffsetText ~ "')";
+    default:
+        return "ZoneId()";
+    }
+}
+
+private string describeNumber(const Element e) pure
+{
+    import std.conv : to;
+
+    const min = (cast(int) e.minWidth).to!string, max = (cast(int) e.maxWidth).to!string;
+    if (e.op == Op.fraction)
+        return "Fraction(NanoOfSecond," ~ min ~ "," ~ max ~ (e.lenient ? ",DecimalPoint)" : ")");
+    if (e.minWidth == 1 && e.maxWidth == 19 && e.sign == SignStyle.NORMAL)
+        return "Value(" ~ fieldNames[e.field] ~ ")";
+    if (e.minWidth == e.maxWidth && e.sign == SignStyle.NOT_NEGATIVE)
+        return "Value(" ~ fieldNames[e.field] ~ "," ~ min ~ ")";
+    return "Value(" ~ fieldNames[e.field] ~ "," ~ min ~ "," ~ max ~ "," ~ signNames[e.sign] ~ ")";
 }
 
 private string indexText(int index) pure nothrow
@@ -1231,11 +1302,11 @@ private Element yearElement(Field f, int count) pure nothrow @nogc
     return num(f, count, 19, SignStyle.EXCEEDS_PAD);
 }
 
-private Element twoWide(Field f, char c, int count, int maxWide = 2)
+private Element twoWide(Field f, char c, int count)
 {
     if (count == 1)
         return num(f, 1, 19, SignStyle.NORMAL);
-    if (count <= maxWide)
+    if (count == 2)
         return num(f, count);
     throw new IllegalArgumentException("Too many pattern letters: " ~ c);
 }
@@ -1265,7 +1336,9 @@ private Element dateLetter(char c, int count)
     case 'L':
         return count <= 2 ? twoWide(Field.monthOfYear, c, count) : textElement(Field.monthOfYear, count);
     case 'D':
-        return count == 1 ? num(Field.dayOfYear, 1, 19, SignStyle.NORMAL) : twoWide(Field.dayOfYear, c, count, 3);
+        if (count > 3)
+            throw new IllegalArgumentException("Too many pattern letters: D");
+        return count == 1 ? num(Field.dayOfYear, 1, 19, SignStyle.NORMAL) : num(Field.dayOfYear, count, 3);
     case 'E':
         return textElement(Field.dayOfWeek, count);
     default:
@@ -1286,7 +1359,7 @@ private Element timeLetter(char c, int count)
             throw new IllegalArgumentException("Too many pattern letters: S");
         return fraction(count, count, false);
     case 'n':
-        return num(Field.nanoOfSecond, count == 1 ? 1 : count, 19, SignStyle.NORMAL);
+        return num(Field.nanoOfSecond, count, 19, SignStyle.NOT_NEGATIVE);
     default:
         return zoneLetter(c, count);
     }

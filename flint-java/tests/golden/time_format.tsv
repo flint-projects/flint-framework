@@ -1,3 +1,4 @@
+describe	ISO_LOCAL_DATE	-	Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)
 format	ISO_LOCAL_DATE	LocalDate	2010-09-07
 format	ISO_LOCAL_DATE	LocalTime	!Unsupported field: Year
 format	ISO_LOCAL_DATE	LocalDateTime	2010-09-07
@@ -10,6 +11,7 @@ format	ISO_LOCAL_DATE	LocalDateBig	+12345-01-02
 format	ISO_LOCAL_DATE	LocalDateNeg	-0044-03-15
 format	ISO_LOCAL_DATE	LocalTimeMidnight	!Unsupported field: Year
 format	ISO_LOCAL_DATE	LocalTimeNano	!Unsupported field: Year
+describe	ISO_LOCAL_TIME	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]
 format	ISO_LOCAL_TIME	LocalDate	!Unsupported field: HourOfDay
 format	ISO_LOCAL_TIME	LocalTime	14:05:09.12
 format	ISO_LOCAL_TIME	LocalDateTime	14:05:09.12
@@ -22,6 +24,7 @@ format	ISO_LOCAL_TIME	LocalDateBig	!Unsupported field: HourOfDay
 format	ISO_LOCAL_TIME	LocalDateNeg	!Unsupported field: HourOfDay
 format	ISO_LOCAL_TIME	LocalTimeMidnight	00:00:00
 format	ISO_LOCAL_TIME	LocalTimeNano	00:00:00.000000001
+describe	ISO_LOCAL_DATE_TIME	-	ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]])
 format	ISO_LOCAL_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
 format	ISO_LOCAL_DATE_TIME	LocalTime	!Unsupported field: Year
 format	ISO_LOCAL_DATE_TIME	LocalDateTime	2010-09-07T14:05:09.12
@@ -34,6 +37,7 @@ format	ISO_LOCAL_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
 format	ISO_LOCAL_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
 format	ISO_LOCAL_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
 format	ISO_LOCAL_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+describe	ISO_OFFSET_DATE_TIME	-	ParseCaseSensitive(false)(ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]))ParseStrict(false)Offset(+HH:MM:ss,'Z')ParseStrict(true)
 format	ISO_OFFSET_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
 format	ISO_OFFSET_DATE_TIME	LocalTime	!Unsupported field: Year
 format	ISO_OFFSET_DATE_TIME	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -46,6 +50,7 @@ format	ISO_OFFSET_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
 format	ISO_OFFSET_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
 format	ISO_OFFSET_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
 format	ISO_OFFSET_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+describe	ISO_ZONED_DATE_TIME	-	(ParseCaseSensitive(false)(ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]))ParseStrict(false)Offset(+HH:MM:ss,'Z')ParseStrict(true))['['ParseCaseSensitive(true)ZoneRegionId()']']
 format	ISO_ZONED_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
 format	ISO_ZONED_DATE_TIME	LocalTime	!Unsupported field: Year
 format	ISO_ZONED_DATE_TIME	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -58,6 +63,7 @@ format	ISO_ZONED_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
 format	ISO_ZONED_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
 format	ISO_ZONED_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
 format	ISO_ZONED_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+describe	ISO_DATE_TIME	-	(ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]))[Offset(+HH:MM:ss,'Z')['['ParseCaseSensitive(true)ZoneRegionId()']']]
 format	ISO_DATE_TIME	LocalDate	!Unsupported field: HourOfDay
 format	ISO_DATE_TIME	LocalTime	!Unsupported field: Year
 format	ISO_DATE_TIME	LocalDateTime	2010-09-07T14:05:09.12
@@ -70,6 +76,7 @@ format	ISO_DATE_TIME	LocalDateBig	!Unsupported field: HourOfDay
 format	ISO_DATE_TIME	LocalDateNeg	!Unsupported field: HourOfDay
 format	ISO_DATE_TIME	LocalTimeMidnight	!Unsupported field: Year
 format	ISO_DATE_TIME	LocalTimeNano	!Unsupported field: Year
+describe	ISO_DATE	-	ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))[Offset(+HH:MM:ss,'Z')]
 format	ISO_DATE	LocalDate	2010-09-07
 format	ISO_DATE	LocalTime	!Unsupported field: Year
 format	ISO_DATE	LocalDateTime	2010-09-07
@@ -82,6 +89,7 @@ format	ISO_DATE	LocalDateBig	+12345-01-02
 format	ISO_DATE	LocalDateNeg	-0044-03-15
 format	ISO_DATE	LocalTimeMidnight	!Unsupported field: Year
 format	ISO_DATE	LocalTimeNano	!Unsupported field: Year
+describe	ISO_TIME	-	ParseCaseSensitive(false)(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]])[Offset(+HH:MM:ss,'Z')]
 format	ISO_TIME	LocalDate	!Unsupported field: HourOfDay
 format	ISO_TIME	LocalTime	14:05:09.12
 format	ISO_TIME	LocalDateTime	14:05:09.12
@@ -94,6 +102,7 @@ format	ISO_TIME	LocalDateBig	!Unsupported field: HourOfDay
 format	ISO_TIME	LocalDateNeg	!Unsupported field: HourOfDay
 format	ISO_TIME	LocalTimeMidnight	00:00:00
 format	ISO_TIME	LocalTimeNano	00:00:00.000000001
+describe	ISO_INSTANT	-	ParseCaseSensitive(false)Instant()
 format	ISO_INSTANT	LocalDate	!Unsupported field: InstantSeconds
 format	ISO_INSTANT	LocalTime	!Unsupported field: InstantSeconds
 format	ISO_INSTANT	LocalDateTime	!Unsupported field: InstantSeconds
@@ -106,6 +115,7 @@ format	ISO_INSTANT	LocalDateBig	!Unsupported field: InstantSeconds
 format	ISO_INSTANT	LocalDateNeg	!Unsupported field: InstantSeconds
 format	ISO_INSTANT	LocalTimeMidnight	!Unsupported field: InstantSeconds
 format	ISO_INSTANT	LocalTimeNano	!Unsupported field: InstantSeconds
+describe	BASIC_ISO_DATE	-	ParseCaseSensitive(false)Value(Year,4)Value(MonthOfYear,2)Value(DayOfMonth,2)[ParseStrict(false)Offset(+HHMMss,'Z')ParseStrict(true)]
 format	BASIC_ISO_DATE	LocalDate	20100907
 format	BASIC_ISO_DATE	LocalTime	!Unsupported field: Year
 format	BASIC_ISO_DATE	LocalDateTime	20100907
@@ -118,6 +128,7 @@ format	BASIC_ISO_DATE	LocalDateBig	!Field Year cannot be printed as the value 12
 format	BASIC_ISO_DATE	LocalDateNeg	!Field Year cannot be printed as the value -44 cannot be negative according to the SignStyle
 format	BASIC_ISO_DATE	LocalTimeMidnight	!Unsupported field: Year
 format	BASIC_ISO_DATE	LocalTimeNano	!Unsupported field: Year
+describe	yyyy-MM-dd	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)
 format	yyyy-MM-dd	LocalDate	2010-09-07
 format	yyyy-MM-dd	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd	LocalDateTime	2010-09-07
@@ -130,6 +141,7 @@ format	yyyy-MM-dd	LocalDateBig	+12345-01-02
 format	yyyy-MM-dd	LocalDateNeg	0045-03-15
 format	yyyy-MM-dd	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd	LocalTimeNano	!Unsupported field: YearOfEra
+describe	yyyy-MM-dd HH:mm:ss	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)' 'Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)
 format	yyyy-MM-dd HH:mm:ss	LocalDate	!Unsupported field: HourOfDay
 format	yyyy-MM-dd HH:mm:ss	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd HH:mm:ss	LocalDateTime	2010-09-07 14:05:09
@@ -142,6 +154,7 @@ format	yyyy-MM-dd HH:mm:ss	LocalDateBig	!Unsupported field: HourOfDay
 format	yyyy-MM-dd HH:mm:ss	LocalDateNeg	!Unsupported field: HourOfDay
 format	yyyy-MM-dd HH:mm:ss	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd HH:mm:ss	LocalTimeNano	!Unsupported field: YearOfEra
+describe	dd/MM/yyyy	-	Value(DayOfMonth,2)'/'Value(MonthOfYear,2)'/'Value(YearOfEra,4,19,EXCEEDS_PAD)
 format	dd/MM/yyyy	LocalDate	07/09/2010
 format	dd/MM/yyyy	LocalTime	!Unsupported field: DayOfMonth
 format	dd/MM/yyyy	LocalDateTime	07/09/2010
@@ -154,6 +167,7 @@ format	dd/MM/yyyy	LocalDateBig	02/01/+12345
 format	dd/MM/yyyy	LocalDateNeg	15/03/0045
 format	dd/MM/yyyy	LocalTimeMidnight	!Unsupported field: DayOfMonth
 format	dd/MM/yyyy	LocalTimeNano	!Unsupported field: DayOfMonth
+describe	d MMM uuuu	-	Value(DayOfMonth)' 'Text(MonthOfYear,SHORT)' 'Value(Year,4,19,EXCEEDS_PAD)
 format	d MMM uuuu	LocalDate	7 Sep 2010
 format	d MMM uuuu	LocalTime	!Unsupported field: DayOfMonth
 format	d MMM uuuu	LocalDateTime	7 Sep 2010
@@ -166,6 +180,7 @@ format	d MMM uuuu	LocalDateBig	2 Jan +12345
 format	d MMM uuuu	LocalDateNeg	15 Mar -0044
 format	d MMM uuuu	LocalTimeMidnight	!Unsupported field: DayOfMonth
 format	d MMM uuuu	LocalTimeNano	!Unsupported field: DayOfMonth
+describe	EEEE, MMMM d, yyyy	-	Text(DayOfWeek)','' 'Text(MonthOfYear)' 'Value(DayOfMonth)','' 'Value(YearOfEra,4,19,EXCEEDS_PAD)
 format	EEEE, MMMM d, yyyy	LocalDate	Tuesday, September 7, 2010
 format	EEEE, MMMM d, yyyy	LocalTime	!Unsupported field: DayOfWeek
 format	EEEE, MMMM d, yyyy	LocalDateTime	Tuesday, September 7, 2010
@@ -178,6 +193,7 @@ format	EEEE, MMMM d, yyyy	LocalDateBig	Tuesday, January 2, +12345
 format	EEEE, MMMM d, yyyy	LocalDateNeg	Thursday, March 15, 0045
 format	EEEE, MMMM d, yyyy	LocalTimeMidnight	!Unsupported field: DayOfWeek
 format	EEEE, MMMM d, yyyy	LocalTimeNano	!Unsupported field: DayOfWeek
+describe	EEE	-	Text(DayOfWeek,SHORT)
 format	EEE	LocalDate	Tue
 format	EEE	LocalTime	!Unsupported field: DayOfWeek
 format	EEE	LocalDateTime	Tue
@@ -190,6 +206,7 @@ format	EEE	LocalDateBig	Tue
 format	EEE	LocalDateNeg	Thu
 format	EEE	LocalTimeMidnight	!Unsupported field: DayOfWeek
 format	EEE	LocalTimeNano	!Unsupported field: DayOfWeek
+describe	hh:mm a	-	Value(ClockHourOfAmPm,2)':'Value(MinuteOfHour,2)' 'Text(AmPmOfDay,SHORT)
 format	hh:mm a	LocalDate	!Unsupported field: ClockHourOfAmPm
 format	hh:mm a	LocalTime	02:05 PM
 format	hh:mm a	LocalDateTime	02:05 PM
@@ -202,6 +219,7 @@ format	hh:mm a	LocalDateBig	!Unsupported field: ClockHourOfAmPm
 format	hh:mm a	LocalDateNeg	!Unsupported field: ClockHourOfAmPm
 format	hh:mm a	LocalTimeMidnight	12:00 AM
 format	hh:mm a	LocalTimeNano	12:00 AM
+describe	h:mm:ss a	-	Value(ClockHourOfAmPm)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)' 'Text(AmPmOfDay,SHORT)
 format	h:mm:ss a	LocalDate	!Unsupported field: ClockHourOfAmPm
 format	h:mm:ss a	LocalTime	2:05:09 PM
 format	h:mm:ss a	LocalDateTime	2:05:09 PM
@@ -214,6 +232,7 @@ format	h:mm:ss a	LocalDateBig	!Unsupported field: ClockHourOfAmPm
 format	h:mm:ss a	LocalDateNeg	!Unsupported field: ClockHourOfAmPm
 format	h:mm:ss a	LocalTimeMidnight	12:00:00 AM
 format	h:mm:ss a	LocalTimeNano	12:00:00 AM
+describe	HH:mm:ss.SSS	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)'.'Fraction(NanoOfSecond,3,3)
 format	HH:mm:ss.SSS	LocalDate	!Unsupported field: HourOfDay
 format	HH:mm:ss.SSS	LocalTime	14:05:09.120
 format	HH:mm:ss.SSS	LocalDateTime	14:05:09.120
@@ -226,6 +245,7 @@ format	HH:mm:ss.SSS	LocalDateBig	!Unsupported field: HourOfDay
 format	HH:mm:ss.SSS	LocalDateNeg	!Unsupported field: HourOfDay
 format	HH:mm:ss.SSS	LocalTimeMidnight	00:00:00.000
 format	HH:mm:ss.SSS	LocalTimeNano	00:00:00.000
+describe	HH:mm:ss.SSSSSS	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)'.'Fraction(NanoOfSecond,6,6)
 format	HH:mm:ss.SSSSSS	LocalDate	!Unsupported field: HourOfDay
 format	HH:mm:ss.SSSSSS	LocalTime	14:05:09.120000
 format	HH:mm:ss.SSSSSS	LocalDateTime	14:05:09.120000
@@ -238,6 +258,7 @@ format	HH:mm:ss.SSSSSS	LocalDateBig	!Unsupported field: HourOfDay
 format	HH:mm:ss.SSSSSS	LocalDateNeg	!Unsupported field: HourOfDay
 format	HH:mm:ss.SSSSSS	LocalTimeMidnight	00:00:00.000000
 format	HH:mm:ss.SSSSSS	LocalTimeNano	00:00:00.000000
+describe	yyyyMMddHHmmss	-	Value(YearOfEra,4,19,EXCEEDS_PAD)Value(MonthOfYear,2)Value(DayOfMonth,2)Value(HourOfDay,2)Value(MinuteOfHour,2)Value(SecondOfMinute,2)
 format	yyyyMMddHHmmss	LocalDate	!Unsupported field: HourOfDay
 format	yyyyMMddHHmmss	LocalTime	!Unsupported field: YearOfEra
 format	yyyyMMddHHmmss	LocalDateTime	20100907140509
@@ -250,6 +271,7 @@ format	yyyyMMddHHmmss	LocalDateBig	!Unsupported field: HourOfDay
 format	yyyyMMddHHmmss	LocalDateNeg	!Unsupported field: HourOfDay
 format	yyyyMMddHHmmss	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyyMMddHHmmss	LocalTimeNano	!Unsupported field: YearOfEra
+describe	yy-M-d	-	ReducedValue(YearOfEra,2,2,2000-01-01)'-'Value(MonthOfYear)'-'Value(DayOfMonth)
 format	yy-M-d	LocalDate	10-9-7
 format	yy-M-d	LocalTime	!Unsupported field: YearOfEra
 format	yy-M-d	LocalDateTime	10-9-7
@@ -262,6 +284,7 @@ format	yy-M-d	LocalDateBig	45-1-2
 format	yy-M-d	LocalDateNeg	45-3-15
 format	yy-M-d	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yy-M-d	LocalTimeNano	!Unsupported field: YearOfEra
+describe	D	-	Value(DayOfYear)
 format	D	LocalDate	250
 format	D	LocalTime	!Unsupported field: DayOfYear
 format	D	LocalDateTime	250
@@ -274,6 +297,7 @@ format	D	LocalDateBig	2
 format	D	LocalDateNeg	75
 format	D	LocalTimeMidnight	!Unsupported field: DayOfYear
 format	D	LocalTimeNano	!Unsupported field: DayOfYear
+describe	yyyy-MM-dd'T'HH:mm:ssXXX	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)'T'Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)Offset(+HH:MM,'Z')
 format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDate	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -286,6 +310,7 @@ format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDateBig	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalDateNeg	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ssXXX	LocalTimeNano	!Unsupported field: YearOfEra
+describe	yyyy-MM-dd'T'HH:mm:ss.SSSZ	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)'T'Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)'.'Fraction(NanoOfSecond,3,3)Offset(+HHMM,'+0000')
 format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDate	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -298,6 +323,7 @@ format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDateBig	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalDateNeg	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ss.SSSZ	LocalTimeNano	!Unsupported field: YearOfEra
+describe	yyyy-MM-dd'T'HH:mm:ssxxx	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)'T'Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)Offset(+HH:MM,'+00:00')
 format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDate	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -310,6 +336,7 @@ format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDateBig	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalDateNeg	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ssxxx	LocalTimeNano	!Unsupported field: YearOfEra
+describe	HH:mm X	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)' 'Offset(+HHmm,'Z')
 format	HH:mm X	LocalDate	!Unsupported field: HourOfDay
 format	HH:mm X	LocalTime	!Unsupported field: OffsetSeconds
 format	HH:mm X	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -322,6 +349,7 @@ format	HH:mm X	LocalDateBig	!Unsupported field: HourOfDay
 format	HH:mm X	LocalDateNeg	!Unsupported field: HourOfDay
 format	HH:mm X	LocalTimeMidnight	!Unsupported field: OffsetSeconds
 format	HH:mm X	LocalTimeNano	!Unsupported field: OffsetSeconds
+describe	HH:mm XX	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)' 'Offset(+HHMM,'Z')
 format	HH:mm XX	LocalDate	!Unsupported field: HourOfDay
 format	HH:mm XX	LocalTime	!Unsupported field: OffsetSeconds
 format	HH:mm XX	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -334,6 +362,7 @@ format	HH:mm XX	LocalDateBig	!Unsupported field: HourOfDay
 format	HH:mm XX	LocalDateNeg	!Unsupported field: HourOfDay
 format	HH:mm XX	LocalTimeMidnight	!Unsupported field: OffsetSeconds
 format	HH:mm XX	LocalTimeNano	!Unsupported field: OffsetSeconds
+describe	HH:mm x	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)' 'Offset(+HHmm,'+00')
 format	HH:mm x	LocalDate	!Unsupported field: HourOfDay
 format	HH:mm x	LocalTime	!Unsupported field: OffsetSeconds
 format	HH:mm x	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -346,6 +375,7 @@ format	HH:mm x	LocalDateBig	!Unsupported field: HourOfDay
 format	HH:mm x	LocalDateNeg	!Unsupported field: HourOfDay
 format	HH:mm x	LocalTimeMidnight	!Unsupported field: OffsetSeconds
 format	HH:mm x	LocalTimeNano	!Unsupported field: OffsetSeconds
+describe	'Date:' yyyy 'o''clock' ''	-	'Date:'' 'Value(YearOfEra,4,19,EXCEEDS_PAD)' ''o''clock'' '''
 format	'Date:' yyyy 'o''clock' ''	LocalDate	Date: 2010 o'clock '
 format	'Date:' yyyy 'o''clock' ''	LocalTime	!Unsupported field: YearOfEra
 format	'Date:' yyyy 'o''clock' ''	LocalDateTime	Date: 2010 o'clock '
@@ -358,6 +388,7 @@ format	'Date:' yyyy 'o''clock' ''	LocalDateBig	Date: +12345 o'clock '
 format	'Date:' yyyy 'o''clock' ''	LocalDateNeg	Date: 0045 o'clock '
 format	'Date:' yyyy 'o''clock' ''	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	'Date:' yyyy 'o''clock' ''	LocalTimeNano	!Unsupported field: YearOfEra
+describe	yyyy-MM-dd[ HH:mm]	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)[' 'Value(HourOfDay,2)':'Value(MinuteOfHour,2)]
 format	yyyy-MM-dd[ HH:mm]	LocalDate	2010-09-07
 format	yyyy-MM-dd[ HH:mm]	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd[ HH:mm]	LocalDateTime	2010-09-07 14:05
@@ -370,6 +401,7 @@ format	yyyy-MM-dd[ HH:mm]	LocalDateBig	+12345-01-02
 format	yyyy-MM-dd[ HH:mm]	LocalDateNeg	0045-03-15
 format	yyyy-MM-dd[ HH:mm]	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd[ HH:mm]	LocalTimeNano	!Unsupported field: YearOfEra
+describe	HH:mm[:ss]	-	Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)]
 format	HH:mm[:ss]	LocalDate	!Unsupported field: HourOfDay
 format	HH:mm[:ss]	LocalTime	14:05:09
 format	HH:mm[:ss]	LocalDateTime	14:05:09
@@ -382,6 +414,7 @@ format	HH:mm[:ss]	LocalDateBig	!Unsupported field: HourOfDay
 format	HH:mm[:ss]	LocalDateNeg	!Unsupported field: HourOfDay
 format	HH:mm[:ss]	LocalTimeMidnight	00:00:00
 format	HH:mm[:ss]	LocalTimeNano	00:00:00
+describe	VV	-	ZoneId()
 format	VV	LocalDate	!Unable to extract ZoneId from temporal 2010-09-07
 format	VV	LocalTime	!Unable to extract ZoneId from temporal 14:05:09.120
 format	VV	LocalDateTime	!Unable to extract ZoneId from temporal 2010-09-07T14:05:09.120
@@ -394,6 +427,7 @@ format	VV	LocalDateBig	!Unable to extract ZoneId from temporal +12345-01-02
 format	VV	LocalDateNeg	!Unable to extract ZoneId from temporal -0044-03-15
 format	VV	LocalTimeMidnight	!Unable to extract ZoneId from temporal 00:00
 format	VV	LocalTimeNano	!Unable to extract ZoneId from temporal 00:00:00.000000001
+describe	n	-	Value(NanoOfSecond,1,19,NOT_NEGATIVE)
 format	n	LocalDate	!Unsupported field: NanoOfSecond
 format	n	LocalTime	120000000
 format	n	LocalDateTime	120000000
@@ -406,6 +440,7 @@ format	n	LocalDateBig	!Unsupported field: NanoOfSecond
 format	n	LocalDateNeg	!Unsupported field: NanoOfSecond
 format	n	LocalTimeMidnight	0
 format	n	LocalTimeNano	1
+describe	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	-	Value(YearOfEra,4,19,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)'T'Value(HourOfDay,2)':'Value(MinuteOfHour,2)':'Value(SecondOfMinute,2)'.'Fraction(NanoOfSecond,3,3)Offset(+HH:MM,'Z')'['ZoneId()']'
 format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDate	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalTime	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDateTime	!Unsupported field: OffsetSeconds
@@ -418,6 +453,7 @@ format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDateBig	!Unsupported field: Hou
 format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalDateNeg	!Unsupported field: HourOfDay
 format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalTimeMidnight	!Unsupported field: YearOfEra
 format	yyyy-MM-dd'T'HH:mm:ss.SSSXXX'['VV']'	LocalTimeNano	!Unsupported field: YearOfEra
+describe	uuuu	-	Value(Year,4,19,EXCEEDS_PAD)
 format	uuuu	LocalDate	2010
 format	uuuu	LocalTime	!Unsupported field: Year
 format	uuuu	LocalDateTime	2010
@@ -430,6 +466,7 @@ format	uuuu	LocalDateBig	+12345
 format	uuuu	LocalDateNeg	-0044
 format	uuuu	LocalTimeMidnight	!Unsupported field: Year
 format	uuuu	LocalTimeNano	!Unsupported field: Year
+describe	yyyy	-	Value(YearOfEra,4,19,EXCEEDS_PAD)
 format	yyyy	LocalDate	2010
 format	yyyy	LocalTime	!Unsupported field: YearOfEra
 format	yyyy	LocalDateTime	2010

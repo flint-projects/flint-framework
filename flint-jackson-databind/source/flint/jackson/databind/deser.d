@@ -23,6 +23,7 @@ import flint.jackson.core : JsonParser, JsonToken, tokenName;
 import flint.jackson.databind.cfg : DeserializationFeature, MapperConfig;
 import flint.jackson.databind.exc : DatabindException, InvalidDefinitionException, InvalidFormatException,
     MismatchedInputException, Reference, UnrecognizedPropertyException, ValueInstantiationException;
+import flint.jackson.databind.ext.javatime : JavaTimeFormat, isJavaTime, readJavaTime;
 import flint.jackson.databind.introspect : BeanDescription, BeanPropertyDefinition;
 import flint.jackson.databind.node : readTree;
 import flint.java.util : RawCollection, RawMap;
@@ -47,17 +48,21 @@ string javaTypeName(string type) pure nothrow
     case "ulong":
         return "java.math.BigInteger";
     default:
-        return type;
+        // flint.java.time.LocalDate is java.time.LocalDate.
+        return type.length > 11 && type[0 .. 11] == "flint.java." ? type[6 .. $] : type;
     }
 }
 
 /// Deserialize the value at the parser's current token into the Flint type `type`. `existing` is the property's
 /// current value: a collection or map without a creator in its descriptor is cleared and refilled.
-Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existing = Any.init)
+Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existing = Any.init,
+        JavaTimeFormat format = JavaTimeFormat.init)
 {
     const t = p.currentToken();
     if (auto scalar = readScalar(config, p, type, t))
         return scalar.value;
+    if (isJavaTime(type))
+        return readJavaTime(config, p, type, format);
     if (isTreeType(type))
         return Any.ofObject(readTree(p, config.nodeFactory), type);
     if (type == "flint.engine.aot.any.Any" || type == "object.Object")
@@ -509,7 +514,8 @@ private Any readProperty(MapperConfig config, JsonParser p, BeanDescription bean
 {
     Any value;
     withPath(Reference(property.name, -1, bean.descriptor.simpleName()), () {
-        value = deserializeValue(config, p, property.type, current);
+        value = deserializeValue(config, p, property.type, current, property.hasFormat
+            ? JavaTimeFormat.of(property.format) : JavaTimeFormat.init);
     });
     return value;
 }

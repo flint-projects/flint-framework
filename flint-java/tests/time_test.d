@@ -230,7 +230,12 @@ unittest
     foreach (row; rows(import("time_format.tsv")))
     {
         string got;
-        if (row[0] == "format")
+        if (row[0] == "describe")
+        {
+            got = formatterNamed(row[1]).toString();
+            assert(got == row[3], row[1] ~ ": " ~ got ~ " != " ~ row[3]);
+        }
+        else if (row[0] == "format")
         {
             try
                 got = formatKind(formatterNamed(row[1]), row[2]);

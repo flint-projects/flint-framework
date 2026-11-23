@@ -1,0 +1,82 @@
+write	event	-	{"date":"2010-09-07","instant":"2023-11-14T22:13:20.005Z","offset":"2010-09-07T14:05:09+02:00","time":"14:05:09.12","timeout":"PT1M30S","when":"2010-09-07T14:05:00","zone":"UTC","zoneOffset":"-05:00","zoned":"2010-09-07T14:05:09Z"}
+write	formatted	-	{"asString":"PT1.5S","date":"07/09/2010","epochDay":[2010,9,7],"offset":"2010-09-07T14:05:09.120+02:00","time":"14:05","when":"2010-09-07 14:05:09"}
+write	stamps_event	-	{"date":[2010,9,7],"instant":1700000000.005000000,"offset":1283861109.000000000,"time":[14,5,9,120000000],"timeout":"PT1M30S","when":[2010,9,7,14,5],"zone":"UTC","zoneOffset":"-05:00","zoned":1283868309.000000000}
+write	millis_event	-	{"date":[2010,9,7],"instant":1700000000005,"offset":1283861109000,"time":[14,5,9,120],"timeout":90000,"when":[2010,9,7,14,5],"zone":"UTC","zoneOffset":"-05:00","zoned":1283868309000}
+write	durations_event	-	{"date":"2010-09-07","instant":"2023-11-14T22:13:20.005Z","offset":"2010-09-07T14:05:09+02:00","time":"14:05:09.12","timeout":90.000000000,"when":"2010-09-07T14:05:00","zone":"UTC","zoneOffset":"-05:00","zoned":"2010-09-07T14:05:09Z"}
+write	zone_ids_event	-	{"date":"2010-09-07","instant":"2023-11-14T22:13:20.005Z","offset":"2010-09-07T14:05:09+02:00","time":"14:05:09.12","timeout":"PT1M30S","when":"2010-09-07T14:05:00","zone":"UTC","zoneOffset":"-05:00","zoned":"2010-09-07T14:05:09Z[UTC]"}
+write	stamps_time_whole	-	[10,15]
+write	stamps_time_seconds	-	[10,15,30]
+write	stamps_datetime_whole	-	[2013,1,1,9,30]
+write	stamps_instant_whole	-	1700000000.000000000
+write	stamps_instant_neg	-	-1E-9
+write	millis_instant_neg	-	-1
+write	millis_time	-	[10,15,30,123]
+write	durations_neg	-	-1.500000000
+write	durations_zero	-	0.0
+write	durations_nano	-	1E-9
+write	stamps_instant_epoch	-	0.0
+write	stamps_instant_small	-	5E-9
+write	stamps_instant_milli	-	0.123000000
+write	stamps_instant_big	-	253402300800.000000000
+write	millis_datetime	-	[2013,1,1,9,30,0,1]
+write	millis_duration_neg	-	-1500
+write	list	-	["2010-09-07","2024-02-29"]
+read	boot:LocalDate	"2010-09-07"	2010-09-07
+read	boot:LocalDate	[2010,9,7]	2010-09-07
+read	boot:LocalDate	"2010-09-07T10:15:30"	2010-09-07
+read	boot:LocalDate	""	null
+read	boot:LocalDate	"2010-13-01"	!Cannot deserialize value of type `java.time.LocalDate` from String "2010-13-01": Failed to deserialize `java.time.LocalDate` (with format 'Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2)'): (java.time.format.DateTimeParseException) Text '2010-13-01' could not be parsed: Invalid value for MonthOfYear (valid values 1 - 12): 13
+read	boot:LocalDate	14862	2010-09-10
+read	boot:LocalDate	null	null
+read	boot:LocalDate	" 2010-09-07 "	2010-09-07
+read	boot:LocalDate	true	!Expected array or string.
+read	boot:LocalDate	{}	!Expected array or string.
+read	boot:LocalTime	"10:15"	10:15
+read	boot:LocalTime	"10:15:30.123"	10:15:30.123
+read	boot:LocalTime	[10,15]	10:15
+read	boot:LocalTime	[10,15,30,123000000]	10:15:30.123
+read	boot:LocalTime	"25:00"	!Cannot deserialize value of type `java.time.LocalTime` from String "25:00": Failed to deserialize `java.time.LocalTime` (with format 'Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]'): (java.time.format.DateTimeParseException) Text '25:00' could not be parsed: Invalid value for HourOfDay (valid values 0 - 23): 25
+read	boot:LocalTime	"2010-09-07T10:15:30"	10:15:30
+read	boot:LocalTime	1000	!raw timestamp (1000) not allowed for `java.time.LocalTime`: need additional information such as an offset or time-zone (see class Javadocs)
+read	boot:LocalDateTime	"2010-09-07T10:15:30"	2010-09-07T10:15:30
+read	boot:LocalDateTime	"2010-09-07T10:15"	2010-09-07T10:15
+read	boot:LocalDateTime	[2013,1,1,9,30]	2013-01-01T09:30
+read	boot:LocalDateTime	[2013,1,1,9,30,5,7000]	2013-01-01T09:30:05.000007
+read	boot:LocalDateTime	"2010-09-07"	!Cannot deserialize value of type `java.time.LocalDateTime` from String "2010-09-07": Failed to deserialize `java.time.LocalDateTime` (with format 'ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]])'): (java.time.format.DateTimeParseException) Text '2010-09-07' could not be parsed at index 10
+read	boot:LocalDateTime	"2010-09-07T10:15:30Z"	2010-09-07T10:15:30
+read	boot:LocalDateTime	"2010-09-07T10:15:30+01:00"	!Cannot deserialize value of type `java.time.LocalDateTime` from String "2010-09-07T10:15:30+01:00": Failed to deserialize `java.time.LocalDateTime` (with format 'ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]])'): (java.time.format.DateTimeParseException) Text '2010-09-07T10:15:30+01:00' could not be parsed, unparsed text found at index 19
+read	boot:LocalDateTime	"2010-09-07 10:15"	!Cannot deserialize value of type `java.time.LocalDateTime` from String "2010-09-07 10:15": Failed to deserialize `java.time.LocalDateTime` (with format 'ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]])'): (java.time.format.DateTimeParseException) Text '2010-09-07 10:15' could not be parsed at index 10
+read	boot:Instant	"2010-09-07T10:15:30Z"	2010-09-07T10:15:30Z
+read	boot:Instant	"2010-09-07T10:15:30.5+01:00"	2010-09-07T09:15:30.500Z
+read	boot:Instant	1700000000	2023-11-14T22:13:20Z
+read	boot:Instant	1700000000.123456789	2023-11-14T22:13:20.123456789Z
+read	boot:Instant	-1.000000001	1969-12-31T23:59:58.999999999Z
+read	boot:Instant	"1700000000"	2023-11-14T22:13:20Z
+read	boot:Instant	1700000000123	+55840-11-08T22:15:23Z
+read	boot:Instant	"2010-09-07T10:15:30"	!Cannot deserialize value of type `java.time.Instant` from String "2010-09-07T10:15:30": Failed to deserialize `java.time.Instant` (with format 'ParseCaseSensitive(false)Instant()'): (java.time.format.DateTimeParseException) Text '2010-09-07T10:15:30' could not be parsed at index 19
+read	boot:Instant	"x"	!Cannot deserialize value of type `java.time.Instant` from String "x": Failed to deserialize `java.time.Instant` (with format 'ParseCaseSensitive(false)Instant()'): (java.time.format.DateTimeParseException) Text 'x' could not be parsed at index 0
+read	boot:OffsetDateTime	"2010-09-07T10:15:30+01:00"	2010-09-07T09:15:30Z
+read	boot:OffsetDateTime	"2010-09-07T10:15:30Z"	2010-09-07T10:15:30Z
+read	boot:OffsetDateTime	1700000000.5	2023-11-14T22:13:20.500Z
+read	boot:OffsetDateTime	"2010-09-07T10:15:30"	!Cannot deserialize value of type `java.time.OffsetDateTime` from String "2010-09-07T10:15:30": Failed to deserialize `java.time.OffsetDateTime` (with format 'ParseCaseSensitive(false)(ParseCaseSensitive(false)(Value(Year,4,10,EXCEEDS_PAD)'-'Value(MonthOfYear,2)'-'Value(DayOfMonth,2))'T'(Value(HourOfDay,2)':'Value(MinuteOfHour,2)[':'Value(SecondOfMinute,2)[Fraction(NanoOfSecond,0,9,DecimalPoint)]]))ParseStrict(false)Offset(+HH:MM:ss,'Z')ParseStrict(true)'): (java.time.format.DateTimeParseException) Text '2010-09-07T10:15:30' could not be parsed at index 19
+read	boot:ZonedDateTime	"2010-09-07T10:15:30+01:00"	2010-09-07T09:15:30Z
+read	boot:ZonedDateTime	"2010-09-07T10:15:30Z[UTC]"	2010-09-07T10:15:30Z
+read	boot:ZonedDateTime	"2010-09-07T10:15:30Z"	2010-09-07T10:15:30Z
+read	boot:ZonedDateTime	1700000000	2023-11-14T22:13:20Z
+read	boot:Duration	"PT1.5S"	PT1.5S
+read	boot:Duration	"P2DT3H"	PT51H
+read	boot:Duration	90	PT1M30S
+read	boot:Duration	1.5	PT1.5S
+read	boot:Duration	-1.5	PT-1.5S
+read	boot:Duration	"90"	!Cannot deserialize value of type `java.time.Duration` from String "90": Failed to deserialize `java.time.Duration` (with format '[default format]'): (java.time.format.DateTimeParseException) Text cannot be parsed to a Duration
+read	boot:Duration	"bogus"	!Cannot deserialize value of type `java.time.Duration` from String "bogus": Failed to deserialize `java.time.Duration` (with format '[default format]'): (java.time.format.DateTimeParseException) Text cannot be parsed to a Duration
+read	boot:ZoneOffset	"+05:30"	+05:30
+read	boot:ZoneOffset	"Z"	Z
+read	boot:ZoneOffset	"bogus"	!Cannot deserialize value of type `java.time.ZoneOffset` from String "bogus": Failed to deserialize `java.time.ZoneOffset` (with format '[default format]'): (java.time.DateTimeException) Invalid ID for ZoneOffset, non numeric characters found: bogus
+read	boot:ZoneId	"UTC"	UTC
+read	boot:ZoneId	"+02:00"	+02:00
+read	boot:ZoneId	"UTC+2"	UTC+02:00
+read	boot:Event	{"date":"2010-09-07","instant":"2023-11-14T22:13:20.005Z","offset":"2010-09-07T14:05:09+02:00","time":"14:05:09.12","timeout":"PT1M30S","when":"2010-09-07T14:05:00","zone":"UTC","zoneOffset":"-05:00","zoned":"2010-09-07T14:05:09Z"}	2010-09-07 14:05:09.120 2010-09-07T14:05 2023-11-14T22:13:20.005Z 2010-09-07T12:05:09Z 2010-09-07T14:05:09Z PT1M30S -05:00 UTC
+read	boot:Event	{"date":[2010,9,7],"instant":1700000000.005000000,"offset":1283861109.000000000,"time":[14,5,9,120000000],"timeout":"PT1M30S","when":[2010,9,7,14,5],"zone":"UTC","zoneOffset":"-05:00","zoned":1283868309.000000000}	2010-09-07 14:05:09.120 2010-09-07T14:05 2023-11-14T22:13:20.005Z 2010-09-07T12:05:09Z 2010-09-07T14:05:09Z PT1M30S -05:00 UTC
+read	boot:Formatted	{"asString":"PT1.5S","date":"07/09/2010","epochDay":[2010,9,7],"offset":"2010-09-07T14:05:09.120+02:00","time":"14:05","when":"2010-09-07 14:05:09"}	2010-09-07 2010-09-07T14:05:09 14:05 2010-09-07T12:05:09.120Z 2010-09-07 PT1.5S
+read	boot:Formatted	{"date":"2010-09-07"}	!Cannot deserialize value of type `java.time.LocalDate` from String "2010-09-07": Failed to deserialize `java.time.LocalDate` (with format 'Value(DayOfMonth,2)'/'Value(MonthOfYear,2)'/'Value(YearOfEra,4,19,EXCEEDS_PAD)'): (java.time.format.DateTimeParseException) Text '2010-09-07' could not be parsed at index 2
