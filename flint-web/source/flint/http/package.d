@@ -893,27 +893,29 @@ struct MediaType
     /// Parses a comma-separated list; `null` or empty gives an empty list.
     static MediaType[] parseMediaTypes(string mediaTypes) pure
     {
-        if (mediaTypes.length == 0)
+        // One allocation (an Accept header on every request): size the result, then parse into it.
+        const count = MimeTypeUtils.countMimeTypes(mediaTypes);
+        if (count == 0)
             return null;
-        MimeType[] mimeTypes;
+        auto result = new MediaType[count];
+        size_t i;
         try
-            mimeTypes = MimeTypeUtils.parseMimeTypes(mediaTypes);
+            MimeTypeUtils.eachMimeType(mediaTypes, (MimeType mimeType) {
+                try
+                    result[i++] = MediaType(mimeType);
+                catch (IllegalArgumentException ex)
+                    throw new InvalidMediaTypeException(mimeType.toString(), ex.getMessage());
+            });
         catch (InvalidMimeTypeException ex)
             throw new InvalidMediaTypeException(ex);
-        auto result = new MediaType[mimeTypes.length];
-        foreach (i, mimeType; mimeTypes)
-        {
-            try
-                result[i] = MediaType(mimeType);
-            catch (IllegalArgumentException ex)
-                throw new InvalidMediaTypeException(mimeType.toString(), ex.getMessage());
-        }
         return result;
     }
 
     /// Parses every element of a list of comma-separated lists.
     static MediaType[] parseMediaTypes(scope const(string)[] mediaTypes) pure
     {
+        if (mediaTypes.length == 1)
+            return parseMediaTypes(mediaTypes[0]); // the common case: no concatenated copy
         MediaType[] result;
         foreach (mediaType; mediaTypes)
             result ~= parseMediaTypes(mediaType);
