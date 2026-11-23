@@ -21,7 +21,7 @@ unittest
     const first = parsedLookupPath(request);
     assert(first.raw == "/api/owners/7" && first.segments == ["api", "owners", "7"]);
     auto cached = request.getAttribute(pathAttribute);
-    assert(!cached.isNull() && cached.holds!PathContainer);
+    assert(!cached.isNull() && cached.asObject() !is null); // one object holds the parse and its segments
     const second = parsedLookupPath(request);
     assert(second.segments is first.segments, "the second lookup reuses the first parse");
 

@@ -1289,7 +1289,7 @@ private void assertNoMatch(const PathPattern pp, string path)
     assert(!pp.matches(path));
 }
 
-private PathMatchInfo* matchAndExtract(string pattern, string path)
+private const(PathMatchInfo)* matchAndExtract(string pattern, string path)
 {
     return parse(pattern).matchAndExtract(path);
 }
@@ -1314,7 +1314,7 @@ private void checkNoMatch(string uriTemplate, string path)
     assert(!pattern.matches(path));
 }
 
-private PathMatchInfo* checkCapture(string uriTemplate, string path, string[] keyValues...)
+private const(PathMatchInfo)* checkCapture(string uriTemplate, string path, string[] keyValues...)
 {
     const parser = new PathPatternParser();
     const pattern = parser.parse(uriTemplate);
@@ -1329,7 +1329,7 @@ private PathMatchInfo* checkCapture(string uriTemplate, string path, string[] ke
     return matchResult;
 }
 
-private PathMatchInfo* matchAndExtract(const PathPattern p, string path)
+private const(PathMatchInfo)* matchAndExtract(const PathPattern p, string path)
 {
     return p.matchAndExtract(path);
 }

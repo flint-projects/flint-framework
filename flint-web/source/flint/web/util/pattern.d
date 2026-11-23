@@ -48,6 +48,9 @@ class PatternParseException : IllegalArgumentException
 }
 
 /// `PathPattern.PathMatchInfo`: the URI variables of a match (and matrix variables, empty in this port).
+/// The match of a pattern without URI variables, shared by every such match.
+private immutable PathMatchInfo noVariables;
+
 struct PathMatchInfo
 {
     private string[] names;
@@ -140,19 +143,21 @@ final class PathPattern
         return match(path, false, captured);
     }
 
-    /// The URI variables when `path` matches, else `null` (R5).
-    PathMatchInfo* matchAndExtract(string path) const
+    /// The URI variables when `path` matches, else `null` (R5). Read-only, as Spring's `PathMatchInfo` is.
+    const(PathMatchInfo)* matchAndExtract(string path) const
     {
         const parsed = PathContainer.parsePath(path);
         return matchAndExtract(parsed);
     }
 
     /// ditto
-    package(flint) PathMatchInfo* matchAndExtract(scope const ref PathContainer path) const
+    package(flint) const(PathMatchInfo)* matchAndExtract(scope const ref PathContainer path) const
     {
         string[][2] captured;
         if (!match(path, true, captured))
             return null;
+        if (captured[0].length == 0)
+            return &noVariables; // a pattern without variables: nothing to allocate
         auto info = new PathMatchInfo;
         info.names = captured[0];
         info.values = captured[1];
@@ -410,6 +415,13 @@ package(flint) struct PathContainer
     /// Parses an encoded path into decoded segments.
     static PathContainer parsePath(string path) pure
     {
+        return parsePath(path, null);
+    }
+
+    /// ditto, with the segments in `storage` when it is long enough (a caller that keeps the result beside its
+    /// storage, in one object, parses without a separate allocation).
+    package(flint) static PathContainer parsePath(string path, return scope string[] storage) pure
+    {
         PathContainer result;
         result.raw = path;
         if (path.length == 0)
@@ -431,7 +443,7 @@ package(flint) struct PathContainer
         foreach (c; rest)
             if (c == '/')
                 count++;
-        result.segments = new string[count];
+        result.segments = count <= storage.length ? storage[0 .. count] : new string[count];
         size_t from, index;
         foreach (i; 0 .. rest.length + 1)
         {

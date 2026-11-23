@@ -102,15 +102,23 @@ package(flint) PathContainer parsedLookupPath(HttpServletRequest request)
 {
     const path = lookupPath(request);
     auto cached = request.getAttribute(pathAttribute);
-    if (!cached.isNull() && cached.holds!PathContainer)
+    if (auto holder = cast(ParsedPath) cached.asObject())
     {
-        auto parsed = cached.get!PathContainer;
-        if (parsed.raw is path || parsed.raw == path)
-            return parsed;
+        if (holder.parsed.raw is path || holder.parsed.raw == path)
+            return holder.parsed;
     }
-    auto parsed = PathContainer.parsePath(path);
-    request.setAttribute(pathAttribute, Any.of(parsed));
-    return parsed;
+    // One allocation per request: the parse and up to four segments live in one object, stored by reference.
+    auto holder = new ParsedPath;
+    holder.parsed = PathContainer.parsePath(path, holder.segments[]);
+    request.setAttribute(pathAttribute, Any.of(holder));
+    return holder.parsed;
+}
+
+/// A request's parsed lookup path, with room for its segments.
+private final class ParsedPath
+{
+    PathContainer parsed;
+    string[4] segments;
 }
 
 /// `AbstractHandlerMapping`: interceptors and ordering around `getHandlerInternal`.
