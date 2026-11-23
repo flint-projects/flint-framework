@@ -51,7 +51,8 @@ class Peer(BaseHTTPRequestHandler):
         parts = urlsplit(self.path)
         assert parts.path == "/".join(escaped(unquote(segment)) for segment in parts.path.split("/"))
         assert parts.path == PATH or parts.path.startswith("/flint-test/")
-        params = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
+        # Python 3.9 rejects an empty query under strict parsing; 3.10 and later return no fields.
+        params = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True) if parts.query else []
         criteria = dict(params)
         signed = self.headers.get("Authorization")
         if signed:
