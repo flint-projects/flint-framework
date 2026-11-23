@@ -484,6 +484,16 @@ abstract class StatementCreatorUtils
             return Types.VARCHAR;
         case "immutable(ubyte)[]", "ubyte[]", "const(ubyte)[]":
             return Types.VARBINARY;
+        default:
+            return temporalSqlType(typeName);
+        }
+    }
+
+    // The java.time part of Spring's javaTypeToSqlTypeMap.
+    private static int temporalSqlType(string typeName)
+    {
+        switch (typeName)
+        {
         case "flint.java.time.LocalDate":
             return Types.DATE;
         case "flint.java.time.LocalTime":
