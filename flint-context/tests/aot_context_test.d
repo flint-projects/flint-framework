@@ -178,7 +178,7 @@ unittest
     properties.put("spring.datasource.url", Any.of("jdbc:h2:mem:test")); // the spring.* alias of flint.*
     properties.put("server.port", Any.of("9090"));
     environment.getPropertySources().addFirst(new MapPropertySource("test", properties));
-    context.loadAotRegistry(&populate);
+    context.deferAotRegistry(&populate); // conditions run inside refresh, after the environment is configured
     context.refresh();
     assert(context.getBean!GreetingService().greet("Ada") == "Hello, Ada!");
     assert(context.getBean!GreetingService().port == 9090);

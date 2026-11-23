@@ -836,6 +836,7 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
     private string applicationType;
     private string[] scanPackages;
     private string webApplicationType = "NONE";
+    private RegistryPopulator deferredRegistry;
 
     /// A context with a new factory.
     this()
@@ -893,7 +894,29 @@ class GenericApplicationContext : AbstractApplicationContext, BeanDefinitionRegi
 
     // ---- AOT registry
 
-    /// Load `populate`'s definitions (by default the installed generated registry), evaluating conditions in order.
+    /++
+    Load the generated registry during `refresh()`, before the `BeanFactoryPostProcessor`s run (where Spring's
+    `ConfigurationClassPostProcessor` evaluates conditions), so singletons registered after construction (Boot's
+    application arguments, banner and binder) are visible to startup conditions. Null means the installed registry.
+    +/
+    final void deferAotRegistry(RegistryPopulator populate = null)
+    {
+        deferredRegistry = populate is null ? installedRegistry() : populate;
+    }
+
+    /// Load a deferred registry, then run the factory post-processors.
+    protected override void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory)
+    {
+        if (deferredRegistry !is null)
+        {
+            auto populate = deferredRegistry;
+            deferredRegistry = null;
+            loadAotRegistry(populate);
+        }
+        super.invokeBeanFactoryPostProcessors(beanFactory);
+    }
+
+    /// Load `populate`'s definitions (by default the installed generated registry) now, evaluating conditions in order.
     void loadAotRegistry(RegistryPopulator populate = null)
     {
         if (populate is null)

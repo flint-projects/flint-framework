@@ -182,19 +182,20 @@ construction, then refreshed.
 +/
 class AnnotationConfigApplicationContext : GenericApplicationContext
 {
-    /// A context loading the installed registry; call `refresh()` after any further registration.
+    /// A context over the installed registry, loaded (and its conditions evaluated) during `refresh()`; register
+    /// further beans and singletons first.
     this()
     {
         super();
-        loadAotRegistry();
+        deferAotRegistry();
     }
 
-    /// A context loading `populate` (a generated registry), then refreshed: Java's
+    /// A context over `populate` (a generated registry), refreshed: Java's
     /// `new AnnotationConfigApplicationContext(AppConfig.class)`, with the configuration resolved at build time.
     this(RegistryPopulator populate)
     {
         super();
-        loadAotRegistry(populate);
+        deferAotRegistry(populate);
         refresh();
     }
 
