@@ -46,7 +46,8 @@ private struct Payload
     Text name;
 }
 
-@HttpExchange("http://127.0.0.1:43719")
+// The fixture serves the exchange on an ephemeral port; the tests bind to it with a run-time base URL.
+@HttpExchange("http://exchange.invalid")
 private interface Echo
 {
 @safe nothrow @nogc:
@@ -57,6 +58,27 @@ private interface Echo
 
     @PostExchange("/echo")
     Result!Payload post(ref scope RequestArena arena, ref Context context, scope const ref Payload value);
+}
+
+@("a run-time base URL replaces the annotation's and follows its rules")
+unittest
+{
+    HttpClient client;
+    const annotated = bindHttpClient!Echo(client);
+    assert(annotated !is null);
+    foreach (base; ["http://127.0.0.1:8080", "https://example.com/api/", "http://[::1]:9/v1"])
+    {
+        const bound = bindHttpClient!Echo(client, base);
+        assert(bound.ok && bound.value !is null, base);
+    }
+    foreach (base; [
+        "", "ftp://example.com", "http://", "http:///path", "https://example.com/?q=1",
+        "http://example.com/#top", "http://user@example.com", "http://exa mple.com", "http://{host}"
+    ])
+    {
+        const bound = bindHttpClient!Echo(client, base);
+        assert(bound.error.code == Status.invalidArgument && bound.value is null, base);
+    }
 }
 
 version (FlintNativeCurl)
@@ -377,7 +399,8 @@ version (FlintNativeCurl)
         assert(client.open(ClientOptions.init).code == Status.ok);
         scope (exit)
             assert(client.close().code == Status.ok);
-        auto exchange = bindHttpClient!Echo(client);
+        auto exchange = bindHttpClient!Echo(client, setting("EXCHANGE")).value;
+        assert(exchange !is null, "the fixture's exchange base URL was rejected");
         ubyte[4096] storage;
         auto arena = RequestArena(storage[]);
         Context context;

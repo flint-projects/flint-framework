@@ -15,42 +15,57 @@ import std.traits : ParameterIdentifierTuple, Parameters, ParameterStorageClass,
 
 package(flint.engine.http) Client makeExchange(Client)(ref HttpClient transport)
 {
+    enum base = trimBase(annotatedBase!Client);
+    static assert(validBase(base), "HTTP exchange requires a literal HTTP or HTTPS base URL without query or fragment");
+    return new Adapter!Client(transport, base);
+}
+
+/// The same adapter with a base URL chosen at run time in place of the annotation's.
+package(flint.engine.http) Result!Client makeExchange(Client)(ref HttpClient transport, string baseUrl)
+{
+    cast(void) annotatedBase!Client;
+    const base = trimBase(baseUrl);
+    if (!validBase(base))
+        return Result!Client(null, Error(Status.invalidArgument,
+                "HTTP exchange base URL must be HTTP or HTTPS without query or fragment"));
+    return Result!Client(new Adapter!Client(transport, base));
+}
+
+private template annotatedBase(Client)
+{
     static assert(is(Client == interface), "HTTP exchange requires an interface");
     alias annotations = getUDAs!(Client, HttpExchange);
     static if (annotations.length != 1)
         static assert(0, "HTTP exchange interface must have exactly one HttpExchange annotation");
     else
-    {
-        enum base = trimBase(annotations[0].baseUrl);
-        static assert(validBase(base),
-                "HTTP exchange requires a literal HTTP or HTTPS base URL without query or fragment");
-        return new Adapter!(Client, base)(transport);
-    }
+        enum annotatedBase = annotations[0].baseUrl;
 }
 
-private final class Adapter(Client, string base) : Client
+private final class Adapter(Client) : Client
 {
     private HttpClient transport;
+    private string base;
 
-    this(HttpClient opened)
+    this(HttpClient opened, string origin)
     {
         transport = opened;
+        base = origin;
     }
 
     static foreach (name; __traits(allMembers, Client))
     {
         static foreach (method; __traits(getOverloads, Client, name))
         {
-            mixin Implement!(method, base);
+            mixin Implement!method;
         }
     }
 }
 
-private mixin template Implement(alias method, string base)
+private mixin template Implement(alias method)
 {
     mixin("override ReturnType!method " ~ __traits(identifier,
             method) ~ "(Parameters!method args) @safe nothrow @nogc"
-            ~ "{ return request!(method, base)(transport, args); }");
+            ~ "{ return request!method(transport, base, args); }");
 }
 
 private enum ArgumentKind : ubyte
@@ -90,7 +105,7 @@ private struct Shape
     bool addMediaType;
 }
 
-private ReturnType!method request(alias method, string base)(ref HttpClient http, Parameters!method args) nothrow @nogc
+private ReturnType!method request(alias method)(ref HttpClient http, string base, Parameters!method args) nothrow @nogc
 {
     enum diagnostic = "HTTP exchange " ~ fullyQualifiedName!method ~ " ";
     alias R = ReturnType!method;

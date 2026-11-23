@@ -26,8 +26,6 @@ import (
 	"time"
 )
 
-const exchangeAddress = "127.0.0.1:43719"
-
 type connectionKey struct{}
 
 // endlessTransfer records how much of an unbounded entity a handler wrote before the client stopped it.
@@ -461,7 +459,8 @@ func main() {
 		}
 	}()
 
-	exchange, err := net.Listen("tcp", exchangeAddress)
+	// An ephemeral port, so concurrent runs on one machine cannot collide; the test binds to it at run time.
+	exchange, err := net.Listen("tcp", "127.0.0.1:0")
 	checked(err)
 	go http.Serve(exchange, mux)
 
@@ -474,6 +473,7 @@ func main() {
 		"OTHER":      other.URL,
 		"HTTPS1":     strings.Replace(h1tls.URL, "127.0.0.1", "localhost", 1),
 		"H2OPEN":     "http://" + openEnded.Addr().String(),
+		"EXCHANGE":   "http://" + exchange.Addr().String(),
 		"CA":         bundle,
 	}
 	checked(json.NewEncoder(os.Stdout).Encode(output))
