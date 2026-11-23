@@ -416,13 +416,70 @@ final class RequestMappingInfo
         return 0;
     }
 
+    // ProducesRequestCondition.compareTo: for each accepted media type, most preferred first, the condition whose
+    // expressions hold it (an equal type, then an including one) at the lower index wins; no `produces` compares
+    // as `*/*`, so `Accept: */*` prefers a mapping without `produces` (Boot's JSON error over its HTML page).
     private int compareProduces(RequestMappingInfo other, HttpServletRequest request)
     {
         if (produces.length == 0 && other.produces.length == 0)
             return 0;
-        if (produces.length == 0 || other.produces.length == 0)
-            return produces.length == 0 ? 1 : -1;
-        return compareMediaTypes(produces, other.produces);
+        MediaType[] acceptedMediaTypes;
+        try
+            acceptedMediaTypes = new ContentNegotiationManager().resolveMediaTypes(new ServletWebRequest(request));
+        catch (HttpMediaTypeNotAcceptableException)
+            return 0;
+        auto mine = producesToCompare();
+        auto theirs = other.producesToCompare();
+        foreach (accepted; acceptedMediaTypes)
+        {
+            int result = compareMatchingMediaTypes(mine, indexOfEqualMediaType(mine, accepted),
+                    theirs, indexOfEqualMediaType(theirs, accepted));
+            if (result != 0)
+                return result;
+            result = compareMatchingMediaTypes(mine, indexOfIncludedMediaType(mine, accepted),
+                    theirs, indexOfIncludedMediaType(theirs, accepted));
+            if (result != 0)
+                return result;
+        }
+        return 0;
+    }
+
+    private MediaTypeExpression[] producesToCompare()
+    {
+        return produces.length != 0 ? produces : [MediaTypeExpression(MediaType.ALL, false)];
+    }
+
+    private static int indexOfEqualMediaType(MediaTypeExpression[] expressions, MediaType candidate)
+    {
+        import std.uni : sicmp;
+
+        foreach (index, expression; expressions)
+        {
+            if (sicmp(candidate.getType(), expression.mediaType.getType()) == 0
+                    && sicmp(candidate.getSubtype(), expression.mediaType.getSubtype()) == 0)
+                return cast(int) index;
+        }
+        return -1;
+    }
+
+    private static int indexOfIncludedMediaType(MediaTypeExpression[] expressions, MediaType candidate)
+    {
+        foreach (index, expression; expressions)
+        {
+            if (candidate.includes(expression.mediaType))
+                return cast(int) index;
+        }
+        return -1;
+    }
+
+    private static int compareMatchingMediaTypes(MediaTypeExpression[] first, int firstIndex,
+            MediaTypeExpression[] second, int secondIndex)
+    {
+        if (firstIndex != secondIndex)
+            return secondIndex - firstIndex;
+        if (firstIndex == -1)
+            return 0;
+        return compareMediaTypes([first[firstIndex]], [second[secondIndex]]);
     }
 
     override string toString() const
@@ -517,7 +574,7 @@ abstract class RequestMappingInfoHandlerMapping : AbstractHandlerMapping
             if (existing.info.toString() == info.toString() && existing.handlerMethod !is handlerMethod)// dfmt off
                 throw new IllegalStateException("Ambiguous mapping. Cannot map '" ~ handlerMethod.getBeanName()
                         ~ "' method \n" ~ handlerMethod.toString() ~ "\nto " ~ info
-                  // dfmt on
+                    // dfmt on
                     .toString() ~ ": There is already '" ~ existing.handlerMethod.getBeanName()
                     ~ "' bean method\n" ~ existing.handlerMethod.toString() ~ " mapped.");
         registrations ~= Registration(info, handlerMethod);

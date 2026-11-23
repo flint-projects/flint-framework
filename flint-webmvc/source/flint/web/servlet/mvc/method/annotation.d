@@ -596,6 +596,34 @@ class HttpHeadersReturnValueHandler : HandlerMethodReturnValueHandler
     }
 }
 
+/// `ModelAndViewMethodReturnValueHandler`: a returned `ModelAndView` gives the view (or view name) and its model;
+/// `null` means the handler wrote the response.
+class ModelAndViewMethodReturnValueHandler : HandlerMethodReturnValueHandler
+{
+    bool supportsReturnType(MethodParameter returnType)
+    {
+        return returnType.getParameterType() == "flint.web.servlet.ModelAndView";
+    }
+
+    void handleReturnValue(Any returnValue, MethodParameter returnType,
+            ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
+    {
+        auto modelAndView = returnValue.isNull() ? null : cast(ModelAndView) returnValue.get!Object;
+        if (modelAndView is null)
+        {
+            mavContainer.setRequestHandled(true);
+            return;
+        }
+        if (modelAndView.isReference())
+            mavContainer.setViewName(modelAndView.getViewName());
+        else
+            mavContainer.setView(cast(Object) modelAndView.getView());
+        auto model = modelAndView.getModel();
+        foreach (name; model.keySet().toArray())
+            mavContainer.addAttribute(name, model.get(name));
+    }
+}
+
 /// `ViewNameMethodReturnValueHandler`: a `string` (without `@ResponseBody`) names a view; `void` too.
 class ViewNameMethodReturnValueHandler : HandlerMethodReturnValueHandler
 {
@@ -716,7 +744,8 @@ private struct DefaultHandlers
         result.argumentResolvers.addResolvers(customResolvers);
         result.argumentResolvers.addResolvers(new RequestParamMethodArgumentResolver(true));
         result.returnValueHandlers = new HandlerMethodReturnValueHandlerComposite;
-        result.returnValueHandlers.addHandlers(entity, new HttpHeadersReturnValueHandler);
+        result.returnValueHandlers.addHandlers(new ModelAndViewMethodReturnValueHandler, entity,
+                new HttpHeadersReturnValueHandler);
         result.returnValueHandlers.addHandlers(customHandlers);
         result.returnValueHandlers.addHandlers(new ViewNameMethodReturnValueHandler);
         return result;
