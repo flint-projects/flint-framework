@@ -309,6 +309,9 @@ class RequestParamMethodArgumentResolver : AbstractNamedValueMethodArgumentResol
     protected override Any resolveName(string name, MethodParameter parameter, NativeWebRequest request)
     {
         auto values = request.getParameterValues(name);
+        // gh-32577: jQuery and others send an array as `name[]`.
+        if (values is null)
+            values = request.getParameterValues(name ~ "[]");
         if (values is null)
             return Any.init;
         return values.length == 1 ? Any.of(values[0]) : Any.of(values);

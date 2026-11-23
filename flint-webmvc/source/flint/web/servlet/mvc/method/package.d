@@ -386,10 +386,34 @@ final class RequestMappingInfo
         return matched.length == 0 ? Matched!MediaTypeExpression.init : found(matched);
     }
 
+    // RequestMethodsRequestCondition.compareTo: by method count (`other - this`, so an explicit method beats none),
+    // then HEAD before GET between single methods.
+    private int compareMethods(RequestMappingInfo other) const pure nothrow @nogc
+    {
+        if (other.methods.length != methods.length)
+            return cast(int) other.methods.length - cast(int) methods.length;
+        if (methods.length == 1)
+        {
+            if (methods[0] == HttpMethod.HEAD && other.methods[0] == HttpMethod.GET)
+                return -1;
+            if (methods[0] == HttpMethod.GET && other.methods[0] == HttpMethod.HEAD)
+                return 1;
+        }
+        return 0;
+    }
+
     /// Spring's `compareTo(other, request)`: patterns, params, headers, consumes, produces, methods.
     int compareTo(RequestMappingInfo other, HttpServletRequest request)
     {
-        int result = comparePatterns(other);
+        int result;
+        // Automatic vs explicit HTTP HEAD mapping: for a HEAD request the methods compare first.
+        if (request.getMethod() == "HEAD")
+        {
+            result = compareMethods(other);
+            if (result != 0)
+                return result;
+        }
+        result = comparePatterns(other);
         if (result != 0)
             return result;
         result = cast(int) other.params.length - cast(int) params.length;
@@ -404,10 +428,7 @@ final class RequestMappingInfo
         result = compareProduces(other, request);
         if (result != 0)
             return result;
-        // Methods: an explicit method beats none; HEAD request prefers an explicit HEAD mapping.
-        if (methods.length != other.methods.length)
-            return other.methods.length == 0 ? -1 : methods.length == 0 ? 1 : 0;
-        return 0;
+        return compareMethods(other);
     }
 
     private int comparePatterns(RequestMappingInfo other)

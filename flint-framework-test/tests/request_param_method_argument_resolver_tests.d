@@ -313,21 +313,17 @@ unittest
     assert(result.get!(string[]) == expected);
 }
 
-// gh-32577: the port does not fall back to the `name[]` parameter when `name` is absent.
-version (FlintWebRequestParamArraySuffix)
+@("RequestParamMethodArgumentResolverTests.resolveStringArrayWithEmptyArraySuffix")
+unittest
 {
-    @("RequestParamMethodArgumentResolverTests.resolveStringArrayWithEmptyArraySuffix")
-    unittest
-    {
-        auto f = setup();
-        string[] expected = ["foo", "bar"];
-        f.request.addParameter("name[]", expected[0]);
-        f.request.addParameter("name[]", expected[1]);
+    auto f = setup();
+    string[] expected = ["foo", "bar"];
+    f.request.addParameter("name[]", expected[0]);
+    f.request.addParameter("name[]", expected[1]);
 
-        MethodParameter param = arg(Handle.param2);
-        const result = f.resolver.resolveArgument(param, null, f.webRequest, null);
-        assert(result.get!(string[]) == expected);
-    }
+    MethodParameter param = arg(Handle.param2);
+    const result = f.resolver.resolveArgument(param, null, f.webRequest, null);
+    assert(result.get!(string[]) == expected);
 }
 
 // MultipartFile, Part and their mocks are not ported.

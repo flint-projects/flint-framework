@@ -321,29 +321,24 @@ unittest
     assert(list[2] is noMethods);
 }
 
-// Behaviour: for a HEAD request the port's compareTo does not compare methods first (Spring prefers an explicit HEAD
-// mapping), so the GET mapping with `produces` sorts before the HEAD mapping.
-version (FlintRequestMappingInfoHeadPrecedence)
+@("RequestMappingInfoTests.compareToWithHttpHeadMapping")
+unittest
 {
-    @("RequestMappingInfoTests.compareToWithHttpHeadMapping")
-    unittest
-    {
-        // SPR-14383
-        auto request = initRequest("GET", "/", true);
-        request.setMethod("HEAD");
-        request.addHeader("Accept", "application/json");
+    // SPR-14383
+    auto request = initRequest("GET", "/", true);
+    request.setMethod("HEAD");
+    request.addHeader("Accept", "application/json");
 
-        auto noMethods = paths().build();
-        auto getMethod = paths().methods(GET).produces("application/json").build();
-        auto headMethod = paths().methods(HEAD).build();
+    auto noMethods = paths().build();
+    auto getMethod = paths().methods(GET).produces("application/json").build();
+    auto headMethod = paths().methods(HEAD).build();
 
-        const list = shuffleAndSort([noMethods, getMethod, headMethod], request);
+    const list = shuffleAndSort([noMethods, getMethod, headMethod], request);
 
-        assert(list.length == 3);
-        assert(list[0] is headMethod);
-        assert(list[1] is getMethod);
-        assert(list[2] is noMethods);
-    }
+    assert(list.length == 3);
+    assert(list[0] is headMethod);
+    assert(list[1] is getMethod);
+    assert(list[2] is noMethods);
 }
 
 // flint.web.servlet's RequestMappingInfo has no opEquals or toHash (equality by conditions).
