@@ -62,6 +62,8 @@ final class ServletEngineRequest : HttpServletRequest
     private string contextPath;
     private string[] names;
     private string[] values;
+    // The field names and values of a usual request, inside this object: no allocation of their own.
+    private string[32] inlineFields;
     private immutable(ubyte)[] content;
     private ulong requestNumber;
     private DispatcherType dispatcherType = DispatcherType.REQUEST;
@@ -93,6 +95,20 @@ final class ServletEngineRequest : HttpServletRequest
         this.values = values;
         this.content = content;
         this.requestNumber = requestNumber;
+    }
+
+    /// Storage for `length` field names and values: inside this object when they fit.
+    package(flint.engine.servlet) string[] fieldStorage(size_t length) return
+    {
+        return length <= inlineFields.length ? inlineFields[0 .. length] : new string[length];
+    }
+
+    /// The fields and body `ServletEngine.capture` copied out of the request arena.
+    package(flint.engine.servlet) void setCaptured(string[] names, string[] values, immutable(ubyte)[] content)
+    {
+        this.names = names;
+        this.values = values;
+        this.content = content;
     }
 
     /// Change the path the request reports, as a forward or error dispatch does; returns the previous state.

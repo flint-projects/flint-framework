@@ -45,6 +45,10 @@ final class ServletEngineResponse : HttpServletResponse
     private bool localeSet;
     private long contentLength = -1;
     private ubyte[] buffer;
+    // A small body is buffered inside this object, so it costs no allocation of its own; a larger one moves to the
+    // GC heap as it grows.
+    private ubyte[512] inlineBody;
+    private bool bufferInline;
     private int bufferSize = defaultBufferSize;
     private bool committed;
     private ulong written;
@@ -113,7 +117,8 @@ final class ServletEngineResponse : HttpServletResponse
             const length = contentLength >= 0 ? contentLength : cast(long) buffer.length;
             if (length == buffer.length)
             {
-                check(transport.respond(cast(ushort) status, fields(), buffer, false, context));
+                StreamField[16] storage;
+                check(transport.respond(cast(ushort) status, fields(storage), buffer, false, context));
                 committed = true;
                 return;
             }
@@ -499,7 +504,17 @@ final class ServletEngineResponse : HttpServletResponse
     {
         if (suspended || finished || bytes.length == 0)
             return;
-        buffer ~= bytes;
+        if ((buffer.length == 0 || bufferInline) && buffer.length + bytes.length <= inlineBody.length)
+        {
+            inlineBody[buffer.length .. buffer.length + bytes.length] = bytes;
+            buffer = inlineBody[0 .. buffer.length + bytes.length];
+            bufferInline = true;
+        }
+        else
+        {
+            buffer ~= bytes; // a slice of inlineBody has no capacity, so this moves it to the GC heap
+            bufferInline = false;
+        }
         written += bytes.length;
         if (buffer.length > bufferSize)
             flushBuffer();
@@ -514,16 +529,18 @@ final class ServletEngineResponse : HttpServletResponse
     private void commit()
     {
         Context context;
-        check(transport.begin(cast(ushort) status, fields(), contentLength >= 0 ? contentLength : unknownLength,
-                context));
+        StreamField[16] storage;
+        check(transport.begin(cast(ushort) status, fields(storage), contentLength >= 0
+                ? contentLength : unknownLength, context));
         committed = true;
     }
 
     /// The fields in Tomcat's order. Framing and hop-by-hop fields belong to the engine and are left out.
-    private StreamField[] fields() const
+    private StreamField[] fields(return ref StreamField[16] storage) const
     {
-        // One exact allocation; reserve and appends cost several times more per response.
-        auto result = new StreamField[headerNames.length + 2];
+        // The caller's storage when the fields fit (the transport copies them at once), else one exact allocation.
+        auto result = headerNames.length + 2 <= storage.length
+            ? storage[0 .. headerNames.length + 2] : new StreamField[headerNames.length + 2];
         size_t used;
         foreach (index, name; headerNames)
         {

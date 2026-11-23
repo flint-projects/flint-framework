@@ -363,7 +363,9 @@ final class ServletEngine : RequestHost
             });
             total += lengths[index * 2] + lengths[index * 2 + 1];
         }
-        auto text = new char[total];
+        // The text is gathered on the stack for a usual request head and frozen once for the request to keep.
+        char[4096] stackText = void;
+        char[] text = total <= stackText.length ? stackText[0 .. total] : new char[total];
         size_t used;
         void copy(Result!Buffer buffer, size_t size)
         {
@@ -392,7 +394,13 @@ final class ServletEngine : RequestHost
             used += name.length + value.length;
         }
         immutable frozen = text.idup;
-        auto fields = new string[count * 2];
+        const path = frozen[0 .. sizes[0]];
+        // A request without '?' has no query string; "?" alone is an empty one.
+        string query = sizes[1] != 0 ? frozen[sizes[0] .. sizes[0] + sizes[1]] : null;
+        auto captured = new ServletEngineRequest(this, methodName(request.method()), path, query,
+                request.protocolMinor() == 0 ? "HTTP/1.0" : "HTTP/1.1", options.contextPath, null,
+                null, null, context.requestId);
+        auto fields = captured.fieldStorage(count * 2);
         auto names = fields[0 .. count], values = fields[count .. $];
         size_t at = sizes[0] + sizes[1];
         foreach (index; 0 .. count)
@@ -411,12 +419,8 @@ final class ServletEngine : RequestHost
             });
             content = bytes.idup;
         }
-        const path = frozen[0 .. sizes[0]];
-        // A request without '?' has no query string; "?" alone is an empty one.
-        string query = sizes[1] != 0 ? frozen[sizes[0] .. sizes[0] + sizes[1]] : null;
-        return new ServletEngineRequest(this, methodName(request.method()), path, query,
-                request.protocolMinor() == 0 ? "HTTP/1.0" : "HTTP/1.1", options.contextPath, names,
-                values, content, context.requestId);
+        captured.setCaptured(names, values, content);
+        return captured;
     }
 
     /// Tomcat's `StandardWrapperValve.exception` and `StandardHostValve.throwable`: an uncaught exception becomes a

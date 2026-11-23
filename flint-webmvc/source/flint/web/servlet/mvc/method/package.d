@@ -237,6 +237,11 @@ final class RequestMappingInfo
         auto matchedPatterns = matchPatterns(request);
         if (matchedPatterns.length == 0)
             return null;
+        // The usual match is every condition of this mapping as it is (one pattern, its method, its media types):
+        // then the matching info is this one, without an allocation per request.
+        if (matchedPatterns is patterns && matchedMethods.value is methods
+                && matchedConsumes.value is consumes && matchedProduces.value is produces)
+            return this;
         auto result = new RequestMappingInfo;
         result.name = name;
         result.patterns = matchedPatterns;

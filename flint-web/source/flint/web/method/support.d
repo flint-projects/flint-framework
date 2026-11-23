@@ -258,8 +258,9 @@ class InvocableHandlerMethod : HandlerMethod
     ///
     this(HandlerMethod handlerMethod)
     {
+        // The resolvers are set per invocation (setHandlerMethodArgumentResolvers); an empty composite is made only
+        // when none were, on first use.
         super(handlerMethod);
-        resolvers = new HandlerMethodArgumentResolverComposite;
     }
 
     /// Sets the argument resolvers.
@@ -312,6 +313,8 @@ class InvocableHandlerMethod : HandlerMethod
         {
             if (findProvidedArgument(parameter, providedArgs, args[i]))
                 continue;
+            if (resolvers is null)
+                resolvers = new HandlerMethodArgumentResolverComposite;
             if (!resolvers.supportsParameter(parameter))
                 throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
             args[i] = resolvers.resolveArgument(parameter, mavContainer, request, dataBinderFactory);
