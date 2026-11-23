@@ -365,11 +365,10 @@ final class ServletEngineResponse : HttpServletResponse
             return;
         if (special(name, value))
             return;
+        // D cannot tell an empty string from null, and Spring writes empty values (`Accept-Patch:` from
+        // HttpOptionsHandler) as empty joins: a null value is the empty field value here (rulebook R14).
         if (value is null)
-        {
-            removeHeader(name);
-            return;
-        }
+            value = "";
         // Tomcat's MimeHeaders.setValue keeps the first field's position and drops the others.
         foreach (index, existing; headerNames)
         {
@@ -396,10 +395,12 @@ final class ServletEngineResponse : HttpServletResponse
     /// `HttpServletResponse.addHeader`.
     void addHeader(string name, string value)
     {
-        if (name is null || name.length == 0 || value is null || appCommitted())
+        if (name is null || name.length == 0 || appCommitted())
             return;
         if (special(name, value))
             return;
+        if (value is null)
+            value = "";
         headerNames ~= name;
         headerValues ~= value;
     }
@@ -547,21 +548,6 @@ final class ServletEngineResponse : HttpServletResponse
             return true;
         }
         return false;
-    }
-
-    private void removeHeader(string name)
-    {
-        size_t index;
-        while (index < headerNames.length)
-        {
-            if (equalsIgnoreCase(headerNames[index], name))
-            {
-                headerNames = headerNames[0 .. index] ~ headerNames[index + 1 .. $];
-                headerValues = headerValues[0 .. index] ~ headerValues[index + 1 .. $];
-            }
-            else
-                ++index;
-        }
     }
 
     private static void check(TransportError result)
