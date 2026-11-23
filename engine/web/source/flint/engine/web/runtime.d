@@ -786,8 +786,11 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
     /// cancelled context, but a successful response and any buffered pipeline still drain.
     private bool halfClosed(Connection* connection) nothrow @nogc
     {
-        if (connection.closing || requestCancelled(connection)
-                || (connection.phase != ConnectionPhase.handling && connection.phase != ConnectionPhase.writing))
+        // A fiber route answers like a servlet container: the client's EOF ends the request side only, so the
+        // running response and the requests already buffered behind it still complete.
+        const fiber = connection.phase == ConnectionPhase.streaming && connection.fiberActive;
+        if (connection.closing || requestCancelled(connection) || (connection.phase != ConnectionPhase.handling
+                && connection.phase != ConnectionPhase.writing && !fiber))
             return false;
         connection.peerClosed = true;
         if (connection.phase == ConnectionPhase.handling)

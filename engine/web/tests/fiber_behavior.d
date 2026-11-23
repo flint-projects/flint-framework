@@ -412,3 +412,23 @@ unittest
     assert(find(received, "Transfer-Encoding") < 0 && find(received, "Connection: close\r\n") > 0, received);
     assert(received[$ - 13 .. $] == "hello, chunks", received);
 }
+
+@("a client that half-closes after its requests still gets the running fiber response and the pipelined ones")
+unittest
+{
+    import std.socket : SocketShutdown;
+
+    Fixture fixture;
+    fixture.open();
+    scope (exit)
+        fixture.close();
+    auto socket = fixture.connect();
+    scope (exit)
+        socket.close();
+    sendAll(socket, "GET /chunked HTTP/1.1\r\nHost: a\r\n\r\nGET /after HTTP/1.1\r\nHost: a\r\n\r\n");
+    socket.shutdown(SocketShutdown.SEND);
+    const received = readUntilClosed(socket);
+    const first = find(received, "\r\n7\r\nhello, \r\n6\r\nchunks\r\n0\r\n\r\n");
+    assert(first > 0, received);
+    assert(find(received, "/after? host=a; HTTP/1.1", first) > first, received);
+}
