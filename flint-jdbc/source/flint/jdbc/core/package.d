@@ -2159,17 +2159,45 @@ underscored form (`first_name` for `firstName`).
 `T`'s properties and constructor come from its Flint AOT descriptor (R4); the mapping itself is the non-template
 `BeanPropertyRowMapping`, so one copy of the code serves every `T`.
 +/
+/// `descriptorOf!T` plus the properties `T` inherits from its base classes: `descriptorOf` describes the members a
+/// class declares, and a JavaBean's setters may be declared by a superclass (petclinic's `Owner.setFirstName`).
+package(flint.jdbc) imported!"flint.engine.aot.descriptor".Descriptor beanDescriptorOf(T)()
+{
+    import flint.engine.aot.descriptor : descriptorOf;
+
+    auto descriptor = descriptorOf!T();
+    static if (is(T == class))
+    {
+        import std.traits : BaseClassesTuple;
+
+        static foreach (B; BaseClassesTuple!T)
+        {
+            static if (!is(B == Object))
+            {
+                foreach (property; descriptorOf!B().properties)
+                {
+                    bool declared;
+                    foreach (ref own; descriptor.properties)
+                        declared = declared || own.name == property.name;
+                    if (!declared)
+                        descriptor.properties ~= property;
+                }
+            }
+        }
+    }
+    return descriptor;
+}
+
 class BeanPropertyRowMapper(T) : RowMapper!T
 {
     /// The erased engine.
     protected BeanPropertyRowMapping mapping;
 
-    /// Create a new `BeanPropertyRowMapper` for `T`, described by `descriptorOf!T`.
+    /// Create a new `BeanPropertyRowMapper` for `T`, described by `descriptorOf!T` with the bean properties of its
+    /// base classes, as Spring's `BeanUtils.getPropertyDescriptors` includes inherited setters.
     this()
     {
-        import flint.engine.aot.descriptor : descriptorOf;
-
-        this(descriptorOf!T());
+        this(beanDescriptorOf!T());
     }
 
     /// Create a new `BeanPropertyRowMapper` for `T`, described by `descriptor`: the descriptor Flint AOT generated

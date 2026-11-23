@@ -814,6 +814,50 @@ unittest
     assert(rows.get(0).getBirthDate() == LocalDate.of(2010, 9, 7));
 }
 
+/// A bean whose setters are partly inherited, as petclinic-rest's `Owner : Person : BaseEntity`.
+class Employee : Person
+{
+    private string title;
+
+    string getTitle()
+    {
+        return title;
+    }
+
+    void setTitle(string title)
+    {
+        this.title = title;
+    }
+}
+
+@("BeanPropertyRowMapper: setters declared by a base class map too")
+unittest
+{
+    import flint.jdbc.core : BeanPropertyRowMapper;
+
+    auto f = Fixture.create();
+    auto template_ = f.namedParameterTemplate.getJdbcTemplate();
+    f.connection.results = new Rows(["name", "age", "title"], [
+        [Any.of("Bubba"), Any.of(22L), Any.of("cook")]
+    ]);
+    auto rows = template_.query("select name, age, title from employees", new BeanPropertyRowMapper!Employee);
+    auto employee = rows.get(0);
+    assert(employee.getName() == "Bubba" && employee.getAge() == 22 && employee.getTitle() == "cook");
+}
+
+@("BeanPropertySqlParameterSource: getters declared by a base class are readable")
+unittest
+{
+    import flint.jdbc.core.namedparam : BeanPropertySqlParameterSource;
+
+    auto employee = new Employee;
+    employee.setName("Bubba");
+    employee.setTitle("cook");
+    auto source = new BeanPropertySqlParameterSource(employee);
+    assert(source.hasValue("name") && source.getValue("name").get!string == "Bubba");
+    assert(source.getValue("title").get!string == "cook");
+}
+
 @("DataClassRowMapper: constructor parameters by column name")
 unittest
 {

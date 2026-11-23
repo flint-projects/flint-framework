@@ -28,10 +28,9 @@ import flint.java.lang : IllegalArgumentException, IllegalStateException;
 import flint.java.sql : PreparedStatement, ResultSet;
 import flint.java.util : ArrayList, HashMap, LinkedHashMap, List, Map;
 import flint.javax.sql : DataSource;
-import flint.jdbc.core : BatchPreparedStatementSetter, ColumnMapRowMapper, JdbcOperations,
-    JdbcTemplate, PreparedStatementCallback, PreparedStatementCreator,
-    PreparedStatementCreatorFactory,
-    ResultSetExtractor, ResultSetReader,
+import flint.jdbc.core : BatchPreparedStatementSetter, beanDescriptorOf, ColumnMapRowMapper,
+    JdbcOperations, JdbcTemplate, PreparedStatementCallback, PreparedStatementCreator,
+    PreparedStatementCreatorFactory, ResultSetExtractor, ResultSetReader,
     RowCallbackHandler, RowMapper, RowMapperResultSetExtractor, SingleColumnRowMapper, SqlParameter,
     SqlParameterValue, StatementCreatorUtils, parameterValueOf, rowLimit, rowMapper;
 import flint.jdbc.support : JdbcUtils, KeyHolder;
@@ -738,7 +737,7 @@ class BeanPropertySqlParameterSource : AbstractSqlParameterSource
     {
         if (object is null)
             throw new IllegalArgumentException("Bean object must not be null");
-        this(Any.of(object), descriptorOf!T());
+        this(Any.of(object), beanDescriptorOf!T());
     }
 
     /// Create a new `BeanPropertySqlParameterSource` for a bean held by `bean`, described by `descriptor`: the erased
