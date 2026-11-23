@@ -235,15 +235,10 @@ version (FlintJacksonDelegatingCreators)
 @("MapDeserializationTest.testFromEmptyString")
 unittest
 {
-    // LIKELY BUG: ACCEPT_EMPTY_STRING_AS_NULL_OBJECT is ignored: Jackson reads "" as a null Map, Flint throws
-    // MismatchedInputException "Cannot deserialize value of type `java.util.LinkedHashMap!(string, Any)` from String".
-    version (FlintJacksonAcceptEmptyStringAsNull)
-    {
-        auto m = jsonMapperBuilder(table()).configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT,
-                true).build();
-        const result = m.readValue!(Map!(string, Any))(q(""));
-        assert(result is null);
-    }
+    auto m = jsonMapperBuilder(table()).configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT,
+            true).build();
+    const result = m.readValue!(Map!(string, Any))(q(""));
+    assert(result is null);
 }
 
 /*

@@ -63,7 +63,7 @@ Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existin
         return scalar.value;
     if (isJavaTime(type))
         return readJavaTime(config, p, type, format);
-    if ((type == "byte[]" || type == "ubyte[]") && (t == JsonToken.VALUE_STRING || t == JsonToken.START_ARRAY))
+    if (isBinary(type, t))
         return readBytes(p, type, t);
     if (isTreeType(type))
         return Any.ofObject(readTree(p, config.nodeFactory), type);
@@ -73,9 +73,22 @@ Any deserializeValue(MapperConfig config, JsonParser p, string type, Any existin
     if (d is null)
         throw new InvalidDefinitionException("Cannot construct instance of `" ~ type
                 ~ "`: no Flint AOT descriptor (register the type, or let Flint AOT generate it)", type);
-    if (t == JsonToken.VALUE_NULL)
+    if (t == JsonToken.VALUE_NULL || emptyAsNull(config, p, t))
         return nullValue(d);
     return readStructured(config, p, d, t, existing);
+}
+
+// A byte[] written as Base64 text or as an array of numbers.
+private bool isBinary(string type, JsonToken t) pure nothrow @nogc
+{
+    return (type == "byte[]" || type == "ubyte[]") && (t == JsonToken.VALUE_STRING || t == JsonToken.START_ARRAY);
+}
+
+// CoercionConfigs: under ACCEPT_EMPTY_STRING_AS_NULL_OBJECT an empty String is AsNull for structured types.
+private bool emptyAsNull(MapperConfig config, JsonParser p, JsonToken t)
+{
+    return t == JsonToken.VALUE_STRING && p.getString().length == 0
+        && config.isEnabled(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT);
 }
 
 private Any readStructured(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t, Any existing)
@@ -553,7 +566,10 @@ MismatchedInputException mismatch(string type, JsonToken t)
 private Any readCollection(MapperConfig config, JsonParser p, RawCollection target, const Descriptor d, Any boxed)
 {
     if (p.currentToken() != JsonToken.START_ARRAY)
-        throw mismatch(d.name, p.currentToken());
+    {
+        target.addAny(singleElement(config, p, d, p.currentToken()));
+        return boxed;
+    }
     int index;
     for (auto t = p.nextToken(); t != JsonToken.END_ARRAY; t = p.nextToken())
     {
@@ -619,7 +635,7 @@ private Any readBytes(JsonParser p, string type, JsonToken t)
 private Any readElements(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t)
 {
     if (t != JsonToken.START_ARRAY)
-        throw mismatch(d.name, t);
+        return d.fromElements([singleElement(config, p, d, t)]);
     Any[] elements;
     int index;
     for (auto e = p.nextToken(); e != JsonToken.END_ARRAY; e = p.nextToken())
@@ -627,6 +643,19 @@ private Any readElements(MapperConfig config, JsonParser p, const Descriptor d, 
             elements ~= deserializeValue(config, p, d.elementType);
         });
     return d.fromElements(elements);
+}
+
+// CollectionDeserializer.handleNonArray: under ACCEPT_SINGLE_VALUE_AS_ARRAY a value that is not an array is the
+// container's one element; otherwise the token is unexpected.
+private Any singleElement(MapperConfig config, JsonParser p, const Descriptor d, JsonToken t)
+{
+    if (!config.isEnabled(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY))
+        throw mismatch(d.name, t);
+    Any element;
+    withPath(Reference(null, 0, null, d.name), () {
+        element = t == JsonToken.VALUE_NULL ? Any.init : deserializeValue(config, p, d.elementType);
+    });
+    return element;
 }
 
 // MapDeserializer into an associative array: keys convert from property names (StdKeyDeserializer).

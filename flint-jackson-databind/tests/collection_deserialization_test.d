@@ -280,37 +280,32 @@ version (FlintJacksonCustomSerializers)
     @("CollectionDeserializationTest.testImplicitArrays")
     unittest
     {
-        // LIKELY BUG: ACCEPT_SINGLE_VALUE_AS_ARRAY is ignored: Jackson reads "4" as [4], Flint throws
-        // MismatchedInputException "Cannot deserialize value of type `int[]` from Integer value".
-        version (FlintJacksonAcceptSingleValueAsArray)
-        {
-            // can't share mapper, custom configs (could create ObjectWriter tho)
-            auto m = jsonMapperBuilder(table()).enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY).build();
+        // can't share mapper, custom configs (could create ObjectWriter tho)
+        auto m = jsonMapperBuilder(table()).enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY).build();
 
-            // first with simple scalar types (numbers), with collections
-            auto ints = m.readValue!(List!Any)("4");
-            assert(ints.size() == 1);
-            assert(ints.get(0).get!int() == 4);
-            auto strings = m.readValue!(ArrayList!string)(q("abc"));
-            assert(strings.size() == 1);
-            assert(strings.get(0) == "abc");
-            // and arrays:
-            const intArray = m.readValue!(int[])("-7");
-            assert(intArray.length == 1);
-            assert(intArray[0] == -7);
-            const stringArray = m.readValue!(string[])(q("xyz"));
-            assert(stringArray.length == 1);
-            assert(stringArray[0] == "xyz");
+        // first with simple scalar types (numbers), with collections
+        auto ints = m.readValue!(List!Any)("4");
+        assert(ints.size() == 1);
+        assert(ints.get(0).get!int() == 4);
+        auto strings = m.readValue!(ArrayList!string)(q("abc"));
+        assert(strings.size() == 1);
+        assert(strings.get(0) == "abc");
+        // and arrays:
+        const intArray = m.readValue!(int[])("-7");
+        assert(intArray.length == 1);
+        assert(intArray[0] == -7);
+        const stringArray = m.readValue!(string[])(q("xyz"));
+        assert(stringArray.length == 1);
+        assert(stringArray[0] == "xyz");
 
-            // and then with Beans:
-            auto xbeanList = m.readValue!(List!XBean)(`{"x":4}`);
-            assert(xbeanList.size() == 1);
-            assert(typeid(xbeanList.get(0)) is typeid(XBean));
+        // and then with Beans:
+        auto xbeanList = m.readValue!(List!XBean)(`{"x":4}`);
+        assert(xbeanList.size() == 1);
+        assert(typeid(xbeanList.get(0)) is typeid(XBean));
 
-            const xbeanArray = m.readValue!(XBean[])(`{"x":29}`);
-            assert(xbeanArray.length == 1);
-            assert(typeid(xbeanArray[0]) is typeid(XBean));
-        }
+        const xbeanArray = m.readValue!(XBean[])(`{"x":29}`);
+        assert(xbeanArray.length == 1);
+        assert(typeid(xbeanArray[0]) is typeid(XBean));
     }
 
     // flint.jackson has no ObjectReader (reader(), readerFor(), with/without).
