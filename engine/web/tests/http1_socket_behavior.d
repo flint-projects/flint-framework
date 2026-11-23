@@ -475,8 +475,31 @@ unittest
     // A 1 ms poll answers each message at the next poll, roughly 0.8 ms after it arrives.
     assertWallClock(median < dur!"usecs"(250), "median delayed echo took " ~ median.toString() ~ " against 250 µs");
     // Spinning for 200 µs of every wait costs at least 40 ms of CPU over these rounds.
-    assertWallClock(cpu < dur!"msecs"(30),
-            "delayed echoes used " ~ cpu.toString() ~ " of CPU in " ~ elapsed.toString() ~ " against 30 ms");
+    const cpuText = "delayed echoes used " ~ cpu.toString() ~ " of CPU in " ~ elapsed.toString() ~ " against 30 ms";
+    static if (unoptimizedCpuLane)
+        reportUnoptimizedCpu(cpu < dur!"msecs"(30), cpuText);
+    else
+        assertWallClock(cpu < dur!"msecs"(30), cpuText);
+}
+
+/// DMD's unoptimized code on Windows costs about as much CPU as the spin signature this bound detects, so that
+/// lane cannot tell the two apart. It reports the measurement, and the Windows Gate 6 lane (LDC) enforces it (ADR-026).
+version (Windows)
+{
+    version (DigitalMars)
+        private enum unoptimizedCpuLane = true;
+    else
+        private enum unoptimizedCpuLane = false;
+}
+else
+    private enum unoptimizedCpuLane = false;
+
+/// Report a CPU bound that this lane does not enforce, as FLINT_EMULATED reports wall-clock bounds.
+private void reportUnoptimizedCpu(bool within, string measurement)
+{
+    import std.stdio : writeln;
+
+    writeln("FLINT-UNOPTIMIZED cpu bound ", within ? "met" : "not met", ": ", measurement);
 }
 
 /// Return a response field's value, matching the name case-insensitively.
