@@ -289,6 +289,8 @@ Descriptor descriptorOf(T)()
     }
     static if (__traits(compiles, U.__flintElementType.init))
         d.elementType = typeNameOf!(U.__flintElementType);
+    static if (isStdNullable!U)
+        d.elementType = typeNameOf!(typeof(U.init.get()));
     static if (__traits(compiles, U.__flintKeyType.init))
         d.keyType = typeNameOf!(U.__flintKeyType);
     addBuilders!U(d);
@@ -345,6 +347,28 @@ private void addBuilders(U)(Descriptor d)
         d.unwrap = &hookUnwrap!U;
         d.wrap = &hookWrap!U;
     }
+    else static if (isStdNullable!U)
+    {
+        d.unwrap = &nullableUnwrap!U;
+        d.wrap = &nullableWrap!U;
+    }
+}
+
+// `std.typecons.Nullable!T`, rulebook R5's nullable value (Java's boxed `Integer`, a `String` that may be null),
+// recognized by name so this module does not import std.typecons.
+private enum isStdNullable(U) = typeNameOf!U.length > 22 && typeNameOf!U[0 .. 22]
+    == "std.typecons.Nullable!" && __traits(compiles, U.init.isNull) && __traits(compiles, U.init.get());
+
+private Any nullableUnwrap(T)(ref Any value) @safe
+{
+    auto self = value.get!T;
+    return self.isNull ? Any.init : Any.of(self.get());
+}
+
+private Any nullableWrap(T)(Any value) @safe
+{
+    alias E = typeof(T.init.get());
+    return value.isNull ? Any.of(T.init) : Any.of(T(value.get!E));
 }
 
 private Any enumAt(E)(long ordinal) @safe
