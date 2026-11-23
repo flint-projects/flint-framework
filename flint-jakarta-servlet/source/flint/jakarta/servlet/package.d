@@ -6,6 +6,7 @@ Upstream copyright: Copyright (c) 1997, 2024 Oracle and/or its affiliates and ot
 Copyright 2004 The Apache Software Foundation. The upstream project is EPL-2.0 OR GPL-2.0-with-classpath-
 exception; Flint distributes this module under EPL-2.0 only (policy/upstream-licences.json, use
 "epl-module"). EPL-2.0 applies to this file; applications that import it are not affected.
+SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
 Modified by the Flint authors: translated to D under the rulebook (docs/spring/api-mapping.md). Only the
 API that Flint Web MVC and its tests use is ported; there is no servlet container. `Object` attributes are
 `Any` (R1), `Enumeration<String>` is `string[]` and `Map<String, String[]>` is `string[][string]` (R10).
@@ -24,7 +25,7 @@ class ServletException : Exception
     // dfmt off
     this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line =
             __LINE__) pure nothrow @nogc
-     // dfmt on
+      // dfmt on
     {
         super(message, file, line, rootCause);
     }

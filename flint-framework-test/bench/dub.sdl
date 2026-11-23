@@ -1,0 +1,8 @@
+name "probe-framework-test"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-framework-test"
+dflags "-preview=dip1000"
+dependency "flint:framework-test" path="../../.."
