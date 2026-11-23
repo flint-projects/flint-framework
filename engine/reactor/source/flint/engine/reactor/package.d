@@ -41,7 +41,8 @@ version (Posix)
 version (linux)
 {
     import flint.engine.reactor.sys.completion : CompletionPort, KernelEvent, cancelKernel, closeCompletionPort,
-        openCompletionPort, pollCompletion, submitAccept, submitRead, submitReadable, submitWrite;
+        completionSetupFlags, openCompletionPort, pollCompletion, submitAccept, submitRead,
+        submitReadable, submitWrite;
     import flint.engine.reactor.sys.nativewatch : NativeWatches;
     import flint.engine.reactor.sys.scratch : Scratch;
 }
@@ -646,6 +647,18 @@ struct Reactor
     Backend activeBackend() const nothrow @nogc
     {
         return runtime is null ? Backend.automatic : runtime.backend;
+    }
+
+    /// The IORING_SETUP_* flags the kernel accepted for the io_uring backend (identical on every worker); 0 on any
+    /// other backend. A ring falls back to fewer flags on a kernel that rejects them.
+    package(flint) uint completionSetupFlags() const nothrow @nogc
+    {
+        version (linux)
+        {
+            if (runtime !is null && runtime.backend == Backend.ioUring && runtime.workers.length != 0)
+                return .completionSetupFlags(runtime.workers[0].completions);
+        }
+        return 0;
     }
 
     static if (resumptionCounter)

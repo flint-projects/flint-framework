@@ -36,6 +36,7 @@ package(flint.engine.reactor):
         {
             int flint_uring_open(uint entries, void** result) @system nothrow @nogc;
             void flint_uring_close(void* owner) @system nothrow @nogc;
+            uint flint_uring_setup_flags(void* owner) @system nothrow @nogc;
             int flint_uring_accept(void* owner, int fd, ulong token) @system nothrow @nogc;
             int flint_uring_recv(void* owner, int fd, ubyte* output, uint length, ulong token) @system nothrow @nogc;
             int flint_uring_send(void* owner, int fd, const(ubyte)* input, uint len, ulong tag) @system nothrow @nogc;
@@ -86,6 +87,15 @@ package(flint.engine.reactor):
             return Result!CompletionPort(CompletionPort.init, Error(Status.unsupported,
                     "liburing provider not prepared"));
         }
+    }
+
+    // SAFETY: Reads one field of the shim's owner record, which lives until closeCompletionPort; null is answered 0.
+    uint completionSetupFlags(ref const CompletionPort port) @trusted nothrow @nogc
+    {
+        version (FlintNativeLiburing)
+            return flint_uring_setup_flags(cast(void*) port.owner);
+        else
+            return 0;
     }
 
     // SAFETY: The worker drained all original and cancellation CQEs, and no other thread can use its port.

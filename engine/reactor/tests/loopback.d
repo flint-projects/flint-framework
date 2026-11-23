@@ -221,6 +221,43 @@ version (linux)
             else
                 echo(Backend.ioUring);
         }
+
+        @("io_uring reports the setup flags the kernel accepted: cooperative task running from Linux 5.19")
+        unittest
+        {
+            import core.sys.posix.sys.utsname : uname, utsname;
+            import std.process : environment;
+
+            if (environment.get("FLINT_TEST_URING_DENIED") == "1")
+                return;
+            enum uint cqsize = 1u << 3, cooperative = (1u << 8) | (1u << 9); // CQSIZE; COOP_TASKRUN | TASKRUN_FLAG
+            ReactorOptions options;
+            options.cores = 1;
+            options.backend = Backend.ioUring;
+            const ring = Reactor.create(options);
+            assert(ring.ok, ring.error.message);
+            const flags = ring.value.completionSetupFlags();
+            assert((flags & cqsize) != 0);
+            utsname host;
+            assert(() @trusted { return uname(&host); }() == 0);
+            uint[2] version_; // major, minor
+            size_t part;
+            foreach (c; host.release)
+            {
+                if (c == '.' && part == 0)
+                    part = 1;
+                else if (c >= '0' && c <= '9')
+                    version_[part] = version_[part] * 10 + (c - '0');
+                else
+                    break;
+            }
+            const recent = version_[0] > 5 || (version_[0] == 5 && version_[1] >= 19);
+            assert((flags & cooperative) == (recent ? cooperative : 0));
+
+            options.backend = Backend.epoll;
+            const readiness = Reactor.create(options);
+            assert(readiness.ok && readiness.value.completionSetupFlags() == 0);
+        }
     }
 }
 else version (OSX)

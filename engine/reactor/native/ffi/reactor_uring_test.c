@@ -12,6 +12,7 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #define CHECK(condition)                                                             \
@@ -196,6 +197,24 @@ static void ring_footprint(void)
     flint_uring_close(owner);
 }
 
+/* A kernel from 5.19 on accepts cooperative task running, and the ring records it; an older one gets a ring
+   without it (flint_uring_open retries without the flags on EINVAL) that still serves the round trip above. */
+static void negotiated_flags(void *owner)
+{
+    enum { cqsize = 1u << 3, coop_taskrun = 1u << 8, taskrun_flag = 1u << 9 };
+    struct utsname host;
+    CHECK(uname(&host) == 0);
+    int major = 0, minor = 0;
+    CHECK(sscanf(host.release, "%d.%d", &major, &minor) == 2);
+    const unsigned flags = flint_uring_setup_flags(owner);
+    CHECK((flags & cqsize) != 0);
+    if (major > 5 || (major == 5 && minor >= 19))
+        CHECK((flags & (coop_taskrun | taskrun_flag)) == (coop_taskrun | taskrun_flag));
+    else
+        CHECK((flags & (coop_taskrun | taskrun_flag)) == 0);
+    CHECK(flint_uring_setup_flags(NULL) == 0);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc == 2 && strcmp(argv[1], "--deny-setup") == 0)
@@ -209,6 +228,7 @@ int main(int argc, char *argv[])
         return 77;
     }
     CHECK(status == 0 && owner != NULL);
+    negotiated_flags(owner);
     round_trip(owner);
     accept_connection(owner);
     borrowed_readiness(owner);

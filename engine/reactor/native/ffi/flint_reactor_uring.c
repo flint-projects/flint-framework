@@ -7,6 +7,7 @@
 #include <poll.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 
 /* Submission-queue entries per ring (64 bytes each); see flint_uring_open. */
@@ -16,6 +17,7 @@ struct flint_uring {
     struct io_uring ring;
     size_t pending;
     size_t limit;
+    unsigned setup_flags; /* the IORING_SETUP_* flags the kernel accepted */
 };
 
 static int required_operations_supported(struct io_uring *ring)
@@ -46,11 +48,19 @@ int flint_uring_open(unsigned entries, void **out)
      * holds what one loop pass prepares before it submits, and `reserve` submits early when it fills, so it is
      * capped: the kernel keeps both rings resident, and at the HTTP engine's 4,160 operations per worker a
      * submission queue as large as the completion queue cost 1 MiB of SQEs per worker. */
-    struct io_uring_params params = {0};
-    params.flags = IORING_SETUP_CQSIZE;
-    params.cq_entries = entries;
+    /* Cooperative task running (Linux 5.19): completions are processed when the loop next enters the kernel,
+     * instead of interrupting it for each one, and IORING_SQ_TASKRUN tells liburing when it must enter. A kernel
+     * that does not know the flags rejects them with EINVAL: retry without them. */
+    static const unsigned cooperative = IORING_SETUP_COOP_TASKRUN | IORING_SETUP_TASKRUN_FLAG;
     unsigned submission = entries < FLINT_URING_SQ_ENTRIES ? entries : FLINT_URING_SQ_ENTRIES;
-    int status = io_uring_queue_init_params(submission, &owner->ring, &params);
+    struct io_uring_params params;
+    int status = -EINVAL;
+    for (int attempt = 0; attempt < 2 && status == -EINVAL; ++attempt) {
+        memset(&params, 0, sizeof(params));
+        params.flags = IORING_SETUP_CQSIZE | (attempt == 0 ? cooperative : 0);
+        params.cq_entries = entries;
+        status = io_uring_queue_init_params(submission, &owner->ring, &params);
+    }
     if (status < 0) {
         free(owner);
         return status;
@@ -62,8 +72,15 @@ int flint_uring_open(unsigned entries, void **out)
         return -EOPNOTSUPP;
     }
     owner->limit = params.cq_entries;
+    owner->setup_flags = params.flags;
     *out = owner;
     return 0;
+}
+
+unsigned flint_uring_setup_flags(void *ring)
+{
+    const struct flint_uring *owner = ring;
+    return owner == NULL ? 0 : owner->setup_flags;
 }
 
 void flint_uring_close(void *ring)

@@ -9,6 +9,9 @@ int flint_uring_open(unsigned entries, void **out);
 /* Call after all original and cancellation CQEs have drained. */
 void flint_uring_close(void *owner);
 
+/* The IORING_SETUP_* flags the kernel accepted for this ring. */
+unsigned flint_uring_setup_flags(void *owner);
+
 /* A successful prepare retains the buffer until its original token completes. */
 int flint_uring_accept(void *owner, int listener, uint64_t token);
 int flint_uring_recv(void *owner, int fd, uint8_t *buffer, unsigned length, uint64_t token);
