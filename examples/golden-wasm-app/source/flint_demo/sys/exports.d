@@ -1,8 +1,8 @@
 module flint_demo.sys.exports;
 import core.lifetime : move;
 import flint.arena : Status;
-import flint.wasm_bridge : CommandBuffer, NodeHandle;
-import flint.ui_signals : SignalGraph, SignalSlot, ObserverSlot, SignalId;
+import flint.engine.wasm_bridge : CommandBuffer, NodeHandle;
+import flint.engine.ui_signals : SignalGraph, SignalSlot, ObserverSlot, SignalId;
 
 @safe:
 version (WebAssembly)

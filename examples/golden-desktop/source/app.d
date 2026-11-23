@@ -2,8 +2,8 @@ module app;
 
 import flint.arena : Error, Result, Status, Text;
 import flint.conc : Context, Deadline;
-import flint.desktop : Asset, Capability, Command, DesktopBackend, DesktopCommands, InvokeContext,
-    Listen, Window, WindowOptions;
+import flint.engine.desktop : Asset, Capability, Command, DesktopBackend, DesktopCommands,
+    InvokeContext, Listen, Window, WindowOptions;
 import std.stdio : writefln;
 
 @safe:

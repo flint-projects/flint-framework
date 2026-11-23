@@ -1,6 +1,6 @@
-"""Milestone 10 (ADR-028 section 10): SIGTERM and SIGINT shut a flint:web application down gracefully.
+"""Milestone 10 (ADR-028 section 10): SIGTERM and SIGINT shut a flint:engine-web application down gracefully.
 
-The fixture in tests/integration/graceful-shutdown composes flint:os's watchShutdownSignals with flint:web's
+The fixture in tests/integration/graceful-shutdown composes flint:os's watchShutdownSignals with flint:engine-web's
 runApplication. It links the pinned native providers, so build them first (tools/native_build.py --emit-dub).
 FLINT_TEST_COMPILER picks the compiler (dmd by default)."""
 import http.client

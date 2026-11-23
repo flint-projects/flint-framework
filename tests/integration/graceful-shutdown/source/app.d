@@ -1,5 +1,5 @@
 /// An application composed the way Flint Boot will compose it: flint:os turns SIGTERM and SIGINT into the
-/// graceful and forced contexts that flint:web's runApplication drains on (ADR-028 section 10).
+/// graceful and forced contexts that flint:engine-web's runApplication drains on (ADR-028 section 10).
 /// Usage: flint-graceful-shutdown-fixture <port> <grace milliseconds>
 module app;
 
@@ -8,8 +8,8 @@ import core.time : dur;
 import flint.arena : Error, Result, Status;
 import flint.conc : Deadline;
 import flint.os : watchShutdownSignals;
-import flint.reactor : Reactor;
-import flint.web : Get, QueryParam, RequestContext, RestController, ServerOptions, WorkerController, runApplication;
+import flint.engine.reactor : Reactor;
+import flint.engine.web : Get, QueryParam, RequestContext, RestController, ServerOptions, WorkerController, runApplication;
 import std.conv : to;
 import std.stdio : writeln;
 

@@ -1,8 +1,8 @@
 module app;
 import flint.arena : Status;
-import flint.tui : Event, EventKind, KeyCode, Effects, Frame, run;
-import flint.style : Style, Color;
-import flint.widgets : TextInput;
+import flint.engine.tui : Event, EventKind, KeyCode, Effects, Frame, run;
+import flint.engine.style : Style, Color;
+import flint.engine.widgets : TextInput;
 
 @safe:
 /// Application state for a bounded single-field terminal form.
