@@ -193,6 +193,60 @@ private Action[] routes(C)()
 
 private enum controllerRoutes(C) = routes!C();
 
+/// The documented operations of controller C, from its route table and argument plan (ADR-028 section 5).
+package(flint.web) template controllerOperations(C)
+{
+    static assert(isController!C(), "OpenAPI documents controllers: " ~ C.stringof);
+    enum controllerOperations = () {
+        import flint.web.internal.openapi : Operation, methodName, openApiPath, quote, schemaOf;
+        import std.traits : ReturnType;
+
+        Operation[] result;
+        static foreach (action; controllerRoutes!C)
+        {
+            {
+                alias member = __traits(getOverloads, C, action.name, true)[action.overload];
+                static if (is(typeof(member) Parameters == function))
+                {
+                    enum label = C.stringof ~ "." ~ action.name;
+                    enum invocation = plan!(member, Parameters)(label, action.path);
+                    Operation operation;
+                    operation.path = openApiPath(action.path);
+                    operation.method = methodName(action.method);
+                    operation.id = label;
+                    static foreach (slot, Parameter; Parameters)
+                    {
+                        {
+                            enum binder = invocation.bindings[slot];
+                            static if (binder.source == Source.path || binder.source == Source.query)
+                                operation.parameters ~= (operation.parameters.length
+                                        ? "," : "") ~ `{"name":` ~ quote(binder.name) ~ `,"in":"` ~ (
+                                        binder.source == Source.path
+                                        ? "path" : "query") ~ `","required":` ~ (binder.source == Source.path
+                                        || binder.required ? "true" : "false") ~ `,"schema":` ~ schemaOf!Parameter()
+                                    ~ "}";
+                            else static if (binder.source == Source.json)
+                                operation.requestBody = schemaOf!Parameter();
+                        }
+                    }
+                    alias Returned = ReturnType!member;
+                    static if (is(Returned == void))
+                        operation.status = "204";
+                    else static if (is(Returned == Result!Value, Value) && !is(Value == Response))
+                    {
+                        operation.status = action.method == Method.post ? "201" : "200";
+                        operation.response = schemaOf!Value();
+                    }
+                    else
+                        operation.status = "200";
+                    result ~= operation;
+                }
+            }
+        }
+        return result;
+    }();
+}
+
 private Action route(C, alias member)(RoutePrefix location, string name, size_t index)
 {
     Action result;

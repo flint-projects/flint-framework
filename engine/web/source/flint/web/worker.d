@@ -17,6 +17,9 @@ import flint.web.worker_packet : WorkerMedia, WorkerReply, WorkerRequest, worker
 package(flint.web):
 
 private enum queuedPackets = 16;
+/// The request arena of a worker-thread handler: its decoded request, its own allocations and its encoded
+/// response. Reused for every request, since the worker runs one at a time.
+private enum workerArenaBytes = 8 << 20;
 
 /// Startup-owned worker lifetime, observed by the server before releasing its controller bindings.
 struct WorkerLifecycle
@@ -57,11 +60,13 @@ final class ControllerWorker(C)
     private shared bool stopping;
     private shared bool stopped = true;
     private Thread thread;
+    private ubyte[] arenaStorage;
 
     this(C startup)
     {
         instance = startup;
         packets = new Job!C[queuedPackets];
+        arenaStorage = new ubyte[workerArenaBytes];
     }
 
     Error start()
@@ -202,8 +207,7 @@ final class ControllerWorker(C)
 
     private void execute(ref Job!C job)
     {
-        ubyte[3 * workerPacketBytes] storage;
-        scope context = RequestContext(RequestArena(storage[]));
+        scope context = RequestContext(RequestArena(arenaStorage));
         context.requestId = job.request.identity;
         context.cancellation = job.cancellation;
         RequestMetadata metadata;
@@ -264,42 +268,56 @@ private bool unpack(scope const WorkerRequest* packet, scope RequestMetadata* me
     return true;
 }
 
-private void encodeResponse(Response response, ref scope RequestArena arena, ref WorkerReply reply) nothrow @nogc
+private void encodeResponse(Response response, ref scope RequestArena arena, ref WorkerReply reply) nothrow
 {
     reply.status = response.status;
     reply.length = 0;
+    reply.large = null;
+    reply.contentType = null;
+    reply.media = WorkerMedia.none;
+    bool listed;
     foreach (index, known; workerMediaTypes)
     {
         if (known == response.contentType)
         {
             reply.media = cast(WorkerMedia) index;
-            reply.error = Status.ok;
-            if (response.body != Buffer.init)
-                reply.error = encodeBody(response.body, arena, reply);
-            return;
+            listed = true;
+            break;
         }
     }
-    reply.error = Status.unsupported;
+    if (!listed)
+        reply.contentType = response.contentType;
+    reply.error = Status.ok;
+    if (response.body != Buffer.init)
+        reply.error = encodeBody(response.body, arena, reply);
 }
 
-private Status encodeBody(Buffer buffer, ref scope RequestArena arena, ref WorkerReply reply) nothrow @nogc
+private Status encodeBody(Buffer buffer, ref scope RequestArena arena, ref WorkerReply reply) nothrow
 {
-    if (buffer.length() > workerPacketBytes)
-        return Status.resourceExhausted;
-    return arena.read(buffer, (scope const(ubyte)[] content) @safe nothrow @nogc {
-        reply.body[0 .. content.length] = content;
-        reply.length = cast(ushort) content.length;
+    if (buffer.length() <= workerPacketBytes)
+        return arena.read(buffer, (scope const(ubyte)[] content) @safe nothrow @nogc {
+            reply.body[0 .. content.length] = content;
+            reply.length = cast(ushort) content.length;
+        });
+    auto copy = new ubyte[buffer.length()];
+    const read = arena.read(buffer, (scope const(ubyte)[] content) @safe nothrow @nogc {
+        copy[0 .. content.length] = content;
     });
+    reply.large = copy;
+    return read;
 }
 
 private Result!Response copyResponse(ref WorkerReply reply, ref scope RequestArena arena) nothrow @nogc
 {
     if (reply.error != Status.ok)
         return failure(reply.error);
-    const payload = arena.copyIn(reply.body[0 .. reply.length]);
+    const payload = arena.copyIn(reply.large.length ? reply.large : reply.body[0 .. reply.length]);
+    const media = reply.contentType.length ? reply.contentType : workerMediaTypes[reply.media];
+    reply.large = null;
+    reply.contentType = null;
     if (!payload.ok())
         return Result!Response(Response.init, payload.error);
-    return Result!Response(Response(reply.status, workerMediaTypes[reply.media], payload.value));
+    return Result!Response(Response(reply.status, media, payload.value));
 }
 
 private Result!Response failure(Status status) nothrow @nogc

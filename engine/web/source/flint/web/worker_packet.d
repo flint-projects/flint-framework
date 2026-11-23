@@ -92,4 +92,9 @@ struct WorkerReply
     WorkerMedia media;
     ushort length;
     ubyte[workerPacketBytes] body;
+    /// A body larger than the packet, copied to the GC heap by the worker thread and released by the reactor
+    /// after it copies the body into the request arena (ADR-028 section 3).
+    const(ubyte)[] large;
+    /// A media type outside `workerMediaTypes`, such as a front end's `text/javascript`.
+    string contentType;
 }
