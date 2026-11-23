@@ -28,6 +28,7 @@ lastName	must not be null	{jakarta.validation.constraints.NotNull.message}	null
 limits	size must be between 0 and 1	{jakarta.validation.constraints.Size.message}	{a=1, b=2}
 maxAge	must be less than or equal to 120	{jakarta.validation.constraints.Max.message}	150
 maybePet.name	must not be blank	{jakarta.validation.constraints.NotBlank.message}	
+missingId	must not be null	{jakarta.validation.constraints.NotNull.message}	null
 nicknames	size must be between 0 and 2	{jakarta.validation.constraints.Size.message}	[a, b, c]
 notLetters	must match "\P{L}+"	{jakarta.validation.constraints.Pattern.message}	12é
 nothing	must be null	{jakarta.validation.constraints.Null.message}	x
@@ -43,3 +44,4 @@ role	must match "^ROLE_[A-Z][A-Z0-9_]{1,74}$"	{jakarta.validation.constraints.Pa
 scores	size must be between 4 and 2147483647	{jakarta.validation.constraints.Size.message}	[1, 2, 3]
 tags	must not be empty	{jakarta.validation.constraints.NotEmpty.message}	[]
 telephone	must match "\d{1,10}"	{jakarta.validation.constraints.Pattern.message}	60855510239999
+zeroId	must be greater than or equal to 1	{jakarta.validation.constraints.Min.message}	0

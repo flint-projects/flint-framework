@@ -13,6 +13,7 @@ import flint.jakarta.validation.constraints;
 import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset,
     ZonedDateTime;
 import flint.java.util : ArrayList, List, Optional;
+import std.typecons : Nullable;
 
 @safe:
 
@@ -108,6 +109,9 @@ private final class Petclinic
     @PetAgeValidation LocalDate future = LocalDate.of(2999, 1, 1);
     @PetAgeValidation LocalDate ancient = LocalDate.of(1900, 1, 1);
     @PetAgeValidation LocalDate fine = LocalDate.of(2020, 2, 2);
+    @NotNull Nullable!int missingId;
+    @Min(1) Nullable!int zeroId = Nullable!int(0);
+    @Min(1) Nullable!int nullId;
     @Even int odd = 7;
     @Even(divisor : 5) int five = 10;
 }
@@ -182,6 +186,8 @@ private string valueOf(Any value)
     import flint.engine.aot.objects : objectToString;
     import flint.serde.java_number : javaDoubleString;
 
+    if (value.typeName().length == 0)
+        return "null";
     // A D array is never null (`[]` is null): it prints as Arrays.toString does.
     if (value.holds!(int[])())
         return list(value.get!(int[])());
@@ -238,6 +244,7 @@ private Validator validator()
         ])
         table.add(d);
     table.add(descriptorOf!Petclinic());
+    table.add(descriptorOf!(Nullable!int)());
     auto configuration = cast(HibernateValidatorConfiguration) Validation.byDefaultProvider();
     assert(configuration !is null, "Hibernate Validator registers itself as the default provider");
     auto mapping = configuration.createConstraintMapping();

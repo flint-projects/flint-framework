@@ -108,6 +108,9 @@ public class GoldenValidation {
         @PetAgeValidation public LocalDate ancient = LocalDate.of(1900, 1, 1);
         @PetAgeValidation public LocalDate fine = LocalDate.of(2020, 2, 2);
         @PetAgeValidation public LocalDate unset = null;
+        @NotNull public Integer missingId = null;
+        @Min(1) public Integer zeroId = 0;
+        @Min(1) public Integer nullId = null;
         @Even public Integer odd = 7;
         @Even(divisor = 5) public Integer five = 10;
     }

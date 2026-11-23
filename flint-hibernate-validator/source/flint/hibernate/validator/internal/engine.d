@@ -646,6 +646,14 @@ private struct Run
 
     void checkConstraints(Any leaf, ref Any value, scope const(MergedAnnotation)[] annotations, PathImpl at)
     {
+        // A Nullable!T (rulebook R5: Java's Integer, a String that may be null) is validated as its value or null,
+        // as Hibernate validates the boxed value itself; Optional keeps container semantics.
+        auto d = described(value);
+        if (d !is null && d.unwrap !is null && d.name.length > 22 && d.name[0 .. 22] == "std.typecons.Nullable!")
+        {
+            auto inner = d.unwrap(value);
+            return checkConstraints(leaf, inner, annotations, at);
+        }
         foreach (ref a; annotations)
         {
             if (isBuiltin(a.type))

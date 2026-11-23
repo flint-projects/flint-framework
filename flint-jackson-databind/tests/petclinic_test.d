@@ -358,3 +358,40 @@ unittest
     }
     assert(false, "no ValidationMessageDto row");
 }
+
+/// openapi-generator's `Integer id` (boxed, nullable) is `Nullable!int` (rulebook R5).
+private final class TypeFields
+{
+    string name;
+    imported!"std.typecons".Nullable!int id;
+
+    this()
+    {
+    }
+
+    this(string name, imported!"std.typecons".Nullable!int id)
+    {
+        this.name = name;
+        this.id = id;
+    }
+}
+
+@("petclinic: a boxed Integer (Nullable!int) reads absent or null as null, writes null, and round-trips a number")
+unittest
+{
+    import std.typecons : Nullable;
+
+    auto t = table();
+    t.add(described!TypeFields());
+    t.add(descriptorOf!(Nullable!int)());
+    auto mapper = JsonMapper.builder().findAndAddModules().descriptors(t).build();
+    // A request body without "id": the creator's missing boxed argument is null, not a FAIL_ON_NULL_FOR_PRIMITIVES
+    // failure, as Java binds null to Integer.
+    auto created = mapper.readValue!TypeFields(`{"name":"ferret"}`);
+    assert(created.name == "ferret" && created.id.isNull);
+    assert(mapper.writeValueAsString(created) == `{"name":"ferret","id":null}`);
+    auto explicit = mapper.readValue!TypeFields(`{"name":"ferret","id":null}`);
+    assert(explicit.id.isNull);
+    auto numbered = mapper.readValue!TypeFields(`{"id":7,"name":"ferret"}`);
+    assert(numbered.id.get == 7 && mapper.writeValueAsString(numbered) == `{"name":"ferret","id":7}`);
+}
