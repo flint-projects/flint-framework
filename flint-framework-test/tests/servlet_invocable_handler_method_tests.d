@@ -88,20 +88,15 @@ unittest
             "Null return value + @ComposedResponseStatus should result in 'request handled'");
 }
 
-// Behaviour: a class-level @ResponseStatus is ignored; Flint AOT's rows (and HandlerMethod) take the status from
-// the method only, where Spring's HandlerMethod falls back to the bean type's annotation.
-version (FlintTypeLevelResponseStatus)
+@("ServletInvocableHandlerMethodTests.invokeAndHandle_VoidWithTypeLevelResponseStatus")
+unittest
 {
-    @("ServletInvocableHandlerMethodTests.invokeAndHandle_VoidWithTypeLevelResponseStatus")
-    unittest
-    {
-        auto f = setup();
-        auto handlerMethod = getHandlerMethod!(ResponseStatusHandler, "handle")(f, new ResponseStatusHandler());
-        handlerMethod.invokeAndHandle(f.webRequest, f.mavContainer);
+    auto f = setup();
+    auto handlerMethod = getHandlerMethod!(ResponseStatusHandler, "handle")(f, new ResponseStatusHandler());
+    handlerMethod.invokeAndHandle(f.webRequest, f.mavContainer);
 
-        assert(f.mavContainer.isRequestHandled());
-        assert(f.response.getStatus() == HttpStatus.BAD_REQUEST.value());
-    }
+    assert(f.mavContainer.isRequestHandled());
+    assert(f.response.getStatus() == HttpStatus.BAD_REQUEST.value());
 }
 
 @("ServletInvocableHandlerMethodTests.invokeAndHandle_VoidWithHttpServletResponseArgument")
@@ -480,22 +475,18 @@ version (FlintAsyncWebRequest)
     }
 }
 
-// Behaviour: ResponseEntity is a struct, so the handler's null is ResponseEntity.init, which
-// HttpEntityMethodProcessor writes with status 0 instead of leaving the response alone.
-version (FlintNullResponseEntity)
+// ResponseEntity is a struct: the handler's null is ResponseEntity.init, which has no status.
+// SPR-12287 (16/Oct/14 comments)
+@("ServletInvocableHandlerMethodTests.responseEntityRawTypeWithNullBody")
+unittest
 {
-    // SPR-12287 (16/Oct/14 comments)
-    @("ServletInvocableHandlerMethodTests.responseEntityRawTypeWithNullBody")
-    unittest
-    {
-        auto f = setup();
-        f.returnValueHandlers.addHandlers(new HttpEntityMethodProcessor(f.converters));
-        auto handlerMethod = getHandlerMethod!(ResponseEntityHandler, "handleRawType")(f, new ResponseEntityHandler());
-        handlerMethod.invokeAndHandle(f.webRequest, f.mavContainer);
+    auto f = setup();
+    f.returnValueHandlers.addHandlers(new HttpEntityMethodProcessor(f.converters));
+    auto handlerMethod = getHandlerMethod!(ResponseEntityHandler, "handleRawType")(f, new ResponseEntityHandler());
+    handlerMethod.invokeAndHandle(f.webRequest, f.mavContainer);
 
-        assert(f.response.getStatus() == 200);
-        assert(f.response.getContentAsString().length == 0);
-    }
+    assert(f.response.getStatus() == 200);
+    assert(f.response.getContentAsString().length == 0);
 }
 
 /// `controller.getClass().getDeclaredMethod(methodName)`, wrapped as Spring's `getHandlerMethod` does.

@@ -50,7 +50,23 @@ class HandlerMethod
         if (mapping.method !is null)
             methodAnnotations = mapping.method.annotations;
         typeAnnotations = mapping.typeAnnotations;
+        if (responseStatus == 0)
+            evaluateTypeResponseStatus();
         initParameters(mapping.arguments, mapping.returnType);
+    }
+
+    // Spring's evaluateResponseStatus: without a method-level @ResponseStatus, the bean type's applies.
+    private void evaluateTypeResponseStatus()
+    {
+        import flint.engine.aot.descriptor : findAnnotation;
+        import flint.web.bind.annotation : ResponseStatus;
+
+        if (auto annotation = findAnnotation(typeAnnotations, "flint.web.bind.annotation.ResponseStatus"))
+        {
+            const status = annotation.value.get!ResponseStatus;
+            responseStatus = status.code.value();
+            responseStatusReason = status.reason;
+        }
     }
 
     /// For an exception handler row and its bean.

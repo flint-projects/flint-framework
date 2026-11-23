@@ -418,26 +418,21 @@ unittest
     assertExceptionHandledAsBody(f, mav, javaToString(err));
 }
 
-// The resolver follows D's `Throwable.next`, but a `RuntimeException` keeps its Java cause in `getCause()`, so the
-// AssertionError cause of a FatalBeanException is never examined (likely bug).
-version (FlintResolverRuntimeExceptionCause)
+@("ExceptionHandlerExceptionResolverTests.resolveExceptionWithAssertionErrorAsRootCause")
+unittest
 {
-    @("ExceptionHandlerExceptionResolverTests.resolveExceptionWithAssertionErrorAsRootCause")
-    unittest
-    {
-        import flint.beans : FatalBeanException;
+    import flint.beans : FatalBeanException;
 
-        auto f = setup();
-        loadConfiguration!MyConfig(f);
+    auto f = setup();
+    loadConfiguration!MyConfig(f);
 
-        auto rootCause = new AssertionError("argh");
-        auto cause = new FatalBeanException("wrapped", rootCause);
-        Exception ex = exceptionWithCause(cause); // gh-26317
-        HandlerMethod handlerMethod = handlerMethodOf(new ResponseBodyController(), "handle");
-        ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
+    auto rootCause = new AssertionError("argh");
+    auto cause = new FatalBeanException("wrapped", rootCause);
+    Exception ex = exceptionWithCause(cause); // gh-26317
+    HandlerMethod handlerMethod = handlerMethodOf(new ResponseBodyController(), "handle");
+    ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
 
-        assertExceptionHandledAsBody(f, mav, javaToString(rootCause));
-    }
+    assertExceptionHandledAsBody(f, mav, javaToString(rootCause));
 }
 
 // The resolver has no MessageSource (application context) to resolve an `@ResponseStatus` reason, and
@@ -469,72 +464,62 @@ version (FlintExceptionResolverMessageSource)
     }
 }
 
-// ControllerAdviceBean compares `assignableTypes` with the controller's exact type, so an advice for a superclass
-// (WebApplicationObjectSupport) does not apply to its subclasses (likely bug).
-version (FlintControllerAdviceAssignableTypes)
+@("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceHandler")
+unittest
 {
-    @("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceHandler")
+    auto f = setup();
+    loadConfiguration!MyControllerAdviceConfig(f);
+
+    auto ex = new IllegalStateException();
+    HandlerMethod handlerMethod = handlerMethodOf(new ResponseBodyController(), "handle");
+    ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
+
+    assertExceptionHandledAsBody(f, mav, "BasePackageTestExceptionResolver: IllegalStateException");
+}
+
+@("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceHandlerMatchingCauseLevel2")
+unittest
+{
+    auto f = setup();
+    loadConfiguration!MyControllerAdviceConfig(f);
+
+    Exception ex = exceptionWithCause(new IllegalStateException());
+    HandlerMethod handlerMethod = handlerMethodOf(new ResponseBodyController(), "handle");
+    ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
+
+    assertExceptionHandledAsBody(f, mav, "BasePackageTestExceptionResolver: IllegalStateException");
+}
+
+// Spring AOP's ProxyFactory is not ported.
+version (FlintAopProxyFactory)
+{
+    @("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceAgainstProxy")
     unittest
     {
+        import flint.aop.framework : ProxyFactory;
+
         auto f = setup();
         loadConfiguration!MyControllerAdviceConfig(f);
 
         auto ex = new IllegalStateException();
-        HandlerMethod handlerMethod = handlerMethodOf(new ResponseBodyController(), "handle");
+        HandlerMethod handlerMethod = handlerMethodOf(cast(ResponseBodyController) new ProxyFactory(
+                new ResponseBodyController()).getProxy(), "handle");
         ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
 
         assertExceptionHandledAsBody(f, mav, "BasePackageTestExceptionResolver: IllegalStateException");
-    }
-
-    @("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceHandlerMatchingCauseLevel2")
-    unittest
-    {
-        auto f = setup();
-        loadConfiguration!MyControllerAdviceConfig(f);
-
-        Exception ex = exceptionWithCause(new IllegalStateException());
-        HandlerMethod handlerMethod = handlerMethodOf(new ResponseBodyController(), "handle");
-        ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
-
-        assertExceptionHandledAsBody(f, mav, "BasePackageTestExceptionResolver: IllegalStateException");
-    }
-
-    // Spring AOP's ProxyFactory is not ported.
-    version (FlintAopProxyFactory)
-    {
-        @("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceAgainstProxy")
-        unittest
-        {
-            import flint.aop.framework : ProxyFactory;
-
-            auto f = setup();
-            loadConfiguration!MyControllerAdviceConfig(f);
-
-            auto ex = new IllegalStateException();
-            HandlerMethod handlerMethod = handlerMethodOf(cast(ResponseBodyController) new ProxyFactory(
-                    new ResponseBodyController()).getProxy(), "handle");
-            ModelAndView mav = f.resolver.resolveException(f.request, f.response, handlerMethod, ex);
-
-            assertExceptionHandledAsBody(f, mav, "BasePackageTestExceptionResolver: IllegalStateException");
-        }
     }
 }
 
-// Without a handler, the resolver applies every advice bean; Spring's HandlerTypePredicate rejects a null handler
-// type for an advice with selectors (basePackages, assignableTypes, annotations) (likely bug).
-version (FlintControllerAdviceNullHandler)
+@("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceNoHandler")
+unittest
 {
-    @("ExceptionHandlerExceptionResolverTests.resolveExceptionControllerAdviceNoHandler")
-    unittest
-    {
-        auto f = setup();
-        loadConfiguration!MyControllerAdviceConfig(f);
+    auto f = setup();
+    loadConfiguration!MyControllerAdviceConfig(f);
 
-        auto ex = new IllegalStateException();
-        ModelAndView mav = f.resolver.resolveException(f.request, f.response, null, ex);
+    auto ex = new IllegalStateException();
+    ModelAndView mav = f.resolver.resolveException(f.request, f.response, null, ex);
 
-        assertExceptionHandledAsBody(f, mav, "DefaultTestExceptionResolver: IllegalStateException");
-    }
+    assertExceptionHandledAsBody(f, mav, "DefaultTestExceptionResolver: IllegalStateException");
 }
 
 // The resolver has no setMappedHandlerClasses or setMappedHandlerPredicate: it applies only to HandlerMethod

@@ -16,7 +16,7 @@ Modified by the Flint authors: annotations are read from Flint AOT's merged anno
 +/
 module flint.web.method.annotation;
 
-import flint.core : MethodParameter;
+import flint.core : MethodParameter, causeOf;
 import flint.core.convert : ConversionFailedException;
 import flint.web.bind.support : javaTypeName;
 import flint.engine.aot.any : Any;
@@ -55,7 +55,7 @@ class TypeMismatchException : RuntimeException
         if (cause is null)
             return "";
         // ConversionFailedException wraps the parse failure; Spring prints the innermost message.
-        auto inner = cause.next !is null ? cause.next : cause;
+        auto inner = causeOf(cause) !is null ? causeOf(cause) : cause;
         return "; " ~ inner.msg;
     }
 
@@ -397,7 +397,7 @@ class ExceptionHandlerMethodResolver
     /// The handler for `exception` (or, failing that, for its causes), or `null`.
     ExceptionHandlerSpec* resolveMethod(Throwable exception)
     {
-        for (Throwable current = exception; current !is null; current = current.next)
+        for (Throwable current = exception; current !is null; current = causeOf(current))
             if (auto found = resolveMethodByExceptionType(current))
                 return found;
         return null;

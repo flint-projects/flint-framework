@@ -719,30 +719,25 @@ version (FlintErrorResponseInterceptors)
     }
 }
 
-// Behaviour: getProducibleMediaTypes returns no types (Spring: `*/*`) when no converter can write the value, so
-// writeWithMessageConverters throws HttpMessageNotWritableException instead of HttpMediaTypeNotAcceptableException.
-version (FlintProducibleMediaTypesAll)
+// SPR-13135
+@("RequestResponseBodyMethodProcessorTests.handleReturnValueWithInvalidReturnType")
+unittest
 {
-    // SPR-13135
-    @("RequestResponseBodyMethodProcessorTests.handleReturnValueWithInvalidReturnType")
-    unittest
-    {
-        import flint.java.io : ByteArrayOutputStream;
-        import flint.web : HttpMediaTypeNotAcceptableException;
+    import flint.java.io : ByteArrayOutputStream;
+    import flint.web : HttpMediaTypeNotAcceptableException;
 
-        auto f = setup();
-        auto returnType = methodParameter!handleAndReturnOutputStream(-1);
-        HttpMessageConverter[] converters = [new StringHttpMessageConverter()];
-        auto processor = new TestProcessor(converters);
-        assert(thrown!HttpMediaTypeNotAcceptableException(() {
-                processor.writeWithMessageConverters(new ByteArrayOutputStream(), returnType, f.request);
-            }) !is null);
-    }
+    auto f = setup();
+    auto returnType = methodParameter!handleAndReturnOutputStream(-1);
+    HttpMessageConverter[] converters = [new StringHttpMessageConverter()];
+    auto processor = new TestProcessor(converters);
+    assert(thrown!HttpMediaTypeNotAcceptableException(() {
+            processor.writeWithMessageConverters(new ByteArrayOutputStream(), returnType, f.request);
+        }) !is null);
+}
 
-    @RequestMapping private imported!"flint.java.io".OutputStream handleAndReturnOutputStream()
-    {
-        return null;
-    }
+@RequestMapping private imported!"flint.java.io".OutputStream handleAndReturnOutputStream()
+{
+    return null;
 }
 
 // flint.web has no ContentNegotiationManagerFactoryBean, and the processor adds no Content-Disposition for

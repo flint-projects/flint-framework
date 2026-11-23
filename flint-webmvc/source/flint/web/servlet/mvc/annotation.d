@@ -10,6 +10,7 @@ Modified by the Flint authors: `@ResponseStatus` on an exception class is read f
 +/
 module flint.web.servlet.mvc.annotation;
 
+import flint.core : causeOf;
 import flint.engine.aot.descriptor : DescriptorTable;
 import flint.jakarta.servlet.http : HttpServletRequest, HttpServletResponse;
 import flint.web.bind.annotation : ResponseStatus;
@@ -39,7 +40,7 @@ class ResponseStatusExceptionResolver : AbstractHandlerExceptionResolver
         auto status = findResponseStatus(ex, found);
         if (found)
             return resolveResponseStatus(status, request, response, handler, ex);
-        if (auto cause = cast(Exception) ex.next)
+        if (auto cause = cast(Exception) causeOf(ex))
             return doResolveException(request, response, handler, cause);
         return null;
     }

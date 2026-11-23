@@ -18,7 +18,7 @@ handlers select on the declared return type name. Message-converter selection is
 +/
 module flint.web.servlet.mvc.method.annotation;
 
-import flint.core : MethodParameter;
+import flint.core : MethodParameter, causeOf;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.bean : BeanFactory;
 import flint.engine.aot.descriptor : DescriptorTable, MergedAnnotation;
@@ -426,17 +426,30 @@ abstract class AbstractMessageConverterMethodProcessor : HandlerMethodArgumentRe
         }
     }
 
-    /// The producible types: the mapping's `produces`, else every converter's types for `valueType`.
+    /// The producible types: the mapping's `produces`, else the types of the converters that can write
+    /// `valueType`, else `*/*`.
     protected MediaType[] getProducibleMediaTypes(HttpServletRequest request, string valueType)
     {
         auto attribute = request.getAttribute(HandlerMapping.PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE);
-        if (!attribute.isNull())
+        if (!attribute.isNull() && attribute.get!(MediaType[]).length != 0)
             return attribute.get!(MediaType[]);
         MediaType[] result;
         foreach (converter; messageConverters)
             if (converter.canWrite(valueType, null))
-                result ~= converter.getSupportedMediaTypes(valueType);
+                foreach (mediaType; converter.getSupportedMediaTypes(valueType))
+                    if (!contains(result, mediaType))
+                        result ~= mediaType;
+        if (result.length == 0)
+            result ~= MediaType.ALL;
         return result;
+    }
+
+    private static bool contains(const MediaType[] types, const MediaType mediaType)
+    {
+        foreach (ref type; types)
+            if (type == mediaType)
+                return true;
+        return false;
     }
 
     private static void determineCompatibleMediaTypes(MediaType[] acceptableTypes,
@@ -594,6 +607,10 @@ class HttpEntityMethodProcessor : AbstractMessageConverterMethodProcessor
     {
         mavContainer.setRequestHandled(true);
         if (returnValue.isNull())
+            return;
+        // ResponseEntity is a struct, so a handler's `null` arrives as ResponseEntity.init, the one entity
+        // without a status: Spring leaves the response alone for it.
+        if (returnValue.holds!ResponseEntity && returnValue.get!ResponseEntity.getStatusCode().value() == 0)
             return;
         auto outputMessage = createOutputMessage(webRequest);
         HttpEntity httpEntity;
@@ -922,19 +939,27 @@ struct ControllerAdviceBean
 
     /// Whether the advice applies to a controller of `beanType` carrying `typeAnnotations` (Spring's
     /// `HandlerTypePredicate`: a name prefix of a base package, an assignable type, or a class annotation).
-    /// Assignability compares the exact type until descriptors carry supertypes.
+    /// `supertypes` are the controller's superclasses and interfaces, for assignability; a null `beanType` (no
+    /// handler) matches only an advice without selectors.
     // dfmt off
-    bool isApplicableToBeanType(string beanType, scope const(MergedAnnotation)[] typeAnnotations = null) const
-            pure nothrow @nogc
+    bool isApplicableToBeanType(string beanType, scope const(MergedAnnotation)[] typeAnnotations = null,
+            scope const(string)[] supertypes = null) const pure nothrow @nogc
     {
         if (basePackages.length == 0 && assignableTypes.length == 0 && annotations.length == 0)
             return true;
+        if (beanType is null)
+            return false;
         foreach (p; basePackages)
             if (beanType.length >= p.length && beanType[0 .. p.length] == p)
                 return true;
         foreach (t; assignableTypes)
+        {
             if (t == beanType)
                 return true;
+            foreach (supertype; supertypes)
+                if (t == supertype)
+                    return true;
+        }
         foreach (a; annotations)
             foreach (ref annotation; typeAnnotations)
                 if (annotation.type == a)
@@ -942,6 +967,30 @@ struct ControllerAdviceBean
         return false;
     }
     // dfmt on
+}
+
+/// The superclasses (up to, not including, `Object`) and interfaces of `bean`'s class, by fully qualified name.
+private string[] supertypesOf(Object bean) pure nothrow
+{
+    string[] names;
+    void addInterfaces(TypeInfo_Class type)
+    {
+        foreach (ref implemented; type.interfaces)
+        {
+            names ~= implemented.classinfo.name;
+            addInterfaces(implemented.classinfo);
+        }
+    }
+
+    if (bean is null)
+        return null;
+    for (TypeInfo_Class type = typeid(bean); type !is null && type !is typeid(Object); type = type.base)
+    {
+        if (type !is typeid(bean))
+            names ~= type.name;
+        addInterfaces(type);
+    }
+    return names;
 }
 
 /// `ExceptionHandlerExceptionResolver`: invokes `@ExceptionHandler` methods of the controller, then of advice.
@@ -1019,7 +1068,7 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
         auto webRequest = new ServletWebRequest(request, response);
         auto mavContainer = new ModelAndViewContainer;
         Any[] provided = [Any.of(cast(Object) exception)];
-        for (Throwable cause = exception.next; cause !is null; cause = cause.next)
+        for (Throwable cause = causeOf(exception); cause !is null; cause = causeOf(cause))
             provided ~= Any.of(cast(Object) cause);
         if (handlerMethod !is null)
             provided ~= Any.of(cast(Object) handlerMethod);
@@ -1056,10 +1105,11 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
                 return found;
             }
         }
+        const supertypes = handlerMethod is null ? null : supertypesOf(handlerMethod.getBean());
         foreach (ref advice; adviceBeans)
         {
-            if (handlerMethod !is null && !advice.isApplicableToBeanType(handlerMethod.getBeanType(),
-                    handlerMethod.getBeanTypeAnnotations()))
+            if (handlerMethod is null ? !advice.isApplicableToBeanType(null) : !advice.isApplicableToBeanType(
+                    handlerMethod.getBeanType(), handlerMethod.getBeanTypeAnnotations(), supertypes))
                 continue;
             if (auto found = new ExceptionHandlerMethodResolver(advice.handlers).resolveMethod(exception))
             {

@@ -110,19 +110,14 @@ unittest
     assert(mav is null, "ModelAndView returned");
 }
 
-// The resolver follows D's `Throwable.next`, but a `RuntimeException` keeps its Java cause in `getCause()`, so the
-// annotated cause of a TypeMismatchException is never examined (likely bug).
-version (FlintResolverRuntimeExceptionCause)
+@("ResponseStatusExceptionResolverTests.nestedException")
+unittest
 {
-    @("ResponseStatusExceptionResolverTests.nestedException")
-    unittest
-    {
-        auto f = setup();
-        Exception cause = new StatusCodeAndReasonMessageException();
-        auto ex = new TypeMismatchException(Any.of("value"), typeNameOf!ITestBean, cause);
-        ModelAndView mav = f.exceptionResolver.resolveException(f.request, f.response, null, ex);
-        assertResolved(f, mav, 410, "gone.reason");
-    }
+    auto f = setup();
+    Exception cause = new StatusCodeAndReasonMessageException();
+    auto ex = new TypeMismatchException(Any.of("value"), typeNameOf!ITestBean, cause);
+    ModelAndView mav = f.exceptionResolver.resolveException(f.request, f.response, null, ex);
+    assertResolved(f, mav, 410, "gone.reason");
 }
 
 @("ResponseStatusExceptionResolverTests.responseStatusException")
@@ -190,19 +185,16 @@ version (FlintWebObservation)
         assert(exchange.error() is ex);
     }
 
-    version (FlintResolverRuntimeExceptionCause)
+    @("ResponseStatusExceptionResolverTests.nestedServerErrorResponseStatusIsRecordedOnObservation")
+    unittest
     {
-        @("ResponseStatusExceptionResolverTests.nestedServerErrorResponseStatusIsRecordedOnObservation")
-        unittest
-        {
-            auto f = setup();
-            Exception cause = new ServerErrorException();
-            auto ex = new TypeMismatchException(Any.of("value"), typeNameOf!ITestBean, cause);
+        auto f = setup();
+        Exception cause = new ServerErrorException();
+        auto ex = new TypeMismatchException(Any.of("value"), typeNameOf!ITestBean, cause);
 
-            ObservedExchange!ModelAndView exchange = observe(f, ex);
-            assertResolved(f, exchange.result(), 500, null);
-            assert(exchange.error() is cause);
-        }
+        ObservedExchange!ModelAndView exchange = observe(f, ex);
+        assertResolved(f, exchange.result(), 500, null);
+        assert(exchange.error() is cause);
     }
 
     @("ResponseStatusExceptionResolverTests.clientErrorIsNotRecordedOnObservation")
