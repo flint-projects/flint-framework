@@ -1,0 +1,16 @@
+name "engine-aot"
+description "Flint AOT runtime: type descriptors, the erased Any value and generated bean-definition records"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}
