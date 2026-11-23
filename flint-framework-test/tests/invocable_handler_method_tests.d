@@ -403,3 +403,70 @@ private final class ExceptionRaisingArgumentResolver : HandlerMethodArgumentReso
         throw new IllegalArgumentException("oops, can't read");
     }
 }
+
+/// A wrapping exception, as petclinic-rest's DataIntegrityViolationException around a SQL constraint violation.
+private class WrapperException : Exception
+{
+    this(string message, Throwable cause) @safe pure nothrow
+    {
+        super(message, __FILE__, __LINE__, cause);
+    }
+}
+
+/// The cause it wraps.
+private class CauseException : Exception
+{
+    this(string message) @safe pure nothrow
+    {
+        super(message);
+    }
+}
+
+/// An @ExceptionHandler row whose invoker does what Flint AOT's generated glue does: cast the exception it is given
+/// to the handler's exception parameter `T` and use it (`e.getMessage()`). With `T` void the handler declares no
+/// exception parameter and returns the invoker's exception's message, or "none".
+private HandlerMethod exceptionHandlerOf(T)()
+{
+    import flint.engine.aot.mapping : ExceptionHandlerSpec;
+
+    ExceptionHandlerSpec spec;
+    spec.bean = "advice";
+    spec.beanType = "advice.Advice";
+    spec.returnType = typeNameOf!string;
+    static if (!is(T == void))
+        spec.arguments = [ArgumentSpec(ArgumentKind.byType, "e", typeNameOf!T)];
+    spec.invoke = (Object bean, Exception exception, HandlerArguments arguments, ref Any result) @safe {
+        static if (is(T == void))
+            result = Any.of(exception is null ? "none" : exception.msg);
+        else
+        {
+            auto e = cast(T) exception;
+            assert(e !is null, "the invoker was given " ~ (exception is null ? "null" : typeid(exception).name));
+            result = Any.of(e.msg);
+        }
+    };
+    return new HandlerMethod(new Object, spec.beanType, spec, "handle");
+}
+
+@("Flint: an @ExceptionHandler's invoker gets the provided exception its parameter matched, not the deepest cause")
+unittest
+{
+    auto f = setup();
+    auto cause = new CauseException("constraint violated");
+    auto wrapper = new WrapperException("could not execute statement", cause);
+    // ExceptionHandlerExceptionResolver provides the exception, then each cause.
+    Any[] provided = [Any.of(cast(Object) wrapper), Any.of(cast(Object) cause)];
+
+    auto forWrapper = new InvocableHandlerMethod(exceptionHandlerOf!WrapperException());
+    forWrapper.setHandlerMethodArgumentResolvers(f.composite);
+    assert(forWrapper.invokeForRequest(f.request, null, provided).get!string == "could not execute statement");
+
+    auto forCause = new InvocableHandlerMethod(exceptionHandlerOf!CauseException());
+    forCause.setHandlerMethodArgumentResolvers(f.composite);
+    assert(forCause.invokeForRequest(f.request, null, provided).get!string == "constraint violated");
+
+    // Without an exception parameter the invoker sees the top-level exception.
+    auto bare = new InvocableHandlerMethod(exceptionHandlerOf!void());
+    bare.setHandlerMethodArgumentResolvers(f.composite);
+    assert(bare.invokeForRequest(f.request, null, provided).get!string == "could not execute statement");
+}

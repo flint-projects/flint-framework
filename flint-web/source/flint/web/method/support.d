@@ -276,11 +276,28 @@ class InvocableHandlerMethod : HandlerMethod
     Any invokeForRequest(NativeWebRequest request, ModelAndViewContainer mavContainer, Any[] providedArgs = null)
     {
         auto args = getMethodArgumentValues(request, mavContainer, providedArgs);
-        Exception exception;
+        return doInvoke(args, invokedException(args, providedArgs));
+    }
+
+    // The generated invoker of an @ExceptionHandler casts this to the handler's exception parameter, so it is the
+    // provided exception (the exception or one of its causes) that parameter resolved to, as Spring passes it as
+    // that argument; without such a parameter, the top-level exception, which providedArgs lists first.
+    private static Exception invokedException(Any[] args, Any[] providedArgs)
+    {
+        foreach (arg; args)
+        {
+            if (arg.isNull())
+                continue;
+            if (auto e = cast(Exception) arg.asObject())
+                foreach (provided; providedArgs)
+                    if (!provided.isNull() && provided.asObject() is e)
+                        return e;
+        }
         foreach (provided; providedArgs)
-            if (auto e = cast(Exception) provided.asObject())
-                exception = e;
-        return doInvoke(args, exception);
+            if (!provided.isNull())
+                if (auto e = cast(Exception) provided.asObject())
+                    return e;
+        return null;
     }
 
     /// Spring's `getMethodArgumentValues`.
