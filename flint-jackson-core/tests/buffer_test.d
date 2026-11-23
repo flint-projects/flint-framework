@@ -44,7 +44,7 @@ unittest
 @("UTF8JsonGenerator: a buffered generator collects documents of any length in one buffer")
 unittest
 {
-    foreach (length; [0, 255, 256, 257, 8000, 50_000])
+    foreach (length; [0, 237, 238, 239, 240, 255, 256, 257, 478, 479, 8000, 50_000])
     {
         const text = document(length);
         auto g = new JsonFactory().createBufferedGenerator(null);

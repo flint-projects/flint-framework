@@ -524,8 +524,10 @@ class UTF8JsonGenerator : JsonGenerator
 
     private enum size_t BYTE_BUFFER_SIZE = 8000;
     // Most documents are small: the buffer starts here and doubles up to BYTE_BUFFER_SIZE before it flushes
-    // (Jackson recycles one 8000-byte buffer per thread instead; Flint keeps no thread-local state).
-    private enum size_t FIRST_BUFFER_SIZE = 256;
+    // (Jackson recycles one 8000-byte buffer per thread instead; Flint keeps no thread-local state). 240, not 256:
+    // a GC array keeps its length after the data, so 256 bytes take the 368-byte size class; 240 and its
+    // doublings (480, 960, 1920, 3840, 7680) each fit the class above them with room for that.
+    private enum size_t FIRST_BUFFER_SIZE = 240;
 
     private ObjectWriteContext _objectWriteContext;
     private JsonFactory _factory;
@@ -541,7 +543,7 @@ class UTF8JsonGenerator : JsonGenerator
     private bool _escapeSlash;
     private bool _escapeNonAscii;
     private bool _numbersAsStrings;
-    private string _hex;
+    private bool _hexUpper; // a flag, not the digits' slice: it keeps the generator in the 128-byte size class
     private string _rootValueSeparator;
 
     /// A generator over `sink`, configured by the factory and the write context.
@@ -559,7 +561,7 @@ class UTF8JsonGenerator : JsonGenerator
         _escapeSlash = factory.isEnabled(JsonWriteFeature.ESCAPE_FORWARD_SLASHES);
         _escapeNonAscii = factory.isEnabled(JsonWriteFeature.ESCAPE_NON_ASCII);
         _numbersAsStrings = factory.isEnabled(JsonWriteFeature.WRITE_NUMBERS_AS_STRINGS);
-        _hex = factory.isEnabled(JsonWriteFeature.WRITE_HEX_UPPER_CASE) ? upperHexDigits : lowerHexDigits;
+        _hexUpper = factory.isEnabled(JsonWriteFeature.WRITE_HEX_UPPER_CASE);
         _rootValueSeparator = factory.getRootValueSeparator();
     }
 
@@ -644,7 +646,13 @@ class UTF8JsonGenerator : JsonGenerator
                 return;
             }
         }
-        _outputBuffer[_outputTail .. _outputTail + bytes.length] = bytes;
+        auto target = _outputBuffer[_outputTail .. _outputTail + bytes.length];
+        // Most pieces are a few bytes (punctuation, names, numbers): a loop beats `_d_array_slice_copy`'s call.
+        if (bytes.length <= 16)
+            foreach (i, b; bytes)
+                target[i] = b;
+        else
+            target[] = bytes[];
         _outputTail += bytes.length;
     }
 
@@ -860,6 +868,7 @@ class UTF8JsonGenerator : JsonGenerator
 
     private void unicodeEscape(uint c)
     {
+        const _hex = _hexUpper ? upperHexDigits : lowerHexDigits;
         immutable ubyte[6] escape = [
             '\\', 'u', _hex[(c >> 12) & 0xF], _hex[(c >> 8) & 0xF], _hex[(c >> 4) & 0xF], _hex[c & 0xF]
         ];
