@@ -160,10 +160,52 @@ private ptrdiff_t matchIgnoreCaseAt(scope const(char)[] s, size_t start, scope c
     return cast(ptrdiff_t) i;
 }
 
-/// Java's `String.equalsIgnoreCase`.
+/// Java's `String.equalsIgnoreCase`. ASCII text (media types, header names) is compared byte by byte; only
+/// non-ASCII text takes the decoding path, whose case folding can match strings of different byte lengths.
 private bool equalsIgnoreCase(scope const(char)[] a, scope const(char)[] b) pure nothrow @nogc
 {
+    if (a == b)
+        return true;
+    if (a.length == b.length)
+    {
+        bool ascii = true;
+        foreach (i, x; a)
+        {
+            const y = b[i];
+            if ((x | y) >= 0x80)
+            {
+                ascii = false;
+                break;
+            }
+            if (x != y && asciiLower(x) != asciiLower(y))
+                return false; // both ASCII here, and every earlier byte was ASCII: the characters differ
+        }
+        if (ascii)
+            return true;
+    }
+    else if (isAscii(a) && isAscii(b))
+        return false;
     return matchIgnoreCaseAt(a, 0, b) == a.length;
+}
+
+private char asciiLower(char c) pure nothrow @nogc
+{
+    return c >= 'A' && c <= 'Z' ? cast(char)(c + 32) : c;
+}
+
+private bool isAscii(scope const(char)[] s) pure nothrow @nogc
+{
+    foreach (c; s)
+        if (c >= 0x80)
+            return false;
+    return true;
+}
+
+unittest
+{
+    assert(equalsIgnoreCase("application/JSON", "Application/json") && !equalsIgnoreCase("text/html", "text/htm"));
+    assert(!equalsIgnoreCase("a-b", "a_b") && !equalsIgnoreCase("ab", "abc") && equalsIgnoreCase("", ""));
+    assert(equalsIgnoreCase("ſ", "s") && equalsIgnoreCase("ÉTÉ", "été") && !equalsIgnoreCase("é", "e")); // Unicode path
 }
 
 /// Whether `s` starts with `prefix`.

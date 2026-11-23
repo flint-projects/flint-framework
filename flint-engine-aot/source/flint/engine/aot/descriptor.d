@@ -190,7 +190,20 @@ final class Descriptor
     {
         import flint.engine.aot.name : simpleTypeName;
 
-        return simpleTypeName(name);
+        // Most names have no template arguments: the part after the last dot.
+        foreach_reverse (i, c; name)
+        {
+            if (c == '!' || c == '(' || c == ')')
+                return simpleTypeName(name);
+            if (c == '.')
+            {
+                foreach (d; name[0 .. i])
+                    if (d == '!' || d == '(')
+                        return simpleTypeName(name);
+                return name[i + 1 .. $];
+            }
+        }
+        return name;
     }
 }
 

@@ -561,3 +561,18 @@ unittest
     assert(method.expression("flint.cache.annotation.Cacheable", "condition") is null);
     assert(method.expression("flint.cache.annotation.CachePut", "key") is null);
 }
+
+unittest
+{
+    // Descriptor.simpleName: the last component, ignoring template arguments.
+    import flint.engine.aot.descriptor : Descriptor, TypeKind;
+
+    foreach (pair; [
+            ["a.b.Owner", "Owner"], ["Owner", "Owner"], ["app.t.Opt!(a.B)", "Opt"],
+            ["app.t.Opt!(Owner).Inner", "Opt"], ["flint.java.util.List!string", "List"]
+        ])
+    {
+        auto d = new Descriptor(pair[0], TypeKind.class_);
+        assert(d.simpleName() == pair[1], pair[0]);
+    }
+}
