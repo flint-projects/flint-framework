@@ -12,11 +12,13 @@ import flint.conc.wait : replaceWaitHook;
 import flint.reactor.internal.operations : OperationId, OperationTable;
 import flint.reactor.internal.queues : Mailbox, Message, Timers;
 import flint.reactor.sys.fibers : createFiber, PoolFiber, releaseFiber, resetFiber, resumeFiber, yieldFiber;
+import flint.reactor.sys.locals : cellStamp, loadCell, localStorable, localWords, storeCell;
+import flint.reactor.sys.offload : OffloadPool;
 import flint.reactor.sys.workers : availableCpus, joinWorker, pinWorker, startWorker, workerUsage, yieldWorker;
 
 public import flint.reactor.types : AcceptDelegate, AcceptFn, Backend, Completion, CompletionDelegate, CompletionFn,
-    ConnectionId, IoId, ListenOptions, NativeInterest, NativeReadyFn, ReadDelegate, ReactorOptions,
-    ReadFn, TaskContext, TaskDelegate, TaskFn, TaskWaker, TimerId, WorkerStats;
+    ConnectionId, IoId, ListenOptions, NativeInterest, NativeReadyFn, OffloadInterrupt, OffloadWork,
+    ReadDelegate, ReactorOptions, ReadFn, TaskContext, TaskDelegate, TaskFn, TaskWaker, TimerId, WorkerStats;
 
 @safe:
 
@@ -69,6 +71,7 @@ private Error waitOnOwner(Deadline deadline) nothrow @nogc
     return owner.yieldUntil(deadline);
 }
 
+// The loop a worker thread runs and its index: the root that FiberLocal and Reactor.current resolve from.
 private Runtime* currentRuntime;
 private uint currentWorkerIndex = uint.max;
 private enum noSlot = uint.max;
@@ -103,7 +106,118 @@ private bool validStorage(ReactorOptions options, uint workers) pure nothrow @no
     return options.maxPendingIoPerCore > 0 && options.maxPendingIoPerCore <= 8192 && options.ioBufferBytes > 0
         && options.ioBufferBytes <= 1_048_576 && options.fiberPoolSize > 0 && options.fiberPoolSize <= ushort.max
         && options.fiberStackBytes >= 16_384 && options.fiberStackBytes <= 1_048_576
+        && options.fiberGuardBytes <= 1_048_576
+        && options.fiberLocalWords <= maxFiberLocalWords && options.offloadThreads <= 256
+        && (options.offloadThreads == 0 || (options.offloadQueueCapacity > 0
+                && options.offloadQueueCapacity <= ushort.max))
         && cast(ulong) workers * options.maxPendingIoPerCore * options.ioBufferBytes <= 512UL * 1024 * 1024;
+}
+
+/// Words that all `FiberLocal` declarations of a process may claim together, one per local plus its value.
+enum uint maxFiberLocalWords = 128;
+
+private shared uint claimedLocalWords;
+// FiberLocal values read or written off any task fiber: on a loop callback, an offload thread or a thread
+// outside the reactor. Thread-local by design; the stamp is constant because the thread never retires.
+private void*[maxFiberLocalWords] threadLocalWords;
+private enum size_t threadStamp = 1;
+
+/// A value each task fiber sees separately, the fiber counterpart of a Java `ThreadLocal`. A task starts
+/// with `T.init`; what it sets is gone once it ends, even though its fiber slot is reused. Off a task fiber
+/// the value is thread-local. Declare it as `shared FiberLocal!T`: only its storage key is shared.
+///
+/// `T` is a class or interface reference or plain data without copy or destruction hooks, at most
+/// `maxFiberLocalWords - 1` words. A set value may not borrow stack or request storage.
+struct FiberLocal(T) if (localStorable!T && localWords!T < maxFiberLocalWords)
+{
+    /// One past the first word claimed for this local, or zero before the first `set`.
+    private uint key;
+
+    /// The calling task's value, or `T.init` when it set none.
+    T get() shared nothrow @nogc
+    {
+        const offset = atomicLoad(key);
+        if (offset == 0)
+            return T.init;
+        size_t stamp;
+        auto cell = localCell(offset, localWords!T, stamp);
+        if (cell.length == 0 || cellStamp(cell) != stamp)
+            return T.init;
+        return loadCell!T(cell);
+    }
+
+    /// Replace the calling task's value. Fails with `resourceExhausted` when the process claimed
+    /// `maxFiberLocalWords` or the task fiber's `ReactorOptions.fiberLocalWords` is too small.
+    Error set(T value) shared nothrow @nogc
+    {
+        const offset = claimLocal(key, localWords!T);
+        if (offset == 0)
+            return Error(Status.resourceExhausted, "FiberLocal words exhausted for this process");
+        size_t stamp;
+        auto cell = localCell(offset, localWords!T, stamp, true);
+        if (cell.length == 0)
+            return Error(Status.resourceExhausted, "raise ReactorOptions.fiberLocalWords for this FiberLocal");
+        storeCell!T(cell, stamp, value);
+        return Error.init;
+    }
+
+    /// Forget the calling task's value, so `get` returns `T.init` and its references are released.
+    void remove() shared nothrow @nogc
+    {
+        const offset = atomicLoad(key);
+        if (offset == 0)
+            return;
+        size_t stamp;
+        auto cell = localCell(offset, localWords!T, stamp);
+        cell[] = null;
+    }
+}
+
+/// The offset of a local's cell, claiming `words` plus a stamp on first use. Zero when the process ran out.
+private uint claimLocal(ref shared uint key, size_t words) nothrow @nogc
+{
+    const current = atomicLoad(key);
+    if (current != 0)
+        return current;
+    for (;;)
+    {
+        const used = atomicLoad(claimedLocalWords);
+        if (used + 1 + words > maxFiberLocalWords)
+            return 0;
+        if (!cas(&claimedLocalWords, used, cast(uint)(used + 1 + words)))
+            continue;
+        // A racing first `set` may have published first; its claim wins and this one stays unused.
+        if (cas(&key, 0U, used + 1))
+            return used + 1;
+        return atomicLoad(key);
+    }
+}
+
+/// The calling context's cell for `offset`, with the stamp of its current owner. Empty when the active task
+/// fiber's storage is too small for this cell.
+private void*[] localCell(uint offset, size_t words, out size_t stamp, bool writing = false) nothrow @nogc
+{
+    const first = offset - 1;
+    const end = first + 1 + words;
+    auto runtime = currentRuntime;
+    if (runtime !is null)
+    {
+        auto worker = &runtime.workers[currentWorkerIndex];
+        if (worker.activeFiber != noSlot)
+        {
+            const stride = runtime.options.fiberLocalWords;
+            if (end > stride)
+                return null;
+            auto task = &worker.fibers[worker.activeFiber];
+            if (writing)
+                task.localsDirty = true;
+            stamp = cast(size_t) task.generation;
+            const base = cast(size_t) worker.activeFiber * stride;
+            return worker.localWords[base + first .. base + end];
+        }
+    }
+    stamp = threadStamp;
+    return threadLocalWords[first .. end];
 }
 
 /// Noncopyable owner for a bounded, single-run reactor.
@@ -152,6 +266,12 @@ struct Reactor
         const result = runtime.prepareBackend(options.backend);
         if (result.code != Status.ok)
             return Result!Reactor(Reactor.init, result);
+        if (options.offloadThreads != 0)
+        {
+            runtime.offload = new OffloadPool(options.offloadThreads, options.offloadQueueCapacity, count);
+            if (runtime.offload.open() != Status.ok)
+                return Result!Reactor(Reactor.init, Error(Status.ioError, "could not open offload signals"));
+        }
 
         ready = true;
         Result!Reactor created;
@@ -420,6 +540,46 @@ struct Reactor
         return runtime.workers[currentWorkerIndex].wakeTask(waker);
     }
 
+    /// Run blocking `work` on an offload thread and suspend the calling task fiber until it returns, so
+    /// other fibers keep running. `work` may borrow this fiber's frame. When the admission queue is full the
+    /// fiber waits for room. Cancellation of the task withdraws work that has not started; work that has
+    /// started gets `interrupt` once and the fiber still waits for it to return before reporting
+    /// `cancelled`, as it does when the reactor stops. Requires `ReactorOptions.offloadThreads`.
+    Error offload(scope OffloadWork work, scope OffloadInterrupt interrupt = null) nothrow @nogc
+    {
+        if (runtime is null || currentRuntime !is runtime)
+            return Error(Status.notFound, "no active fiber");
+        if (work is null)
+            return Error(Status.invalidArgument, "offload requires work");
+        if (runtime.offload is null)
+            return Error(Status.unavailable, "offload is disabled; set ReactorOptions.offloadThreads");
+        auto worker = &runtime.workers[currentWorkerIndex];
+        if (worker.activeFiber == noSlot)
+            return Error(Status.conflict, "offload requires an active reactor fiber");
+        if (!worker.offloadWatchTried)
+        {
+            worker.offloadWatchTried = true;
+            version (ReactorNativeWatches)
+            {
+                const signal = runtime.offload.signal(currentWorkerIndex);
+                // Without a watch the fiber polls for completion every millisecond instead.
+                if (signal >= 0)
+                    worker.offloadWatched = worker.watchNative(signal, NativeInterest.read,
+                            &worker.offloadReady).code == Status.ok;
+            }
+        }
+        const waker = worker.activeWaker().value;
+        for (;;)
+        {
+            const ticket = runtime.offload.submit(work, waker);
+            if (ticket != 0)
+                return worker.awaitOffload(ticket, interrupt);
+            const waited = worker.yieldTask(Deadline.afterMillis(1));
+            if (waited.code != Status.ok)
+                return waited;
+        }
+    }
+
     /// Create or update a Linux or macOS watch on the current worker. The caller keeps ownership of fd and
     /// removes the watch before releasing the descriptor or callback. Error readiness is always delivered.
     Error watchNative(int fd, NativeInterest interest, NativeReadyFn callback) nothrow @nogc
@@ -503,6 +663,8 @@ private struct Runtime
     ushort port;
     AcceptFn accept;
     AcceptDelegate acceptDelegate;
+    /// Threads for `Reactor.offload`, or null when disabled.
+    OffloadPool offload;
     /// Set by `stopAccepting`; each owner then retires its accept and counts itself in `acceptRetired`.
     shared bool acceptStopping;
     shared uint acceptRetired;
@@ -582,6 +744,9 @@ private struct Runtime
     {
         scope (exit)
         {
+            // Every fiber waiting on offloaded work stayed until it returned, so no job remains.
+            if (offload !is null)
+                offload.stop();
             foreach (ref worker; workers)
                 worker.releaseFibers();
             release();
@@ -603,6 +768,8 @@ private struct Runtime
 
         foreach (ref worker; workers)
             worker.preallocateFibers();
+        if (offload !is null)
+            offload.start();
 
         auto threads = new Thread[workers.length];
         size_t started;
@@ -648,6 +815,8 @@ private struct Runtime
     {
         foreach (ref worker; workers)
             worker.release();
+        if (offload !is null)
+            offload.closeSignals();
         closeSocket(listener);
         acceptDelegate = null;
     }
@@ -704,6 +873,10 @@ private struct FiberTask
     /// A caller context that also ends the current yield, valid while `watching`.
     Context watched;
     bool watching;
+    /// Waiting for offloaded work after cancellation: only a wake or its deadline resumes it.
+    bool shielded;
+    /// The task wrote FiberLocal storage, which is cleared when it ends.
+    bool localsDirty;
     uint next;
     /// Position in the worker's suspended list, or noSlot while free or running.
     uint suspendedAt = noSlot;
@@ -755,6 +928,11 @@ private struct Worker
     long nextWake = long.max;
     /// Last task lifetime issued on this worker.
     ulong taskGeneration;
+    /// FiberLocal cells, `fiberLocalWords` per fiber slot. GC-scanned, so stored references stay alive.
+    void*[] localWords;
+    /// Whether this worker tried, and managed, to watch its offload signal.
+    bool offloadWatchTried;
+    bool offloadWatched;
 
     version (Posix) Readiness readiness;
 
@@ -814,12 +992,13 @@ private struct Worker
         fibers = new FiberTask[runtime.options.fiberPoolSize];
         foreach (slot, ref task; fibers)
         {
-            task.fiber = createFiber(&enterTask, runtime.options.fiberStackBytes);
+            task.fiber = createFiber(&enterTask, runtime.options.fiberStackBytes, runtime.options.fiberGuardBytes);
             task.next = cast(uint)(slot + 1);
         }
         fibers[$ - 1].next = noSlot;
         freeFiber = 0;
         suspended = new uint[fibers.length];
+        localWords = new void*[fibers.length * runtime.options.fiberLocalWords];
     }
 
     void releaseFibers()
@@ -875,6 +1054,63 @@ private struct Worker
         return task.context.cancellation.check();
     }
 
+    /// Suspend the active fiber until offloaded `ticket` returns. See `Reactor.offload`.
+    Error awaitOffload(uint ticket, scope OffloadInterrupt interrupt) nothrow @nogc
+    {
+        auto pool = runtime.offload;
+        auto task = &fibers[activeFiber];
+        Error cancelled;
+        while (!pool.finished(ticket))
+        {
+            if (atomicLoad(runtime.state) != State.running)
+            {
+                if (pool.abandon(ticket))
+                    return Error(Status.cancelled, "reactor is stopping");
+                if (cancelled.code == Status.ok && interrupt !is null)
+                    interrupt();
+                if (cancelled.code == Status.ok)
+                    cancelled = Error(Status.cancelled, "reactor is stopping");
+                // Shutdown resumes each fiber once more; the work may borrow this frame, so the owner
+                // blocks here until the call returns instead of letting the frame go.
+                pool.waitFinished(ticket);
+                break;
+            }
+            if (cancelled.code == Status.ok)
+            {
+                const status = task.context.cancellation.check();
+                if (status.code != Status.ok)
+                {
+                    if (pool.abandon(ticket))
+                        return status;
+                    cancelled = status;
+                    if (interrupt !is null)
+                        interrupt();
+                }
+            }
+            task.shielded = cancelled.code != Status.ok;
+            task.wake = Deadline.afterMillis(offloadWatched ? 1_000 : 1);
+            yieldFiber();
+            task.shielded = false;
+        }
+        const succeeded = pool.retire(ticket);
+        if (cancelled.code != Status.ok)
+            return cancelled;
+        return succeeded ? Error.init : Error(Status.ioError, "offloaded work ended with a throwable");
+    }
+
+    /// On the owner loop, when the offload signal is readable: resume every fiber whose work returned.
+    void offloadReady(int, NativeInterest) nothrow @nogc
+    {
+        auto pool = runtime.offload;
+        pool.drain(index);
+        foreach (slot; 0 .. pool.capacity)
+        {
+            const waker = pool.finishedWaker(index, slot);
+            if (waker.valid)
+                cast(void) wakeTask(waker);
+        }
+    }
+
     void executeTask() nothrow @nogc
     {
         auto task = &fibers[activeFiber];
@@ -927,6 +1163,13 @@ private struct Worker
                 task.suspendedAt = noSlot;
             }
             resetFiber(task.fiber);
+            if (task.localsDirty)
+            {
+                // The generation stamp already hides these cells; clearing them releases their references.
+                const stride = runtime.options.fiberLocalWords;
+                localWords[cast(size_t) slot * stride .. (cast(size_t) slot + 1) * stride] = null;
+                task.localsDirty = false;
+            }
             task.task = null;
             task.boundTask = null;
             task.context = TaskContext.init;
@@ -957,7 +1200,7 @@ private struct Worker
             const slot = suspended[position];
             auto task = &fibers[slot];
             if (stopping || task.wake.monotonicNanoseconds <= now.monotonicNanoseconds
-                    || task.context.cancellation.statusAt(now.monotonicNanoseconds) != Status.ok
+                    || (!task.shielded && task.context.cancellation.statusAt(now.monotonicNanoseconds) != Status.ok)
                     || (task.watching && task.watched.statusAt(now.monotonicNanoseconds) != Status.ok))
             {
                 resumeTask(slot);

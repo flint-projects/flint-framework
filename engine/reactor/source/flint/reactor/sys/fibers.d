@@ -16,43 +16,50 @@ version (linux)
 /// druntime writes a new fiber's initial frame into the top page of its stack during construction.
 /// Preallocating a large pool therefore made one page per fiber resident before any work ran.
 /// `park` returns those pages to the kernel; `prime` rewrites the frame before the first resume.
-/// The stack mapping, its guard page, its GC registration and the pool capacity are unchanged.
+/// The stack mapping, its guard pages, its GC registration and the pool capacity are unchanged.
 final class PoolFiber : Fiber
 {
     private bool parked;
+    private size_t guardBytes;
 
-    /// Allocate a guarded stack of `stackBytes` for `entry`.
-    // SAFETY: The base constructor allocates and registers the stack this object owns; the entry is safe and nothrow.
-    @trusted this(TaskFn entry, size_t stackBytes) nothrow
+    /// Allocate a stack of `stackBytes` for `entry` above `guard` inaccessible bytes, both in whole pages.
+    // SAFETY: The base constructor maps and registers the stack this object owns and protects its lowest
+    // `guard` bytes; the entry is safe and nothrow.
+    @trusted this(TaskFn entry, size_t stackBytes, size_t guard) nothrow
     {
-        super(entry, stackBytes);
+        guardBytes = guard;
+        super(entry, stackBytes, guard);
     }
 
-    // park discards this fiber's own anonymous mapping above the guard page, [m_pmem + page, m_pmem + m_size).
+    /// The protected range below the stack: its lowest address and length. Empty before allocation.
+    // SAFETY: Reads this fiber's own mapping address as an integer; no pointer is created or exposed.
+    @trusted size_t[2] guardRange() const nothrow @nogc
+    {
+        return [cast(size_t) m_pmem, m_pmem is null ? 0 : guardBytes];
+    }
+
+    // park discards this fiber's own anonymous mapping above the guard, [m_pmem + guard, m_pmem + m_size).
     /// Return the stack pages dirtied by construction to the kernel until the first resume.
     // SAFETY: HOLD state, never resumed, own mapping only; `prime` rewrites the frame before the first resume.
     @trusted void park() nothrow @nogc
     {
         version (linux)
         {
-            import core.memory : pageSize;
-
-            if (parked || state != Fiber.State.HOLD || m_pmem is null || m_size <= pageSize)
+            if (parked || state != Fiber.State.HOLD || m_pmem is null || m_size <= guardBytes)
                 return;
-            if (madvise(m_pmem + pageSize, m_size - pageSize, adviseDontNeed) == 0)
+            if (madvise(m_pmem + guardBytes, m_size - guardBytes, adviseDontNeed) == 0)
                 parked = true;
         }
         else version (OSX)
         {
-            import core.memory : pageSize;
             import core.sys.posix.sys.mman : MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE,
                 PROT_READ, PROT_WRITE, mmap;
 
-            if (parked || state != Fiber.State.HOLD || m_pmem is null || m_size <= pageSize)
+            if (parked || state != Fiber.State.HOLD || m_pmem is null || m_size <= guardBytes)
                 return;
             // Darwin's MADV_DONTNEED leaves the pages resident. A fresh fixed anonymous mapping over the
             // same range, with the same protection, gives them back and reads as zero until primed.
-            if (mmap(m_pmem + pageSize, m_size - pageSize, PROT_READ | PROT_WRITE,
+            if (mmap(m_pmem + guardBytes, m_size - guardBytes, PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0) != MAP_FAILED)
                 parked = true;
         }
@@ -76,9 +83,13 @@ final class PoolFiber : Fiber
 }
 
 // SAFETY: The new fiber owns its stack. Its entry is an immutable function with safe, nonthrowing behavior.
-@trusted package(flint.reactor) PoolFiber createFiber(TaskFn entry, size_t stackBytes)
+@trusted package(flint.reactor) PoolFiber createFiber(TaskFn entry, size_t stackBytes, size_t guardBytes)
 {
-    auto fiber = new PoolFiber(entry, stackBytes);
+    import core.memory : pageSize;
+
+    // druntime rounds the stack to pages; the guard must be whole pages for park to skip it exactly.
+    const guard = guardBytes == 0 ? pageSize : (guardBytes + pageSize - 1) / pageSize * pageSize;
+    auto fiber = new PoolFiber(entry, stackBytes, guard);
     fiber.park();
     return fiber;
 }

@@ -29,8 +29,17 @@ struct ReactorOptions
     uint maxConnectionsPerCore = 8192;
     /// Number of pinned task fibers per worker.
     uint fiberPoolSize = 1024;
-    /// Stack bytes reserved for each task fiber.
-    size_t fiberStackBytes = 65_536;
+    /// Stack bytes reserved for each task fiber. Only the pages a task touches become resident.
+    size_t fiberStackBytes = 262_144;
+    /// Inaccessible bytes reserved below each fiber stack, so an overflow faults instead of corrupting
+    /// memory. A single frame larger than this can step over the guard. Rounded up to whole pages.
+    size_t fiberGuardBytes = 16_384;
+    /// Machine words of `FiberLocal` storage per task fiber. Each local uses one word plus its value.
+    uint fiberLocalWords = 32;
+    /// Threads that run `Reactor.offload` work. Zero disables offloading.
+    uint offloadThreads = 0;
+    /// Offloaded calls admitted at once, queued or running, across all workers.
+    uint offloadQueueCapacity = 64;
     /// Maximum simultaneous I/O reservations per worker, including callbacks still being delivered.
     uint maxPendingIoPerCore = 128;
     /// Maximum bytes per read reservation or copied write.
@@ -117,6 +126,13 @@ alias ReadDelegate = void delegate(Completion, scope const(ubyte)[]) @safe nothr
 
 /// An owned task bound to the worker that posts it.
 alias TaskDelegate = void delegate() @safe nothrow @nogc;
+
+/// Blocking work for an offload thread. It may borrow the calling fiber's frame: that fiber stays
+/// suspended until the work returns, even when its task is cancelled or the reactor stops.
+alias OffloadWork = void delegate() @safe nothrow;
+/// A thread-safe request that makes running offloaded work return early, such as `sqlite3_interrupt` or
+/// `PQcancel`. It runs on the owner loop at most once, when the waiting task is cancelled.
+alias OffloadInterrupt = void delegate() @safe nothrow @nogc;
 
 /// A ticket for the exact lifetime of one read or write reservation.
 struct IoId
