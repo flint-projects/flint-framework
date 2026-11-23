@@ -21,7 +21,6 @@ import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, MergedAnnotation,
     PropertyDescriptor, TypeKind, findAnnotation;
 import flint.engine.aot.name : typeNameOf;
-import std.traits : isDynamicArray;
 import flint.jackson.annotation : JsonAlias, JsonAnyGetter, JsonCreator, JsonUnwrapped, JsonFormat,
     JsonGetter, JsonIgnore,
     JsonIgnoreProperties, JsonInclude, JsonIncludeProperties, JsonProperty, JsonPropertyOrder,
@@ -30,6 +29,9 @@ import flint.jackson.databind.annotation : JsonNaming;
 import flint.jackson.databind.exc : InvalidDefinitionException;
 
 @safe:
+
+// Whether `X` is a dynamic array (std.traits.isDynamicArray without the std.traits import).
+private enum isSlice(X) = is(X : E[], E);
 
 /// Read the merged annotation of type `T`, as a value; false when it is absent.
 bool annotation(T)(scope const(MergedAnnotation)[] annotations, out T value)
@@ -41,7 +43,7 @@ bool annotation(T)(scope const(MergedAnnotation)[] annotations, out T value)
     const merged = found.value.get!T();
     static foreach (i; 0 .. T.tupleof.length)
     {
-        static if (is(typeof(T.tupleof[i]) : const(char)[]) || !isDynamicArray!(typeof(T.tupleof[i])))
+        static if (is(typeof(T.tupleof[i]) : const(char)[]) || !isSlice!(typeof(T.tupleof[i])))
             value.tupleof[i] = merged.tupleof[i];
         else
             value.tupleof[i] = merged.tupleof[i].dup;
@@ -528,16 +530,47 @@ struct POJOPropertiesCollector
 /// Java's `String.compareTo`: lexicographic order of UTF-16 code units (rulebook R14).
 int compareUtf16(scope const(char)[] a, scope const(char)[] b) pure nothrow
 {
-    import std.utf : byWchar;
+    size_t i, j;
+    wchar[2] x, y;
+    size_t xs, xn, ys, yn; // the UTF-16 units of the current code point of each side, and the next one to compare
+    for (;;)
+    {
+        if (xs == xn)
+        {
+            if (i == a.length)
+                break;
+            xn = utf16Units(a, i, x);
+            xs = 0;
+        }
+        if (ys == yn)
+        {
+            if (j == b.length)
+                return 1;
+            yn = utf16Units(b, j, y);
+            ys = 0;
+        }
+        if (x[xs] != y[ys])
+            return x[xs] < y[ys] ? -1 : 1;
+        ++xs;
+        ++ys;
+    }
+    return ys == yn && j == b.length ? 0 : -1;
+}
 
-    auto x = a.byWchar;
-    auto y = b.byWchar;
-    for (; !x.empty && !y.empty; x.popFront(), y.popFront())
-        if (x.front != y.front)
-            return x.front < y.front ? -1 : 1;
-    if (x.empty && y.empty)
-        return 0;
-    return x.empty ? -1 : 1;
+// The code point at `index` as UTF-16 units (one, or a surrogate pair); advances `index`.
+private size_t utf16Units(scope const(char)[] text, ref size_t index, ref wchar[2] units) pure nothrow @nogc
+{
+    import flint.engine.aot.text : decodeUtf8;
+
+    const c = decodeUtf8(text, index);
+    if (c < 0x10000)
+    {
+        units[0] = cast(wchar) c;
+        return 1;
+    }
+    units[0] = cast(wchar)(0xD800 + ((c - 0x10000) >> 10));
+    units[1] = cast(wchar)(0xDC00 + ((c - 0x10000) & 0x3FF));
+    return 2;
 }
 
 @("compareUtf16 orders as Java's String.compareTo")

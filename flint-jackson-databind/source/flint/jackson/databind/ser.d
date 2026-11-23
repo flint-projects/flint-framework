@@ -206,10 +206,8 @@ private bool writeScalar(ref Any value, string type, JsonGenerator g)
         g.writeNumber(value.get!double());
         return true;
     case "char", "wchar", "dchar":
-        import std.conv : to;
-
         // Java's char serializes as a one-character String.
-        g.writeString([value.get!dchar()].to!string);
+        g.writeString(imported!"flint.engine.aot.text".utf8(value.get!dchar()));
         return true;
     default:
         return false;
@@ -219,12 +217,12 @@ private bool writeScalar(ref Any value, string type, JsonGenerator g)
 // ByteArraySerializer: Base64 (MIME without line feeds, padded).
 private bool writeBytes(ref Any value, string type, JsonGenerator g)
 {
-    import std.base64 : Base64;
+    import flint.jackson.databind.base64 : encodeBase64;
 
     if (type == "byte[]")
-        g.writeString(Base64.encode(cast(const(ubyte)[]) value.get!(byte[])()).idup);
+        g.writeString(encodeBase64(cast(const(ubyte)[]) value.get!(byte[])()));
     else if (type == "ubyte[]")
-        g.writeString(Base64.encode(value.get!(ubyte[])()).idup);
+        g.writeString(encodeBase64(value.get!(ubyte[])()));
     else
         return false;
     return true;
@@ -244,7 +242,7 @@ size_t enumIndex(const Descriptor d, ref Any value)
 private void writeEnum(MapperConfig config, const Descriptor d, ref Any value, JsonGenerator g)
 {
     import flint.engine.aot.text : decimal;
-    import std.uni : toLower;
+    import flint.jackson.databind : lowerCase;
 
     const index = enumIndex(d, value);
     if (config.isEnabled(EnumFeature.WRITE_ENUMS_USING_INDEX))
@@ -256,7 +254,7 @@ private void writeEnum(MapperConfig config, const Descriptor d, ref Any value, J
         throw new InvalidDefinitionException("Enum value " ~ decimal(
                 cast(ulong) index) ~ " of " ~ d.name ~ " has no constant name in its descriptor", d.name);
     const name = d.enumConstants[index];
-    g.writeString(config.isEnabled(EnumFeature.WRITE_ENUMS_TO_LOWERCASE) ? name.toLower() : name);
+    g.writeString(config.isEnabled(EnumFeature.WRITE_ENUMS_TO_LOWERCASE) ? lowerCase(name) : name);
 }
 
 private void writeCollection(MapperConfig config, RawCollection collection, JsonGenerator g)

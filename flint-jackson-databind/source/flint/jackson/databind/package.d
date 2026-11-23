@@ -96,19 +96,15 @@ final class PropertyNamingStrategies
     {
         override string translate(string input)
         {
+            import flint.engine.aot.text : decodeUtf8, utf8;
             import std.uni : toUpper;
-            import std.utf : decode, encode;
 
             if (input.length == 0)
                 return input;
             size_t next;
-            const first = decode(input, next);
+            const first = decodeUtf8(input, next);
             const upper = toUpper(first);
-            if (upper == first)
-                return input;
-            char[] head;
-            encode(head, upper);
-            return head.idup ~ input[next .. $];
+            return upper == first ? input : utf8(upper) ~ input[next .. $];
         }
     }
 
@@ -126,11 +122,10 @@ final class PropertyNamingStrategies
     {
         override string translate(string input)
         {
-            import std.ascii : toUpper;
-
             auto snake = snakeCase(input).dup;
             foreach (ref c; snake)
-                c = toUpper(c);
+                if (c >= 'a' && c <= 'z')
+                    c -= 32; // Java's toUpperCase on the ASCII letters snake case produces
             return snake.idup;
         }
     }
@@ -140,9 +135,7 @@ final class PropertyNamingStrategies
     {
         override string translate(string input)
         {
-            import std.uni : toLower;
-
-            return toLower(input);
+            return lowerCase(input);
         }
     }
 
@@ -210,22 +203,16 @@ final class PropertyNamingStrategies
 // NamingStrategyImpls.SNAKE_CASE (ASCII case rules, as Character.isUpperCase is for property names in practice).
 private string snakeCase(string beanName) pure
 {
+    import flint.engine.aot.text : decodeUtf8, utf8;
     import std.uni : isUpper, toLower;
-    import std.utf : decode, encode;
 
-    char[] result;
+    string result;
     bool wasPrevTranslated;
     size_t i;
     bool first = true;
     while (i < beanName.length)
     {
-        dchar c;
-        try
-            c = decode(beanName, i);
-        catch (Exception)
-        {
-            c = beanName[i++];
-        }
+        dchar c = decodeUtf8(beanName, i);
         if (!first || c != '_')
         {
             if (isUpper(c))
@@ -237,34 +224,28 @@ private string snakeCase(string beanName) pure
             }
             else
                 wasPrevTranslated = false;
-            encode(result, c);
+            result ~= utf8(c);
         }
         first = false;
     }
-    return result.length ? result.idup : beanName;
+    return result.length ? result : beanName;
 }
 
 // NamingStrategyImpls.translateLowerCaseWithSeparator.
 private string lowerCaseWithSeparator(string beanName, char separator) pure
 {
+    import flint.engine.aot.text : decodeUtf8, utf8;
     import std.uni : toLower;
-    import std.utf : decode, encode;
 
     if (beanName.length == 0)
         return beanName;
-    char[] result;
+    string result;
     size_t[] starts;
     int upperCount;
     size_t i;
     while (i < beanName.length)
     {
-        dchar ch;
-        try
-            ch = decode(beanName, i);
-        catch (Exception)
-        {
-            ch = beanName[i++];
-        }
+        const ch = decodeUtf8(beanName, i);
         const lc = toLower(ch);
         if (lc == ch)
         {
@@ -279,9 +260,27 @@ private string lowerCaseWithSeparator(string beanName, char separator) pure
             ++upperCount;
         }
         starts ~= result.length;
-        encode(result, lc);
+        result ~= utf8(lc);
     }
-    return result.idup;
+    return result;
+}
+
+/// `String.toLowerCase` by code point (`Character.toLowerCase`), without std.uni's string templates.
+package(flint.jackson.databind) string lowerCase(string text) pure
+{
+    import flint.engine.aot.text : decodeUtf8, utf8;
+    import std.uni : toLower;
+
+    string result;
+    size_t i;
+    while (i < text.length)
+    {
+        const start = i;
+        const c = decodeUtf8(text, i);
+        const lower = toLower(c);
+        result ~= lower == c ? text[start .. i] : utf8(lower);
+    }
+    return result;
 }
 
 private final class MapperWriteContext : ObjectWriteContext.Base

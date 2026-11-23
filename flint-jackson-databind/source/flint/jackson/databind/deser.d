@@ -259,16 +259,14 @@ private Scalar* readScalar(MapperConfig config, JsonParser p, string type, JsonT
         return new Scalar(Any.of(readFloating(config, p, t, type)));
     case "char", "wchar", "dchar":
         auto text = readString(p, t, type);
-        const s = text.isNull() ? "" : text.get!string();
-        import std.utf : count;
+        import flint.engine.aot.text : codePointCount, decodeUtf8;
 
-        if (s.count != 1)
+        const s = text.isNull() ? "" : text.get!string();
+        if (codePointCount(s) != 1)
             throw new InvalidFormatException("Cannot deserialize value of type `char` from String \"" ~ s
                     ~ "\": expected either Integer value code or 1-character String", s, type, p.currentLocation());
         size_t next;
-        import std.utf : decode;
-
-        return new Scalar(Any.of(decode(s, next)));
+        return new Scalar(Any.of(decodeUtf8(s, next)));
     default:
         return null;
     }
@@ -603,17 +601,17 @@ private Any readMap(MapperConfig config, JsonParser p, RawMap target, const Desc
 // PrimitiveArrayDeserializers.ByteDeser: Base64 text, or numbers from -128 to 255 (wrapping to a byte).
 private Any readBytes(JsonParser p, string type, JsonToken t)
 {
-    import std.base64 : Base64, Base64Exception;
+    import flint.jackson.databind.base64 : decodeBase64;
 
     ubyte[] bytes;
     if (t == JsonToken.VALUE_STRING)
     {
         const text = p.getString();
-        try
-            bytes = Base64.decode(text);
-        catch (Base64Exception e)
+        string error;
+        bytes = decodeBase64(text, error);
+        if (error !is null)
             throw new InvalidFormatException("Cannot deserialize value of type `byte[]` from String \"" ~ text
-                    ~ "\": Failed to decode VALUE_STRING as base64 (MIME-NO-LINEFEEDS): " ~ e.msg,
+                    ~ "\": Failed to decode VALUE_STRING as base64 (MIME-NO-LINEFEEDS): " ~ error,
                     text, type, p.currentLocation());
     }
     else
