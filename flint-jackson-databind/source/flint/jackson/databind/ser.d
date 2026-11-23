@@ -21,7 +21,7 @@ import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : Descriptor, TypeKind;
 import flint.jackson.annotation : JsonFormat, JsonInclude;
 import flint.jackson.core : JsonGenerator;
-import flint.jackson.databind.cfg : EnumFeature, MapperConfig, SerializationFeature;
+import flint.jackson.databind.cfg : EnumFeature, MapperConfig, MapperFeature, SerializationFeature;
 import flint.jackson.databind.exc : DatabindException, InvalidDefinitionException, Reference;
 import flint.jackson.databind.ext.javatime : JavaTimeFormat, writeJavaTime;
 import flint.jackson.databind.introspect : BeanDescription, BeanPropertyDefinition;
@@ -273,8 +273,9 @@ private void writeMap(MapperConfig config, RawMap map, JsonGenerator g)
     g.writeEndObject();
 }
 
-private bool includeContent(MapperConfig config, ref Any value)
+private bool includeContent(MapperConfig config, ref Any content)
 {
+    auto value = unwrapNullable(config, content);
     final switch (config.defaultContentInclusion)
     {
     case JsonInclude.Include.ALWAYS:
@@ -442,9 +443,34 @@ private string scalarText(ref Any v)
     return javaDoubleString(v.get!double());
 }
 
-// JsonInclude: the property's setting, else the type's, else the mapper's default.
-private bool include(MapperConfig config, BeanDescription bean, BeanPropertyDefinition p, ref Any v)
+// A `std.typecons.Nullable!T` value is Java's boxed wrapper (`Integer`, `Boolean`): null when empty, otherwise its
+// value. Anything else is returned as it is.
+private Any unwrapNullable(MapperConfig config, ref Any value, out bool wrapper)
 {
+    enum prefix = "std.typecons.Nullable!";
+    const type = value.typeName();
+    if (type.length > prefix.length && type[0 .. prefix.length] == prefix)
+        if (auto d = config.descriptor(type))
+            if (d.unwrap !is null)
+            {
+                wrapper = true;
+                return d.unwrap(value);
+            }
+    return value;
+}
+
+// ditto
+private Any unwrapNullable(MapperConfig config, ref Any value)
+{
+    bool wrapper;
+    return unwrapNullable(config, value, wrapper);
+}
+
+// JsonInclude: the property's setting, else the type's, else the mapper's default.
+private bool include(MapperConfig config, BeanDescription bean, BeanPropertyDefinition p, ref Any property)
+{
+    bool wrapper;
+    auto v = unwrapNullable(config, property, wrapper);
     auto rule = p.inclusion;
     if (rule == JsonInclude.Include.USE_DEFAULTS)
         rule = bean.inclusion;
@@ -462,6 +488,10 @@ private bool include(MapperConfig config, BeanDescription bean, BeanPropertyDefi
     case JsonInclude.Include.NON_EMPTY:
         return !isEmptyValue(v);
     case JsonInclude.Include.NON_DEFAULT:
+        // [databind#5570]: with WRAPPERS_DEFAULT_TO_NULL a wrapper's default is null, not its primitive's.
+        if (wrapper
+                && config.isEnabled(MapperFeature.WRAPPERS_DEFAULT_TO_NULL))
+            return !v.isNull();
         return !isEmptyValue(v) && !isDefaultScalar(v);
     }
 }

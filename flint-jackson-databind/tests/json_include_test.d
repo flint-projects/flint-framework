@@ -439,81 +439,69 @@ version (FlintJacksonNonDefaultByClass)
     }
 }
 
-// Null `Nullable!T` wrappers count as values for NON_DEFAULT, and MapperFeature.WRAPPERS_DEFAULT_TO_NULL is ignored.
-// LIKELY BUG: DefaultIntBean(0, null) writes {"i2":null}, expected {}; with WRAPPERS_DEFAULT_TO_NULL disabled,
-// DefaultIntBean(0, 0) writes {"i2":0}, expected {}; Issue5570Bean{value:null} writes {"value":null}, expected {}.
-version (FlintJacksonWrapperInclusion)
+@("JsonIncludeTest.testDefaultForIntegers")
+unittest
 {
-    @("JsonIncludeTest.testDefaultForIntegers")
-    unittest
-    {
-        auto mapper = jsonMapperBuilder(table()).enable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL).build();
-        // [databind#5570]: Integer wrapper default is null, not 0, so Integer.valueOf(0) should be included
-        assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(0))) == `{"i2":0}`);
-        assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(1))) == `{"i2":1}`);
-        assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int.init)) == "{}");
-        assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int(0))) == `{"i1":3,"i2":0}`);
-        assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int.init)) == `{"i1":3}`);
+    auto mapper = jsonMapperBuilder(table()).enable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL).build();
+    // [databind#5570]: Integer wrapper default is null, not 0, so Integer.valueOf(0) should be included
+    assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(0))) == `{"i2":0}`);
+    assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(1))) == `{"i2":1}`);
+    assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int.init)) == "{}");
+    assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int(0))) == `{"i1":3,"i2":0}`);
+    assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int.init)) == `{"i1":3}`);
 
-        // but with different settings
-        mapper = jsonMapperBuilder(table()).disable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL).build();
+    // but with different settings
+    mapper = jsonMapperBuilder(table()).disable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL).build();
 
-        assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(0))) == "{}");
-        assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(1))) == `{"i2":1}`);
-        assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int.init)) == "{}");
-        assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int(0))) == `{"i1":3}`);
-        assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int.init)) == `{"i1":3}`);
-    }
+    assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(0))) == "{}");
+    assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int(1))) == `{"i2":1}`);
+    assert(mapper.writeValueAsString(new DefaultIntBean(0, Nullable!int.init)) == "{}");
+    assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int(0))) == `{"i1":3}`);
+    assert(mapper.writeValueAsString(new DefaultIntBean(3, Nullable!int.init)) == `{"i1":3}`);
 }
 
-version (FlintJacksonWrapperInclusion)
+// [databind#5570]: Test for Boolean wrapper with NON_DEFAULT
+@("JsonIncludeTest.testDefaultForBooleans")
+unittest
 {
-    // [databind#5570]: Test for Boolean wrapper with NON_DEFAULT
-    @("JsonIncludeTest.testDefaultForBooleans")
-    unittest
-    {
-        auto mapper = jsonMapperBuilder(table()).enable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL).build();
+    auto mapper = jsonMapperBuilder(table()).enable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL).build();
 
-        // Both false: primitive suppressed (false is default for boolean),
-        // wrapper included (Boolean default is null, not false)
-        assert(mapper.writeValueAsString(new DefaultBooleanBean(false, Nullable!bool(false))) == `{"b2":false}`);
+    // Both false: primitive suppressed (false is default for boolean),
+    // wrapper included (Boolean default is null, not false)
+    assert(mapper.writeValueAsString(new DefaultBooleanBean(false, Nullable!bool(false))) == `{"b2":false}`);
 
-        // Both true: both included (neither matches their defaults)
-        assert(mapper.writeValueAsString(new DefaultBooleanBean(true, Nullable!bool(true))) == `{"b1":true,"b2":true}`);
+    // Both true: both included (neither matches their defaults)
+    assert(mapper.writeValueAsString(new DefaultBooleanBean(true, Nullable!bool(true))) == `{"b1":true,"b2":true}`);
 
-        // Wrapper null: both suppressed (primitive=false matches default, wrapper=null matches default)
-        assert(mapper.writeValueAsString(new DefaultBooleanBean(false, Nullable!bool.init)) == "{}");
+    // Wrapper null: both suppressed (primitive=false matches default, wrapper=null matches default)
+    assert(mapper.writeValueAsString(new DefaultBooleanBean(false, Nullable!bool.init)) == "{}");
 
-        // Primitive true, wrapper false: both included (neither matches defaults)
-        const json = mapper.writeValueAsString(new DefaultBooleanBean(true, Nullable!bool(false)));
-        assert(json == `{"b1":true,"b2":false}`);
-    }
+    // Primitive true, wrapper false: both included (neither matches defaults)
+    const json = mapper.writeValueAsString(new DefaultBooleanBean(true, Nullable!bool(false)));
+    assert(json == `{"b1":true,"b2":false}`);
 }
 
-version (FlintJacksonWrapperInclusion)
+// [databind#5570]: Reproduce exact scenario from issue report
+@("JsonIncludeTest.testIssue5570BooleanWrapper")
+unittest
 {
-    // [databind#5570]: Reproduce exact scenario from issue report
-    @("JsonIncludeTest.testIssue5570BooleanWrapper")
-    unittest
-    {
-        // Test case from issue #5570 - global NON_DEFAULT configuration
-        auto mapper = jsonMapperBuilder(table()).enable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL)
-            .changeDefaultPropertyInclusion(JsonInclude.Include.NON_DEFAULT).build();
+    // Test case from issue #5570 - global NON_DEFAULT configuration
+    auto mapper = jsonMapperBuilder(table()).enable(MapperFeature.WRAPPERS_DEFAULT_TO_NULL)
+        .changeDefaultPropertyInclusion(JsonInclude.Include.NON_DEFAULT).build();
 
-        auto pojo = new Issue5570Bean();
-        pojo.setValue(Nullable!bool(false));
+    auto pojo = new Issue5570Bean();
+    pojo.setValue(Nullable!bool(false));
 
-        // Should include "value":false because Boolean default is null, not false
-        assert(mapper.writeValueAsString(pojo) == `{"value":false}`);
+    // Should include "value":false because Boolean default is null, not false
+    assert(mapper.writeValueAsString(pojo) == `{"value":false}`);
 
-        // null should be excluded (matches default for Boolean wrapper)
-        pojo.setValue(Nullable!bool.init);
-        assert(mapper.writeValueAsString(pojo) == "{}");
+    // null should be excluded (matches default for Boolean wrapper)
+    pojo.setValue(Nullable!bool.init);
+    assert(mapper.writeValueAsString(pojo) == "{}");
 
-        // true should be included (doesn't match null default)
-        pojo.setValue(Nullable!bool(true));
-        assert(mapper.writeValueAsString(pojo) == `{"value":true}`);
-    }
+    // true should be included (doesn't match null default)
+    pojo.setValue(Nullable!bool(true));
+    assert(mapper.writeValueAsString(pojo) == `{"value":true}`);
 }
 
 @("JsonIncludeTest.testEmptyInclusionScalars")
