@@ -7,11 +7,11 @@ module servlet_engine_tests;
 import core.time : MonoTime, dur;
 import flint.engine.aot.any : Any;
 import flint.engine.servlet : ServletEngine, ServletEngineException, ServletEngineOptions;
-import flint.engine.servlet.response : ServletEngineResponse;
 import flint.jakarta.servlet : DispatcherType, Filter, FilterChain, RequestDispatcher,
     ServletRequest, ServletResponse;
 import flint.jakarta.servlet.http : HttpServlet, HttpServletRequest, HttpServletResponse;
 import flint.java.lang : IllegalStateException;
+import flint.java.util : Locale;
 import std.socket : InternetAddress, Socket, SocketOption, SocketOptionLevel, TcpSocket;
 
 @safe:
@@ -75,7 +75,7 @@ private final class Probe : HttpServlet
         response.setHeader("X-Replaced", "a");
         response.setHeader("X-Replaced", "b");
         response.setContentType("text/html;charset=UTF-8");
-        (cast(ServletEngineResponse) response).setContentLanguage("en-US");
+        response.setLocale(Locale.US);
         response.getWriter().print("<p>é</p>");
     }
 
@@ -91,7 +91,7 @@ private final class Probe : HttpServlet
             .print(request.getHeader("X-Trace") ~ "|" ~ request.getHeader(
                     "x-trace") ~ "|" ~ request.getServerName() ~ "|" ~ decimal(
                     request.getServerPort()) ~ "|" ~ request.getRequestURL() ~ "|" ~ request.getQueryString()
-                    ~ "|" ~ request.getProtocol());
+                    ~ "|" ~ request.getProtocol() ~ "|" ~ request.getLocale().toLanguageTag());
     }
 
     private void large(HttpServletRequest, HttpServletResponse response)
@@ -394,9 +394,10 @@ unittest
         socket.close();
     char[] pending;
 
-    auto reply = exchange(socket, pending,
-            "GET /headers?a=1&b HTTP/1.1\r\nHost: example.test:8443\r\n" ~ "X-Trace: 7\r\n\r\n");
-    assert(reply.content == "7|7|example.test|8443|http://example.test:8443/headers|a=1&b|HTTP/1.1", reply.content);
+    auto reply = exchange(socket, pending, "GET /headers?a=1&b HTTP/1.1\r\nHost: example.test:8443\r\n"
+            ~ "X-Trace: 7\r\nAccept-Language: de;q=0.5, fr-CH\r\n\r\n");
+    assert(reply.content == "7|7|example.test|8443|http://example.test:8443/headers|a=1&b|HTTP/1.1|fr-CH",
+            reply.content);
 
     // Repeated fields keep their order; a replaced field keeps its first position; Content-Type, then
     // Content-Language, follow the application's fields, as Tomcat writes them.

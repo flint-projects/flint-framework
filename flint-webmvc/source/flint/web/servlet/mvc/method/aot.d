@@ -55,6 +55,8 @@ HandlerMapping[] requestMappingsOf(C)(string beanName)
                         const mapping = methodMapping.value.get!RequestMapping;
                         HandlerMapping row;
                         row.bean = beanName;
+                        row.beanType = typeNameOf!C;
+                        row.typeAnnotations = typeAnnotations;
                         string[] methodPaths = mapping.path.length != 0 ? mapping.path.dup : mapping.value.dup;
                         row.paths = combinePaths(typePaths, methodPaths);
                         row.methods = typeMethods.dup;
@@ -78,10 +80,6 @@ HandlerMapping[] requestMappingsOf(C)(string beanName)
                         descriptor.name = member;
                         descriptor.returnType = row.returnType;
                         descriptor.annotations = methodAnnotations;
-                        foreach (ref annotation; typeAnnotations)
-                            if (annotation.type == "flint.web.bind.annotation.CrossOrigin")
-                                descriptor.annotations ~= MergedAnnotation(annotation.type,
-                                        annotation.value, cast(ubyte)(annotation.distance + 100));
                         row.method = descriptor;
                         row.invoke = &invokeHandler!(C, overload);
                         row.source = __traits(identifier, C) ~ "." ~ member;
@@ -101,13 +99,26 @@ ExceptionHandlerSpec[] exceptionHandlersOf(C)(string beanName)
     auto typeAnnotations = mergedAnnotations!(__traits(getAttributes, C))();
     const advice = findAnnotation(typeAnnotations, "flint.web.bind.annotation.ControllerAdvice") !is null;
     const typeResponseBody = findAnnotation(typeAnnotations, "flint.web.bind.annotation.ResponseBody") !is null;
-    string[] basePackages;
+    string[] basePackages, assignableTypes, adviceAnnotations;
     if (auto adviceAnnotation = findAnnotation(typeAnnotations, "flint.web.bind.annotation.ControllerAdvice"))
     {
         import flint.web.bind.annotation : ControllerAdvice;
 
         const value = adviceAnnotation.value.get!ControllerAdvice;
         basePackages = value.basePackages.length != 0 ? value.basePackages.dup : value.value.dup;
+        // basePackageClasses name their packages (ClassUtils.getPackageName).
+        foreach (ref type; value.basePackageClasses)
+        {
+            size_t dot;
+            foreach (index, c; type.name)
+                if (c == '.')
+                    dot = index;
+            basePackages ~= type.name[0 .. dot];
+        }
+        foreach (ref type; value.assignableTypes)
+            assignableTypes ~= type.name;
+        foreach (ref type; value.annotations)
+            adviceAnnotations ~= type.name;
     }
     static foreach (member; __traits(derivedMembers, C))
     {
@@ -122,6 +133,10 @@ ExceptionHandlerSpec[] exceptionHandlersOf(C)(string beanName)
                         const value = handler.value.get!ExceptionHandler;
                         ExceptionHandlerSpec row;
                         row.bean = beanName;
+                        row.beanType = typeNameOf!C;
+                        row.adviceAssignableTypes = assignableTypes;
+                        row.adviceAnnotations = adviceAnnotations;
+                        row.produces = value.produces.dup;
                         foreach (ref type; value.value.length != 0 ? value.value : value.exception)
                             row.exceptionTypes ~= type.name;
                         if (row.exceptionTypes.length == 0)

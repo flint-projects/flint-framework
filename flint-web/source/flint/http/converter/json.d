@@ -16,9 +16,11 @@ module flint.http.converter.json;
 
 import flint.engine.aot.any : Any;
 import flint.http : HttpInputMessage, HttpOutputMessage, MediaType, ProblemDetail;
-import flint.http.converter : AbstractHttpMessageConverter, HttpMessageNotReadableException,
-    HttpMessageNotWritableException;
+import flint.http.converter : AbstractHttpMessageConverter, HttpMessageConversionException,
+    HttpMessageNotReadableException, HttpMessageNotWritableException;
+import flint.jackson.core : JacksonException;
 import flint.jackson.databind : JsonMapper, ObjectMapper;
+import flint.jackson.databind.exc : InvalidDefinitionException;
 
 @safe:
 
@@ -52,10 +54,17 @@ class JacksonJsonHttpMessageConverter : AbstractHttpMessageConverter
             || mapper.descriptors().find(typeName) !is null;
     }
 
+    /// `AbstractJacksonHttpMessageConverter.readJavaType`: the body through the mapper's descriptor of `typeName`.
+    /// A type the mapper cannot handle is a conversion error (500); any other Jackson failure is unreadable input
+    /// (400), with Jackson's original message.
     protected override Any readInternal(string typeName, HttpInputMessage inputMessage)
     {
-        throw new HttpMessageNotReadableException(
-                "JSON parse error: reading " ~ typeName ~ " waits for flint.jackson.databind", null, inputMessage);
+        try
+            return mapper.readValue(inputMessage.getBody(), typeName);
+        catch (InvalidDefinitionException ex)
+            throw new HttpMessageConversionException("Type definition error: " ~ ex.getType(), ex);
+        catch (JacksonException ex)
+            throw new HttpMessageNotReadableException("JSON parse error: " ~ ex.getOriginalMessage(), ex, inputMessage);
     }
 
     protected override void writeInternal(Any value, HttpOutputMessage outputMessage)

@@ -34,6 +34,7 @@ class HandlerMethod
     private string responseStatusReason;
     private bool responseBody;
     private const(MergedAnnotation)[] methodAnnotations;
+    private const(MergedAnnotation)[] typeAnnotations;
 
     /// For a request mapping row and its bean.
     this(Object bean, string beanType, HandlerMapping mapping)
@@ -48,6 +49,7 @@ class HandlerMethod
         responseBody = mapping.responseBody;
         if (mapping.method !is null)
             methodAnnotations = mapping.method.annotations;
+        typeAnnotations = mapping.typeAnnotations;
         initParameters(mapping.arguments, mapping.returnType);
     }
 
@@ -91,6 +93,12 @@ class HandlerMethod
     string getBeanType() const pure nothrow @nogc
     {
         return beanType;
+    }
+
+    /// The bean class's merged annotations (AOT contract 2), as Spring finds them on `getBeanType()`.
+    const(MergedAnnotation)[] getBeanTypeAnnotations() const pure nothrow @nogc
+    {
+        return typeAnnotations;
     }
 
     /// The method name.

@@ -4,8 +4,7 @@ spring-web/src/test/java/org/springframework/web/cors/DefaultCorsProcessorTests.
 Copyright 2002-present the original author or authors. Licensed under the Apache License, Version 2.0.
 Modified by the Flint authors: JUnit and AssertJ assertions become D unittests and asserts; the `@BeforeEach`
 fields become a `Fixture` that `setup` returns. The test lives with flint.mock.web's `MockHttpServletRequest` and
-`MockHttpServletResponse` in flint:framework-test, which depends on flint:web. Cases that need
-`addAllowedOriginPattern` or private-network preflight support wait behind version gates.
+`MockHttpServletResponse` in flint:framework-test, which depends on flint:web. Every case runs.
 +/
 module flint.web.default_cors_processor_tests;
 
@@ -405,197 +404,185 @@ unittest
             HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
 }
 
-// flint.web's CorsConfiguration has no addAllowedOriginPattern yet.
-version (FlintCorsConfigurationComplete)
+@("DefaultCorsProcessorTests.actualRequestCredentialsWithWildcardOrigin")
+unittest
 {
-    @("DefaultCorsProcessorTests.actualRequestCredentialsWithWildcardOrigin")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.GET.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    auto f = setup();
+    f.request.setMethod(HttpMethod.GET.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
 
-        f.conf.addAllowedOrigin("*");
-        f.conf.setAllowCredentials(true);
-        assert(throws!IllegalArgumentException({
-                f.processor.processRequest(f.conf, f.request, f.response);
-            }));
+    f.conf.addAllowedOrigin("*");
+    f.conf.setAllowCredentials(true);
+    assert(throws!IllegalArgumentException({
+            f.processor.processRequest(f.conf, f.request, f.response);
+        }));
 
-        f.conf.setAllowedOrigins(null);
-        f.conf.addAllowedOriginPattern("*");
+    f.conf.setAllowedOrigins(null);
+    f.conf.addAllowedOriginPattern("*");
 
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) == "https://domain2.com");
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
-        assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS) == "true");
-        assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
-                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
-
-    @("DefaultCorsProcessorTests.preflightRequestCredentialsWithWildcardOrigin")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Header1");
-        f.conf.setAllowedOrigins(["https://domain1.com", "*", "http://domain3.example"]);
-        f.conf.addAllowedHeader("Header1");
-        f.conf.setAllowCredentials(true);
-
-        assert(throws!IllegalArgumentException({
-                f.processor.processRequest(f.conf, f.request, f.response);
-            }));
-
-        f.conf.setAllowedOrigins(null);
-        f.conf.addAllowedOriginPattern("*");
-
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) == "https://domain2.com");
-        assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
-                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) == "https://domain2.com");
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
+    assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS) == "true");
+    assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
+            HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
 }
 
-// flint.web's DefaultCorsProcessor has no Private Network Access support (ACCESS_CONTROL_*_PRIVATE_NETWORK).
-version (FlintCorsPrivateNetwork)
+@("DefaultCorsProcessorTests.preflightRequestCredentialsWithWildcardOrigin")
+unittest
 {
-    @("DefaultCorsProcessorTests.preflightRequestPrivateNetworkWithWildcardOrigin")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Header1");
-        f.request.addHeader(DefaultCorsProcessor.ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK, "true");
-        f.conf.setAllowedOrigins(["https://domain1.com", "*", "http://domain3.example"]);
-        f.conf.addAllowedHeader("Header1");
-        f.conf.setAllowPrivateNetwork(true);
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Header1");
+    f.conf.setAllowedOrigins(["https://domain1.com", "*", "http://domain3.example"]);
+    f.conf.addAllowedHeader("Header1");
+    f.conf.setAllowCredentials(true);
 
-        assert(throws!IllegalArgumentException({
-                f.processor.processRequest(f.conf, f.request, f.response);
-            }));
+    assert(throws!IllegalArgumentException({
+            f.processor.processRequest(f.conf, f.request, f.response);
+        }));
 
-        f.conf.setAllowedOrigins(null);
-        f.conf.addAllowedOriginPattern("*");
+    f.conf.setAllowedOrigins(null);
+    f.conf.addAllowedOriginPattern("*");
 
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
-        assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) == "https://domain2.com");
-        assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
-                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
-
-    @("DefaultCorsProcessorTests.preflightRequestWithoutAccessControlRequestPrivateNetwork")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.conf.addAllowedHeader("*");
-        f.conf.addAllowedOrigin("https://domain2.com");
-
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(!f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
-
-    @("DefaultCorsProcessorTests.preflightRequestWithAccessControlRequestPrivateNetworkNotAllowed")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.request.addHeader(DefaultCorsProcessor.ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK, "true");
-        f.conf.addAllowedHeader("*");
-        f.conf.addAllowedOrigin("https://domain2.com");
-
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(!f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
-
-    @("DefaultCorsProcessorTests.preflightRequestWithAccessControlRequestPrivateNetworkAllowed")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.request.addHeader(DefaultCorsProcessor.ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK, "true");
-        f.conf.addAllowedHeader("*");
-        f.conf.addAllowedOrigin("https://domain2.com");
-        f.conf.setAllowPrivateNetwork(true);
-
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) == "https://domain2.com");
+    assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
+            HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
 }
 
-// flint.web rejects a preflight whose Access-Control-Request-Headers is absent or empty (null vs empty list).
-version (FlintCorsPreflightEmptyRequestHeaders)
+@("DefaultCorsProcessorTests.preflightRequestPrivateNetworkWithWildcardOrigin")
+unittest
 {
-    @("DefaultCorsProcessorTests.preflightRequestAllOriginsAllowed")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.conf.addAllowedOrigin("*");
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Header1");
+    f.request.addHeader(DefaultCorsProcessor.ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK, "true");
+    f.conf.setAllowedOrigins(["https://domain1.com", "*", "http://domain3.example"]);
+    f.conf.addAllowedHeader("Header1");
+    f.conf.setAllowPrivateNetwork(true);
 
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
-                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
+    assert(throws!IllegalArgumentException({
+            f.processor.processRequest(f.conf, f.request, f.response);
+        }));
 
-    @("DefaultCorsProcessorTests.preflightRequestMatchedAllowedMethod")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.conf.addAllowedOrigin("*");
+    f.conf.setAllowedOrigins(null);
+    f.conf.addAllowedOriginPattern("*");
 
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-        assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS) == "GET,HEAD");
-        assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
-                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
-    }
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
+    assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN) == "https://domain2.com");
+    assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
+            HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
+}
 
-    @("DefaultCorsProcessorTests.preflightRequestWithEmptyHeaders")
-    unittest
-    {
-        auto f = setup();
-        f.request.setMethod(HttpMethod.OPTIONS.name());
-        f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
-        f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "");
-        f.conf.addAllowedHeader("*");
-        f.conf.addAllowedOrigin("https://domain2.com");
+@("DefaultCorsProcessorTests.preflightRequestWithoutAccessControlRequestPrivateNetwork")
+unittest
+{
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.conf.addAllowedHeader("*");
+    f.conf.addAllowedOrigin("https://domain2.com");
 
-        f.processor.processRequest(f.conf, f.request, f.response);
-        assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assert(!f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS));
-        assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
-                HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
-        assert(f.response.getStatus() == HttpServletResponse.SC_OK);
-    }
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(!f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
+}
+
+@("DefaultCorsProcessorTests.preflightRequestWithAccessControlRequestPrivateNetworkNotAllowed")
+unittest
+{
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.request.addHeader(DefaultCorsProcessor.ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK, "true");
+    f.conf.addAllowedHeader("*");
+    f.conf.addAllowedOrigin("https://domain2.com");
+
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(!f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
+}
+
+@("DefaultCorsProcessorTests.preflightRequestWithAccessControlRequestPrivateNetworkAllowed")
+unittest
+{
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.request.addHeader(DefaultCorsProcessor.ACCESS_CONTROL_REQUEST_PRIVATE_NETWORK, "true");
+    f.conf.addAllowedHeader("*");
+    f.conf.addAllowedOrigin("https://domain2.com");
+    f.conf.setAllowPrivateNetwork(true);
+
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(f.response.containsHeader(DefaultCorsProcessor.ACCESS_CONTROL_ALLOW_PRIVATE_NETWORK));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
+}
+
+@("DefaultCorsProcessorTests.preflightRequestAllOriginsAllowed")
+unittest
+{
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.conf.addAllowedOrigin("*");
+
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
+            HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
+}
+
+@("DefaultCorsProcessorTests.preflightRequestMatchedAllowedMethod")
+unittest
+{
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.conf.addAllowedOrigin("*");
+
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
+    assert(f.response.getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS) == "GET,HEAD");
+    assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
+            HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
+}
+
+@("DefaultCorsProcessorTests.preflightRequestWithEmptyHeaders")
+unittest
+{
+    auto f = setup();
+    f.request.setMethod(HttpMethod.OPTIONS.name());
+    f.request.addHeader(HttpHeaders.ORIGIN, "https://domain2.com");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
+    f.request.addHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "");
+    f.conf.addAllowedHeader("*");
+    f.conf.addAllowedOrigin("https://domain2.com");
+
+    f.processor.processRequest(f.conf, f.request, f.response);
+    assert(f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert(!f.response.containsHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS));
+    assert(containsAll(f.response.getHeaders(HttpHeaders.VARY), HttpHeaders.ORIGIN,
+            HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS));
+    assert(f.response.getStatus() == HttpServletResponse.SC_OK);
 }

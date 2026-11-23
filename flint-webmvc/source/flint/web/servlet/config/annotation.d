@@ -21,8 +21,9 @@ import flint.http.converter.json : JacksonJsonHttpMessageConverter;
 import flint.web.cors : CorsConfiguration, UrlBasedCorsConfigurationSource;
 import flint.web.method.support : HandlerMethodArgumentResolver, HandlerMethodReturnValueHandler;
 import flint.web.servlet : DispatcherStrategies, HandlerExceptionResolver, HandlerInterceptor,
-    HandlerMapping, ViewResolver;
+    HandlerMapping, LocaleResolver, ViewResolver;
 import flint.web.servlet.handler : MappedInterceptor;
+import flint.web.servlet.i18n : AcceptHeaderLocaleResolver;
 import flint.web.servlet.mvc.annotation : ResponseStatusExceptionResolver;
 import flint.web.servlet.mvc.method.annotation : ExceptionHandlerExceptionResolver,
     RequestMappingHandlerAdapter, RequestMappingHandlerMapping;
@@ -271,6 +272,7 @@ class WebMvcConfigurationSupport
     private HandlerExceptionResolver[] firstResolvers;
     private ViewResolver[] viewResolvers;
     private int[string] adviceOrder;
+    private LocaleResolver localeResolver;
 
     /// Over Flint AOT's tables, the bean factory and the application's configurers.
     this(AotHandlerMapping[] mappings, ExceptionHandlerSpec[] exceptionHandlers,
@@ -287,6 +289,14 @@ class WebMvcConfigurationSupport
     WebMvcConfigurationSupport setMessageConverters(HttpMessageConverter[] converters) pure nothrow @nogc
     {
         this.converters = converters;
+        return this;
+    }
+
+    /// The `localeResolver` bean: Spring's default is an `AcceptHeaderLocaleResolver`; Boot's
+    /// `WebMvcAutoConfiguration` replaces it from `flint.web.locale` and `flint.web.locale-resolver`.
+    WebMvcConfigurationSupport setLocaleResolver(LocaleResolver localeResolver) pure nothrow @nogc
+    {
+        this.localeResolver = localeResolver;
         return this;
     }
 
@@ -385,6 +395,7 @@ class WebMvcConfigurationSupport
         ];
         strategies.handlerExceptionResolvers = firstResolvers ~ resolvers;
         strategies.viewResolvers = viewResolvers;
+        strategies.localeResolver = localeResolver !is null ? localeResolver : new AcceptHeaderLocaleResolver;
         return strategies;
     }
 }

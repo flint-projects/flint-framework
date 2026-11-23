@@ -15,6 +15,7 @@ import flint.jakarta.servlet : DispatcherType, RequestDispatcher, ServletContext
     ServletInputStream, ServletRequest, ServletResponse;
 import flint.jakarta.servlet.http : Cookie, HttpServletRequest;
 import flint.java.lang : IllegalArgumentException, IllegalStateException, NumberFormatException;
+import flint.java.util : Locale;
 
 @safe:
 
@@ -338,6 +339,19 @@ final class ServletEngineRequest : HttpServletRequest
     string getProtocolRequestId()
     {
         return "";
+    }
+
+    /// `HttpServletRequest.getLocale`: Tomcat's first `Accept-Language` locale, else the default locale.
+    Locale getLocale()
+    {
+        return getLocales()[0];
+    }
+
+    /// `HttpServletRequest.getLocales`.
+    Locale[] getLocales()
+    {
+        auto locales = acceptLanguages(getHeaders("accept-language"));
+        return locales.length != 0 ? locales : [Locale.getDefault()];
     }
 
     // HttpServletRequest
@@ -805,4 +819,90 @@ unittest
     assert(charsetOf("text/plain; Charset=\"iso-8859-1\"") == "iso-8859-1");
     assert(charsetOf("application/json") is null);
     assert(charsetOf(null) is null);
+}
+
+/// Tomcat's `Request.parseLocalesHeader`: every `Accept-Language` range with a positive quality, highest quality
+/// first and in header order within one quality; `*` and malformed ranges are skipped.
+package(flint.engine.servlet) Locale[] acceptLanguages(string[] values)
+{
+    struct Ranked
+    {
+        double quality;
+        Locale locale;
+    }
+
+    Ranked[] ranked;
+    foreach (value; values)
+    {
+        foreach (entry; split(value, ','))
+        {
+            const parts = split(entry, ';');
+            const range = trim(parts[0]);
+            double quality = 1;
+            foreach (parameter; parts[1 .. $])
+            {
+                const text = trim(parameter);
+                if (text.length > 2 && (text[0] == 'q' || text[0] == 'Q') && text[1] == '=')
+                    quality = parseQuality(text[2 .. $]);
+            }
+            if (range.length == 0 || range == "*" || !(quality > 0))
+                continue;
+            const locale = Locale.forLanguageTag(range);
+            if (locale.getLanguage().length != 0)
+                ranked ~= Ranked(quality, locale);
+        }
+    }
+    // A stable insertion sort by descending quality; header lists are short.
+    foreach (i; 1 .. ranked.length)
+    {
+        auto item = ranked[i];
+        size_t j = i;
+        while (j > 0 && ranked[j - 1].quality < item.quality)
+        {
+            ranked[j] = ranked[j - 1];
+            --j;
+        }
+        ranked[j] = item;
+    }
+    Locale[] locales;
+    foreach (item; ranked)
+        locales ~= item.locale;
+    return locales;
+}
+
+/// A quality value (`0`, `0.5`, `1.000`); NaN when malformed.
+private double parseQuality(string text) pure nothrow @nogc
+{
+    double value = 0;
+    double scale = 0;
+    foreach (c; text)
+    {
+        if (c == '.' && scale == 0)
+            scale = 1;
+        else if (c >= '0' && c <= '9')
+        {
+            if (scale == 0)
+                value = value * 10 + (c - '0');
+            else
+            {
+                scale /= 10;
+                value += (c - '0') * scale;
+            }
+        }
+        else
+            return double.nan;
+    }
+    return text.length == 0 || value > 1 ? double.nan : value;
+}
+
+@("Accept-Language orders by quality, keeps header order within a quality and skips q=0, * and bad ranges")
+unittest
+{
+    auto locales = acceptLanguages([
+        "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5", "es;q=0, it;q=0.9"
+    ]);
+    assert(locales.length == 5);
+    assert(locales[0].toLanguageTag() == "fr-CH" && locales[1].toLanguageTag() == "fr");
+    assert(locales[2].toLanguageTag() == "it" && locales[3].toLanguageTag() == "en" && locales[4].toLanguageTag() == "de");
+    assert(acceptLanguages(["en;q=x"]).length == 0 && acceptLanguages(null).length == 0);
 }

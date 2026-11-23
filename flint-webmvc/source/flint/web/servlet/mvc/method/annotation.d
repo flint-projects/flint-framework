@@ -21,6 +21,7 @@ module flint.web.servlet.mvc.method.annotation;
 import flint.core : MethodParameter;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.bean : BeanFactory;
+import flint.engine.aot.descriptor : MergedAnnotation;
 import flint.engine.aot.mapping : AotHandlerMapping = HandlerMapping, ArgumentKind, ArgumentSpec,
     ExceptionHandlerSpec, HandlerArguments;
 import flint.http : HttpEntity, HttpHeaders, HttpMethod, HttpStatus, HttpStatusCode, MediaType,
@@ -63,16 +64,17 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
         foreach (mapping; mappings)
         {
             Object bean = beanFactory.getBean(mapping.bean);
-            auto handlerMethod = new HandlerMethod(bean, typeid(bean).name, mapping);
+            // Contract 2's beanType; a row from an older table falls back to the bean's run-time type.
+            auto handlerMethod = new HandlerMethod(bean, mapping.beanType.length != 0
+                    ? mapping.beanType : typeid(bean).name, mapping);
             registerMapping(new RequestMappingInfo(mapping.paths, mapping.methods, mapping.params,
                     mapping.headers, mapping.consumes, mapping.produces), handlerMethod,
                     initCorsConfiguration(mapping));
         }
     }
 
-    /// Spring's `initCorsConfiguration`: class-level `@CrossOrigin` updated by the method's, then permit defaults.
-    /// Class-level values arrive as the method row's `@CrossOrigin` at distance 100 or more (interim until contract 2
-    /// carries class annotations separately).
+    /// Spring's `initCorsConfiguration`: class-level `@CrossOrigin` (contract 2's `typeAnnotations`) updated by the
+    /// method's, then permit defaults.
     protected CorsConfiguration initCorsConfiguration(AotHandlerMapping mapping)
     {
         import flint.web.bind.annotation : CrossOrigin;
@@ -80,15 +82,12 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
         if (mapping.method is null)
             return null;
         const(CrossOrigin)[] typeValues, methodValues;
-        foreach (ref annotation; mapping.method.annotations)
-        {
-            if (annotation.type != "flint.web.bind.annotation.CrossOrigin")
-                continue;
-            if (annotation.distance >= 100)
+        foreach (ref annotation; mapping.typeAnnotations)
+            if (annotation.type == "flint.web.bind.annotation.CrossOrigin" && typeValues.length == 0)
                 typeValues ~= annotation.value.get!CrossOrigin;
-            else if (methodValues.length == 0)
+        foreach (ref annotation; mapping.method.annotations)
+            if (annotation.type == "flint.web.bind.annotation.CrossOrigin" && methodValues.length == 0)
                 methodValues ~= annotation.value.get!CrossOrigin;
-        }
         const(CrossOrigin)* typeAnnotation = typeValues.length != 0 ? &typeValues[0] : null;
         const(CrossOrigin)* methodAnnotation = methodValues.length != 0 ? &methodValues[0] : null;
         if (typeAnnotation is null && methodAnnotation is null)
@@ -109,8 +108,8 @@ class RequestMappingHandlerMapping : RequestMappingInfoHandlerMapping
             return;
         foreach (origin; annotation.origins.length != 0 ? annotation.origins : annotation.value)
             config.addAllowedOrigin(origin);
-        if (annotation.originPatterns.length != 0)
-            config.setAllowedOriginPatterns((config.getAllowedOriginPatterns() ~ annotation.originPatterns).dup);
+        foreach (pattern; annotation.originPatterns)
+            config.addAllowedOriginPattern(pattern);
         foreach (method; annotation.methods)
             config.addAllowedMethod(method.name());
         foreach (header; annotation.allowedHeaders)
@@ -527,7 +526,9 @@ class HttpEntityMethodProcessor : AbstractMessageConverterMethodProcessor
             NativeWebRequest webRequest, WebDataBinderFactory binderFactory)
     {
         auto inputMessage = new ServletServerHttpRequest(webRequest.getNativeRequest());
-        auto body = readWithMessageConverters(webRequest, parameter, "string");
+        // Contract 2's elementType is the T of HttpEntity!T or RequestEntity!T; an untyped entity reads text.
+        const elementType = parameter.getArgumentSpec().elementType;
+        auto body = readWithMessageConverters(webRequest, parameter, elementType.length != 0 ? elementType : "string");
         return Any.of(HttpEntity.of(body, inputMessage.getHeaders()));
     }
 
@@ -827,6 +828,8 @@ class RequestMappingHandlerAdapter : HandlerAdapter
         if (mavContainer.isRequestHandled())
             return null;
         auto mav = new ModelAndView(mavContainer.getViewName(), mavContainer.getModel());
+        if (!mavContainer.isViewReference())
+            mav.setView(cast(imported!"flint.web.servlet".View) mavContainer.getView());
         if (auto status = mavContainer.getStatus())
             mav.setStatus(*status);
         return mav;
@@ -843,19 +846,26 @@ struct ControllerAdviceBean
     int order = int.max; ///
     string[] basePackages; ///
     string[] assignableTypes; ///
+    string[] annotations; ///
     ExceptionHandlerSpec[] handlers; ///
 
-    /// Whether the advice applies to a controller of `beanType` (Spring's `HandlerTypePredicate`).
-    bool isApplicableToBeanType(string beanType) const pure nothrow @nogc
+    /// Whether the advice applies to a controller of `beanType` carrying `typeAnnotations` (Spring's
+    /// `HandlerTypePredicate`: a name prefix of a base package, an assignable type, or a class annotation).
+    /// Assignability compares the exact type until descriptors carry supertypes.
+    bool isApplicableToBeanType(string beanType, scope const(MergedAnnotation)[] typeAnnotations = null) const pure nothrow @nogc
     {
-        if (basePackages.length == 0 && assignableTypes.length == 0)
+        if (basePackages.length == 0 && assignableTypes.length == 0 && annotations.length == 0)
             return true;
         foreach (p; basePackages)
-            if (beanType.length > p.length && beanType[0 .. p.length] == p && beanType[p.length] == '.')
+            if (beanType.length >= p.length && beanType[0 .. p.length] == p)
                 return true;
         foreach (t; assignableTypes)
             if (t == beanType)
                 return true;
+        foreach (a; annotations)
+            foreach (ref annotation; typeAnnotations)
+                if (annotation.type == a)
+                    return true;
         return false;
     }
 }
@@ -891,6 +901,8 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
                 ControllerAdviceBean advice;
                 advice.beanName = spec.bean;
                 advice.basePackages = spec.adviceBasePackages;
+                advice.assignableTypes = spec.adviceAssignableTypes;
+                advice.annotations = spec.adviceAnnotations;
                 if (auto order = spec.bean in adviceOrder)
                     advice.order = *order;
                 advice.handlers = [spec];
@@ -925,7 +937,7 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
         if (spec is null)
             return null;
         auto exceptionHandlerMethod = new ServletInvocableHandlerMethod(new HandlerMethod(bean,
-                typeid(bean).name, *spec));
+                spec.beanType.length != 0 ? spec.beanType : typeid(bean).name, *spec));
         exceptionHandlerMethod.setHandlerMethodArgumentResolvers(adapter.getArgumentResolvers());
         exceptionHandlerMethod.setHandlerMethodReturnValueHandlers(adapter.getReturnValueHandlers(),
                 adapter.getResponseBodyHandler());
@@ -949,6 +961,8 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
         if (mavContainer.isRequestHandled())
             return new ModelAndView();
         auto mav = new ModelAndView(mavContainer.getViewName(), mavContainer.getModel());
+        if (!mavContainer.isViewReference())
+            mav.setView(cast(imported!"flint.web.servlet".View) mavContainer.getView());
         if (auto status = mavContainer.getStatus())
             mav.setStatus(*status);
         return mav;
@@ -970,7 +984,8 @@ class ExceptionHandlerExceptionResolver : AbstractHandlerExceptionResolver
         }
         foreach (ref advice; adviceBeans)
         {
-            if (handlerMethod !is null && !advice.isApplicableToBeanType(handlerMethod.getBeanType()))
+            if (handlerMethod !is null && !advice.isApplicableToBeanType(handlerMethod.getBeanType(),
+                    handlerMethod.getBeanTypeAnnotations()))
                 continue;
             if (auto found = new ExceptionHandlerMethodResolver(advice.handlers).resolveMethod(exception))
             {

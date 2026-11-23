@@ -3,8 +3,8 @@
 
 Ported from spring-projects/spring-framework v7.1.0, spring-webmvc/src/main/java/org/springframework/web/servlet/
 (DispatcherServlet.java, FrameworkServlet.java, HandlerMapping.java, HandlerAdapter.java, HandlerInterceptor.java,
-HandlerExecutionChain.java, HandlerExceptionResolver.java, ModelAndView.java, View.java, ViewResolver.java,
-NoHandlerFoundException.java) and spring-web's WebUtils.java (error attribute exposure).
+HandlerExecutionChain.java, HandlerExceptionResolver.java, LocaleResolver.java, ModelAndView.java, View.java,
+ViewResolver.java, NoHandlerFoundException.java) and spring-web's WebUtils.java (error attribute exposure).
 Copyright 2002-present the original author or authors.
 Licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
 Modified by the Flint authors: translated to D under the rulebook. `HandlerInterceptor` is an abstract class
@@ -19,7 +19,7 @@ import flint.http : HttpHeaders, HttpMethod, HttpStatus, HttpStatusCode, MediaTy
 import flint.jakarta.servlet : RequestDispatcher, ServletException, ServletRequest, ServletResponse;
 import flint.jakarta.servlet.http : HttpServlet, HttpServletRequest, HttpServletResponse;
 import flint.java.lang : IllegalStateException;
-import flint.java.util : LinkedHashMap;
+import flint.java.util : LinkedHashMap, Locale;
 import flint.web : ErrorResponse, skipBacktrace;
 
 @safe:
@@ -209,6 +209,17 @@ interface View
     void render(LinkedHashMap!(string, Any) model, HttpServletRequest request, HttpServletResponse response);
 }
 
+/// `LocaleResolver`: the locale of a request, which `DispatcherServlet.render` applies to the response
+/// (`Content-Language`). Java's `@Nullable Locale` is `Locale.init` here.
+interface LocaleResolver
+{
+    /// The current locale of `request`.
+    Locale resolveLocale(HttpServletRequest request);
+
+    /// Changes the current locale; strategies that cannot change it throw `UnsupportedOperationException`.
+    void setLocale(HttpServletRequest request, HttpServletResponse response, Locale locale);
+}
+
 /// `ViewResolver`: resolves a view name.
 interface ViewResolver
 {
@@ -396,6 +407,8 @@ struct DispatcherStrategies
     HandlerAdapter[] handlerAdapters; ///
     HandlerExceptionResolver[] handlerExceptionResolvers; ///
     ViewResolver[] viewResolvers; ///
+    /// `null` falls back to `request.getLocale()`, as in Spring.
+    LocaleResolver localeResolver;
 }
 
 /++
@@ -650,6 +663,10 @@ class DispatcherServlet : HttpServlet
     /// Spring's `render`: resolves the view and renders the model.
     protected void render(ModelAndView mv, HttpServletRequest request, HttpServletResponse response)
     {
+        // Determine locale for request and apply it to the response.
+        const locale = strategies.localeResolver !is null
+            ? strategies.localeResolver.resolveLocale(request) : request.getLocale();
+        response.setLocale(locale);
         View view;
         if (mv.isReference())
         {

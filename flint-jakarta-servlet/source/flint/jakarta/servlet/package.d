@@ -15,6 +15,7 @@ module flint.jakarta.servlet;
 
 import flint.engine.aot.any : Any;
 import flint.java.io : InputStream, IOException, OutputStream, PrintWriter;
+import flint.java.util : Locale;
 
 @safe:
 
@@ -25,7 +26,7 @@ class ServletException : Exception
     // dfmt off
     this(string message = null, Throwable rootCause = null, string file = __FILE__, size_t line =
             __LINE__) pure nothrow @nogc
-       // dfmt on
+          // dfmt on
     {
         super(message, file, line, rootCause);
     }
@@ -358,6 +359,13 @@ interface ServletRequest
 
     /// The protocol's own request identifier, or `""`.
     string getProtocolRequestId();
+
+    /// The preferred locale from `Accept-Language`, or the server's default locale when there is none.
+    Locale getLocale();
+
+    /// The acceptable locales in decreasing preference, or the server's default locale alone
+    /// (`Enumeration<Locale>` is `Locale[]`, R10).
+    Locale[] getLocales();
 }
 
 /// `jakarta.servlet.ServletResponse`.
@@ -404,6 +412,12 @@ interface ServletResponse
 
     /// Discards status, headers and buffered body. Throws `IllegalStateException` once committed.
     void reset();
+
+    /// Sets the response locale, which sets `Content-Language`; ignored once the response is committed.
+    void setLocale(Locale loc);
+
+    /// The response locale: the last one set, else the server's default.
+    Locale getLocale();
 }
 
 /// `jakarta.servlet.FilterChain`.

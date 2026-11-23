@@ -19,6 +19,7 @@ import flint.jakarta.servlet : DispatcherType, Filter, FilterRegistration, Reque
 import flint.jakarta.servlet.http : Cookie, HttpServletRequest, HttpServletResponse;
 import flint.java.io : PrintWriter, Writer;
 import flint.java.lang : IllegalStateException, UnsupportedOperationException;
+import flint.java.util : Locale;
 
 @safe:
 
@@ -155,6 +156,7 @@ class MockHttpServletRequest : HttpServletRequest
     private string protocol = "HTTP/1.1";
     private DispatcherType dispatcherType = DispatcherType.REQUEST;
     private MockServletContext servletContext;
+    private Locale[] locales = [Locale.ENGLISH];
 
     /// With a method and request URI.
     this(string method = "", string requestURI = "")
@@ -219,6 +221,13 @@ class MockHttpServletRequest : HttpServletRequest
     {
         if (equalsIgnoreCase(name, HttpHeaders.CONTENT_TYPE) && contentType is null)
             setContentType(value);
+        // Spring's mock: the first Accept-Language header replaces the preferred locales (ENGLISH when empty).
+        if (equalsIgnoreCase(name, "Accept-Language") && findPair(headers, name, true) < 0)
+        {
+            locales = acceptLanguageLocales(value);
+            if (locales.length == 0)
+                locales = [Locale.ENGLISH];
+        }
         const i = findPair(headers, name, true);
         if (i >= 0)
             headers[i].values ~= value;
@@ -479,6 +488,34 @@ class MockHttpServletRequest : HttpServletRequest
         return "";
     }
 
+    /// The preferred locale (`Locale.ENGLISH` unless set).
+    Locale getLocale()
+    {
+        return locales[0];
+    }
+
+    /// The preferred locales, most preferred first.
+    Locale[] getLocales()
+    {
+        return locales.dup;
+    }
+
+    /// Adds a locale ahead of the others.
+    void addPreferredLocale(Locale locale) pure nothrow
+    {
+        locales = locale ~ locales;
+    }
+
+    /// Replaces the preferred locales; at least one is required.
+    void setPreferredLocales(Locale[] locales)
+    {
+        import flint.java.lang : IllegalArgumentException;
+
+        if (locales.length == 0)
+            throw new IllegalArgumentException("Locale list must not be empty");
+        this.locales = locales.dup;
+    }
+
     // ----- HttpServletRequest
 
     string getAuthType()
@@ -652,6 +689,8 @@ class MockHttpServletResponse : HttpServletResponse
     private string redirectedUrl;
     private ServletOutputStream outputStream;
     private PrintWriter writer;
+    private Locale locale;
+    private bool localeSet;
 
     // ----- inspection
 
@@ -834,6 +873,20 @@ class MockHttpServletResponse : HttpServletResponse
         return committed;
     }
 
+    /// Sets the locale and `Content-Language`, as Spring's mock does.
+    void setLocale(Locale loc)
+    {
+        locale = loc;
+        localeSet = true;
+        setHeader("Content-Language", loc.toLanguageTag());
+    }
+
+    /// The locale (the default locale unless set).
+    Locale getLocale()
+    {
+        return localeSet ? locale : Locale.getDefault();
+    }
+
     void reset()
     {
         resetBuffer();
@@ -1000,4 +1053,68 @@ private bool equalsIgnoreCase(scope const(char)[] a, scope const(char)[] b) pure
             return false;
     }
     return true;
+}
+
+/// `HttpHeaders.getAcceptLanguageAsLocales`: the ranges by descending weight (header order within a weight),
+/// without `*` and zero-weight ranges.
+private Locale[] acceptLanguageLocales(string value)
+{
+    struct Ranked
+    {
+        double weight;
+        Locale locale;
+    }
+
+    Ranked[] ranked;
+    size_t start;
+    foreach (end; 0 .. value.length + 1)
+    {
+        if (end != value.length && value[end] != ',')
+            continue;
+        auto entry = value[start .. end];
+        start = end + 1;
+        double weight = 1;
+        size_t semicolon = entry.length;
+        foreach (index, c; entry)
+            if (c == ';')
+            {
+                semicolon = index;
+                break;
+            }
+        if (semicolon < entry.length)
+        {
+            import std.conv : ConvException, to;
+            import std.string : strip;
+
+            const parameter = entry[semicolon + 1 .. $].strip;
+            if (parameter.length > 2 && parameter[0 .. 2] == "q=")
+            {
+                try
+                    weight = parameter[2 .. $].to!double;
+                catch (ConvException)
+                    continue;
+            }
+        }
+        import std.string : strip;
+
+        const range = entry[0 .. semicolon].strip;
+        if (range.length == 0 || range == "*" || !(weight > 0))
+            continue;
+        ranked ~= Ranked(weight, Locale.forLanguageTag(range));
+    }
+    foreach (i; 1 .. ranked.length)
+    {
+        auto item = ranked[i];
+        size_t j = i;
+        while (j > 0 && ranked[j - 1].weight < item.weight)
+        {
+            ranked[j] = ranked[j - 1];
+            --j;
+        }
+        ranked[j] = item;
+    }
+    Locale[] result;
+    foreach (item; ranked)
+        result ~= item.locale;
+    return result;
 }

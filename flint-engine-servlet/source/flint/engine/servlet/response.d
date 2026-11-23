@@ -22,6 +22,7 @@ import flint.jakarta.servlet : ServletOutputStream;
 import flint.jakarta.servlet.http : Cookie, HttpServletResponse;
 import flint.java.io : IOException, PrintWriter, Writer;
 import flint.java.lang : IllegalArgumentException, IllegalStateException;
+import flint.java.util : Locale;
 
 @safe:
 
@@ -40,6 +41,8 @@ final class ServletEngineResponse : HttpServletResponse
     private string characterEncoding;
     private bool characterEncodingSet;
     private string contentLanguage;
+    private Locale locale;
+    private bool localeSet;
     private long contentLength = -1;
     private ubyte[] buffer;
     private int bufferSize = defaultBufferSize;
@@ -270,6 +273,7 @@ final class ServletEngineResponse : HttpServletResponse
         headerValues = null;
         contentType = null;
         contentLanguage = null;
+        localeSet = false;
         contentLength = -1;
         characterEncoding = null;
         characterEncodingSet = false;
@@ -471,11 +475,21 @@ final class ServletEngineResponse : HttpServletResponse
         return distinct;
     }
 
-    /// `Content-Language`, which Tomcat writes after `Content-Type` (Java's `setLocale`).
-    void setContentLanguage(string language)
+    /// `ServletResponse.setLocale`: `Content-Language` becomes the locale's language tag, which Tomcat writes
+    /// after `Content-Type`. Tomcat's locale-to-charset mapping is not applied; Spring's views name their charset.
+    void setLocale(Locale loc)
     {
-        if (!appCommitted())
-            contentLanguage = language;
+        if (appCommitted())
+            return;
+        locale = loc;
+        localeSet = true;
+        contentLanguage = loc.toLanguageTag();
+    }
+
+    /// `ServletResponse.getLocale`: the last locale set, else the default locale.
+    Locale getLocale()
+    {
+        return localeSet ? locale : Locale.getDefault();
     }
 
     // Body
