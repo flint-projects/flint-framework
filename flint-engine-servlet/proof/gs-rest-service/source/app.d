@@ -93,7 +93,7 @@ DispatcherServlet dispatcherServlet()
 
 void main() @system
 {
-    import core.thread : Thread;
+    import core.thread.osthread : Thread; // DMD on Windows resolves Thread only from its declaring module (ADR-026)
     import core.time : dur;
     import std.conv : to;
     import std.process : environment;

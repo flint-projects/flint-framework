@@ -157,21 +157,7 @@ final class ServletEngine : RequestHost
     {
         if (started)
             return;
-        foreach (entry; servlets)
-            if (entry.mappings.length != 0)
-                defaultServlet = entry;
-        if (defaultServlet is null)
-            throw new IllegalStateException("no servlet is mapped at / or /*");
-        // Tomcat's addFilterMapBefore and addFilterMap: mappings declared with isMatchAfter false run first, each
-        // group in declaration order.
-        foreach (after; [false, true])
-            foreach (entry; filters)
-                if (entry.mapped && entry.after == after)
-                    chainOrder ~= entry;
-        foreach (entry; servlets)
-            entry.servlet.init(new EngineConfig(entry.name, servletContext, entry.parameters));
-        foreach (entry; filters)
-            entry.filter.init(new EngineFilterConfig(entry.name, servletContext, entry.parameters));
+        initializeComponents();
 
         ServerOptions serverOptions;
         serverOptions.address = options.address;
@@ -197,6 +183,26 @@ final class ServletEngine : RequestHost
         if (admitted.code != Status.ok)
             throw new ServletEngineException("Unable to admit requests: " ~ admitted.message, options.port);
         started = true;
+    }
+
+    /// Pick the servlet mapped at `/` or `/*`, order the filter chain and initialize every servlet and filter.
+    private void initializeComponents()
+    {
+        foreach (entry; servlets)
+            if (entry.mappings.length != 0)
+                defaultServlet = entry;
+        if (defaultServlet is null)
+            throw new IllegalStateException("no servlet is mapped at / or /*");
+        // Tomcat's addFilterMapBefore and addFilterMap: mappings declared with isMatchAfter false run first, each
+        // group in declaration order.
+        foreach (after; [false, true])
+            foreach (entry; filters)
+                if (entry.mapped && entry.after == after)
+                    chainOrder ~= entry;
+        foreach (entry; servlets)
+            entry.servlet.init(new EngineConfig(entry.name, servletContext, entry.parameters));
+        foreach (entry; filters)
+            entry.filter.init(new EngineFilterConfig(entry.name, servletContext, entry.parameters));
     }
 
     /// Stop at once: admitted requests are cancelled. Idempotent.

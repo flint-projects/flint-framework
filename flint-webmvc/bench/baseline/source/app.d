@@ -13,7 +13,7 @@ private void emit(scope const(char)[] text) nothrow @nogc
     fputc('\n', stdout);
 }
 
-int main(string[] args)
+int main(string[])
 {
     emit("dispatcherServlet mapped");
     return 0;

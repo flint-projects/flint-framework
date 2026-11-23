@@ -19,6 +19,7 @@ int main(string[] args)
     auto cookie = new Cookie(args.length > 1 ? "session" : "visit", "v1");
     cookie.setPath("/");
     cookie.setHttpOnly(true);
-    emit(cookie.getName() ~ "=" ~ cookie.getValue() ~ " " ~ cookie.getPath() ~ (cookie.isHttpOnly() ? " HttpOnly" : ""));
+    const flags = cookie.isHttpOnly() ? " HttpOnly" : "";
+    emit(cookie.getName() ~ "=" ~ cookie.getValue() ~ " " ~ cookie.getPath() ~ flags);
     return 0;
 }
