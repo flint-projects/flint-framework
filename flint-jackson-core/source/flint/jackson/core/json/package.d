@@ -1568,10 +1568,12 @@ class UTF8StreamJsonParser : JsonParser
 
     private JacksonException unexpected(ubyte c, string comment, bool whole = false)
     {
-        import std.format : format;
+        import std.conv : to;
 
-        auto description = c >= 0x20 && c < 0x7F ? format("'%s' (code %d)", cast(char) c,
-                c) : format("(CTRL-CHAR, code %d)", c);
+        // Concatenation, not std.format: format alone instantiated about 4,000 templates in this module.
+        const code = "code " ~ (cast(uint) c).to!string;
+        const printable = c >= 0x20 && c < 0x7F;
+        auto description = printable ? "'" ~ cast(char) c ~ "' (" ~ code ~ ")" : "(CTRL-CHAR, " ~ code ~ ")";
         if (whole)
             return readError(comment);
         return readError("Unexpected character (" ~ description ~ "): " ~ comment);
