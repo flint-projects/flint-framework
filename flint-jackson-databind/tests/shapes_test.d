@@ -1,11 +1,12 @@
-/// Jackson 3.1.8 under Spring Boot 4.2's default mapper on arrays, byte[], Optional, maps, enums, records and @JsonNaming: each
-/// case is the D twin of a case in tests/golden/GoldenShapes.java, whose results the real Jackson wrote to
-/// tests/golden/shapes.tsv. Java's nested class names (`GoldenShapes$Color`) read as this module's (`shapes_test.Color`).
+/// Jackson 3.1.8 under Spring Boot 4.2's default mapper on arrays, byte[], Optional, maps, enums, records and
+/// @JsonNaming: each case is the D twin of a case in tests/golden/GoldenShapes.java, whose results the real Jackson
+/// wrote to tests/golden/shapes.tsv. Java's nested class names (`GoldenShapes$Color`) read as this module's
+/// (`shapes_test.Color`).
 module shapes_test;
 
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, DescriptorTable, ParameterDescriptor,
-    descriptorOf;
+import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, DescriptorTable,
+    ParameterDescriptor, descriptorOf;
 import flint.jackson.core : JacksonException;
 import flint.jackson.annotation : JsonIgnore, JsonProperty, JsonUnwrapped;
 import flint.jackson.databind : JsonMapper, PropertyNamingStrategies;
@@ -115,7 +116,8 @@ private final class Unwrapping
 {
     @JsonUnwrapped Status status;
     int count = 2;
-    @JsonUnwrapped(prefix : "x_", suffix : "_y") Status other;
+    @JsonUnwrapped(prefix : "x_", suffix:
+            "_y") Status other;
     @JsonUnwrapped(prefix : "deep_") Inner inner;
     @JsonUnwrapped StatusClass none;
 }
@@ -136,26 +138,25 @@ private Any invokePoint(scope Any[] arguments) @safe
 private Descriptor pointDescriptor()
 {
     auto d = descriptorOf!Point();
-    auto canonical = ConstructorDescriptor([
-        ParameterDescriptor("x", "int"), ParameterDescriptor("y", "int"),
-        ParameterDescriptor("label", "string")
-    ], null, &invokePoint, true);
-    d.constructors = canonical ~ d.constructors;
+    d.constructors = [
+        ConstructorDescriptor([
+            ParameterDescriptor("x", "int"), ParameterDescriptor("y", "int"),
+            ParameterDescriptor("label", "string")
+        ], null, &invokePoint, true)
+    ] ~ d.constructors;
     return d;
 }
 
 private DescriptorTable table()
 {
     auto t = DescriptorTable.withBuiltins();
-    foreach (d; [
-            descriptorOf!Shapes(), pointDescriptor(), descriptorOf!Color(), descriptorOf!(int[])(),
-            descriptorOf!(string[])(), descriptorOf!(byte[])(), descriptorOf!(double[])(),
-            descriptorOf!(Optional!string)(), descriptorOf!(Optional!int)(), descriptorOf!(int[string])(),
-            descriptorOf!(List!Color)(), descriptorOf!(ArrayList!Color)(), descriptorOf!(Point[])(),
-            descriptorOf!Snaked(), kebabDescriptor(), descriptorOf!Status(), descriptorOf!Inner(), descriptorOf!StatusClass(),
-            descriptorOf!Unwrapping(), descriptorOf!Renamed()
-        ])
-        t.add(d);
+    t.add(descriptorOf!Shapes());
+    t.add(pointDescriptor());
+    t.add(kebabDescriptor());
+    static foreach (T; imported!"std.meta".AliasSeq!(Color, int[], string[], byte[], double[],
+            Optional!string, Optional!int, int[string], List!Color, ArrayList!Color, Point[],
+            Snaked, Status, Inner, StatusClass, Unwrapping, Renamed))
+        t.add(descriptorOf!T());
     return t;
 }
 
@@ -164,38 +165,33 @@ private JsonMapper mapper()
     return JsonMapper.builder().findAndAddModules().descriptors(table()).build();
 }
 
+// The value each `write` case of GoldenShapes.java serializes with the default mapper.
+private struct WriteCase
+{
+    string name;
+    Any function() @safe value;
+}
+
+private static immutable WriteCase[] writeCases = [
+    WriteCase("shapes", () => Any.of(new Shapes())), WriteCase("color", () => Any.of(Color.BLUE)),
+    WriteCase("point", () => Any.of(Point(5, 6, "q"))), WriteCase("ints", () => Any.of([4, 5])),
+    WriteCase("bytes_empty", () => Any.of(cast(byte[])[])),
+    WriteCase("optional_empty", () => Any.of(Optional!string.init)),
+    WriteCase("snaked", () => Any.of(new Snaked())),
+    WriteCase("kebab", () => Any.of(Kebab("Madison", 608))),
+    WriteCase("unwrapping", () => Any.of(new Unwrapping())),
+    WriteCase("renamed", () => Any.of(new Renamed())),
+];
+
 private string written(string name)
 {
-    auto m = mapper();
-    switch (name)
-    {
-    case "shapes":
-        return m.writeValueAsString(new Shapes());
-    case "color":
-        return m.writeValueAsString(Color.BLUE);
-    case "point":
-        return m.writeValueAsString(Point(5, 6, "q"));
-    case "ints":
-        return m.writeValueAsString([4, 5]);
-    case "bytes_empty":
-        return m.writeValueAsString(cast(byte[])[]);
-    case "optional_empty":
-        return m.writeValueAsString(Optional!string.init);
-    case "snaked":
-        return m.writeValueAsString(new Snaked());
-    case "kebab":
-        return m.writeValueAsString(Kebab("Madison", 608));
-    case "unwrapping":
-        return m.writeValueAsString(new Unwrapping());
-    case "renamed":
-        return m.writeValueAsString(new Renamed());
-    case "kebab_over_global":
-        return JsonMapper.builder().findAndAddModules().descriptors(table())
-            .propertyNamingStrategy(PropertyNamingStrategies.UPPER_CAMEL_CASE()).build()
-            .writeValueAsString(Kebab("Madison", 608));
-    default:
-        assert(false, name);
-    }
+    if (name == "kebab_over_global")
+        return JsonMapper.builder().findAndAddModules().descriptors(table()).propertyNamingStrategy(
+                PropertyNamingStrategies.UPPER_CAMEL_CASE()).build().writeValueAsString(Kebab("Madison", 608));
+    foreach (ref c; writeCases)
+        if (c.name == name)
+            return mapper().writeValueAsString(c.value());
+    assert(false, name);
 }
 
 // Java's Arrays.toString, List.toString and record toString.
@@ -223,8 +219,8 @@ private string point(const Point p)
 {
     import std.conv : to;
 
-    return "Point[x=" ~ p.x.to!string ~ ", y=" ~ p.y.to!string ~ ", label=" ~ (p.label is null ? "null" : p.label)
-        ~ "]";
+    const label = p.label is null ? "null" : p.label;
+    return "Point[x=" ~ p.x.to!string ~ ", y=" ~ p.y.to!string ~ ", label=" ~ label ~ "]";
 }
 
 private string optional(T)(Optional!T o)
@@ -244,9 +240,10 @@ private string shapes(Shapes s)
     Color[] palette;
     foreach (c; s.palette.toArray())
         palette ~= c;
-    return list(s.counts) ~ " " ~ list(s.names) ~ " " ~ list(s.bytes) ~ " " ~ list(s.empty) ~ " "
-        ~ optional(s.present) ~ " " ~ optional(s.absent) ~ " " ~ optional(s.number) ~ " " ~ scores ~ "} "
-        ~ s.color.to!string ~ " " ~ list(palette) ~ " " ~ point(s.point) ~ " " ~ list(s.points);
+    return list(s.counts) ~ " " ~ list(s.names) ~ " " ~ list(s.bytes) ~ " " ~ list(
+            s.empty) ~ " " ~ optional(s.present) ~ " " ~ optional(s.absent) ~ " " ~ optional(
+            s.number) ~ " " ~ scores ~ "} " ~ s.color.to!string ~ " " ~ list(palette) ~ " " ~ point(
+            s.point) ~ " " ~ list(s.points);
 }
 
 private string read(string type, string json)

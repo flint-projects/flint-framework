@@ -6,8 +6,8 @@
 module petclinic_test;
 
 import flint.engine.aot.any : Any;
-import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, DescriptorTable, ParameterDescriptor,
-    descriptorOf;
+import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, DescriptorTable,
+    ParameterDescriptor, descriptorOf;
 import flint.engine.aot.name : typeNameOf;
 import flint.jackson.annotation : JsonAnyGetter;
 import flint.jackson.databind : JsonMapper;
@@ -282,18 +282,18 @@ private DescriptorTable table()
 {
     auto t = DescriptorTable.withBuiltins();
     foreach (d; [
-            described!PetTypeDto(), described!VisitDto(), described!PetDto(), described!OwnerDto(),
-            described!SpecialtyDto(), described!VetDto(), described!RoleDto(), described!UserDto(),
-            described!OwnerPageDto(), described!PetPageDto(), described!ValidationMessageDto(),
-            descriptorOf!(List!VisitDto)(), descriptorOf!(ArrayList!VisitDto)(),
-            descriptorOf!(List!PetDto)(), descriptorOf!(ArrayList!PetDto)(),
-            descriptorOf!(List!OwnerDto)(), descriptorOf!(ArrayList!OwnerDto)(),
-            descriptorOf!(List!SpecialtyDto)(), descriptorOf!(ArrayList!SpecialtyDto)(),
-            descriptorOf!(List!RoleDto)(), descriptorOf!(ArrayList!RoleDto)(),
-            descriptorOf!(List!PetTypeDto)(), descriptorOf!(ArrayList!PetTypeDto)(),
-            descriptorOf!(List!VetDto)(), descriptorOf!(ArrayList!VetDto)(),
-            descriptorOf!(LinkedHashMap!(string, string))()
-        ])
+        described!PetTypeDto(), described!VisitDto(), described!PetDto(), described!OwnerDto(),
+        described!SpecialtyDto(), described!VetDto(), described!RoleDto(),
+        described!UserDto(), described!OwnerPageDto(), described!PetPageDto(),
+        described!ValidationMessageDto(), descriptorOf!(List!VisitDto)(),
+        descriptorOf!(ArrayList!VisitDto)(), descriptorOf!(List!PetDto)(),
+        descriptorOf!(ArrayList!PetDto)(), descriptorOf!(List!OwnerDto)(),
+        descriptorOf!(ArrayList!OwnerDto)(), descriptorOf!(List!SpecialtyDto)(),
+        descriptorOf!(ArrayList!SpecialtyDto)(), descriptorOf!(List!RoleDto)(),
+        descriptorOf!(ArrayList!RoleDto)(), descriptorOf!(List!PetTypeDto)(),
+        descriptorOf!(ArrayList!PetTypeDto)(), descriptorOf!(List!VetDto)(),
+        descriptorOf!(ArrayList!VetDto)(), descriptorOf!(LinkedHashMap!(string, string))()
+    ])
         t.add(d);
     return t;
 }
@@ -302,8 +302,8 @@ private string typeOf(string dto)
 {
     switch (dto)
     {
-        static foreach (T; imported!"std.meta".AliasSeq!(PetTypeDto, VisitDto, PetDto, OwnerDto, SpecialtyDto,
-                VetDto, UserDto, OwnerPageDto, PetPageDto))
+        static foreach (T; imported!"std.meta".AliasSeq!(PetTypeDto, VisitDto, PetDto, OwnerDto,
+                SpecialtyDto, VetDto, UserDto, OwnerPageDto, PetPageDto))
         {
     case __traits(identifier, T):
             return typeNameOf!T;
@@ -349,9 +349,8 @@ unittest
         if (row[1] != "ValidationMessageDto")
             continue;
         auto dto = new ValidationMessageDto(`Field 'telephone' must match "^[0-9]{10}$" (rejected value: 01234abcde)`)
-            .putAdditionalProperty("field", "telephone")
-            .putAdditionalProperty("defaultMessage", `must match "^[0-9]{10}$"`)
-            .putAdditionalProperty("rejectedValue", "01234abcde");
+            .putAdditionalProperty("field", "telephone").putAdditionalProperty("defaultMessage",
+                `must match "^[0-9]{10}$"`).putAdditionalProperty("rejectedValue", "01234abcde");
         const written = mapper.writeValueAsString(dto);
         assert(written == row[2], "\nflint:      " ~ written ~ "\npetclinic: " ~ row[2]);
         return;
@@ -390,7 +389,7 @@ unittest
     auto created = mapper.readValue!TypeFields(`{"name":"ferret"}`);
     assert(created.name == "ferret" && created.id.isNull);
     assert(mapper.writeValueAsString(created) == `{"name":"ferret","id":null}`);
-    auto explicit = mapper.readValue!TypeFields(`{"name":"ferret","id":null}`);
+    const explicit = mapper.readValue!TypeFields(`{"name":"ferret","id":null}`);
     assert(explicit.id.isNull);
     auto numbered = mapper.readValue!TypeFields(`{"id":7,"name":"ferret"}`);
     assert(numbered.id.get == 7 && mapper.writeValueAsString(numbered) == `{"name":"ferret","id":7}`);

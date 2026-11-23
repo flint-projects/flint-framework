@@ -2,20 +2,21 @@
 /// shorthand of rulebook R2, and repeated @Resource.
 module annotation_test;
 
-import flint.jakarta.annotation : Generated, Nonnull, Nullable, PostConstruct, PreDestroy, Priority, Resource,
-    Resources;
+import flint.jakarta.annotation : Generated, Nonnull, Nullable, PostConstruct, PreDestroy,
+    Priority, Resource, Resources;
 
 @safe:
 
 private final class Component
 {
     @Resource string plain;
-    @Resource(name: "jdbc/petclinic", shareable: false) string named;
-    @Resource(lookup: "java:global/a") @Resource(lookup: "java:global/b") string twice;
+    @Resource(name : "jdbc/petclinic", shareable:
+            false) string named;
+    @Resource(lookup : "java:global/a") @Resource(lookup : "java:global/b") string twice;
     @Nullable string optional;
     @Nonnull string required = "x";
 
-    @PostConstruct void init()
+    @PostConstruct void start()
     {
     }
 
@@ -24,7 +25,7 @@ private final class Component
     }
 }
 
-@Priority(100) @Generated(["flint aot"], date: "2026-11-23T00:00:00Z") private struct Interceptor
+@Priority(100) @Generated(["flint aot"], "2026-11-23T00:00:00Z") private struct Interceptor
 {
 }
 
@@ -53,8 +54,8 @@ unittest
 {
     enum found = resources!(Component.plain);
     static assert(found.length == 1);
-    static assert(found[0].name == "" && found[0].lookup == "" && found[0].mappedName == ""
-            && found[0].description == "");
+    static assert(found[0].name == "" && found[0].lookup == "" && found[0].mappedName == "" && found[0].description
+            == "");
     static assert(found[0].shareable);
     static assert(found[0].authenticationType == Resource.AuthenticationType.CONTAINER);
 }
@@ -81,7 +82,7 @@ unittest
 {
     import std.traits : hasUDA;
 
-    static assert(hasUDA!(Component.init, PostConstruct) && !hasUDA!(Component.init, PreDestroy));
+    static assert(hasUDA!(Component.start, PostConstruct) && !hasUDA!(Component.start, PreDestroy));
     static assert(hasUDA!(Component.close, PreDestroy) && !hasUDA!(Component.close, PostConstruct));
     static assert(hasUDA!(Component.optional, Nullable) && !hasUDA!(Component.optional, Nonnull));
     static assert(hasUDA!(Component.required, Nonnull));

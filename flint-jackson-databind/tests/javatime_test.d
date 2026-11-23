@@ -9,8 +9,8 @@ import flint.jackson.core : JacksonException;
 import flint.jackson.databind : JsonMapper;
 import flint.jackson.databind.cfg : DateTimeFeature;
 import flint.jackson.databind.ext.javatime : decimalSeconds;
-import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneId, ZoneOffset,
-    ZonedDateTime;
+import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime,
+    ZoneId, ZoneOffset, ZonedDateTime;
 import flint.java.util : ArrayList, List;
 
 @safe:
@@ -50,12 +50,12 @@ private final class Event
 
 private final class Formatted
 {
-    @JsonFormat(pattern: "dd/MM/yyyy") LocalDate date;
-    @JsonFormat(pattern: "yyyy-MM-dd HH:mm:ss") LocalDateTime when;
-    @JsonFormat(pattern: "HH:mm") LocalTime time;
-    @JsonFormat(pattern: "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") OffsetDateTime offset;
-    @JsonFormat(shape: JsonFormat.Shape.NUMBER) LocalDate epochDay;
-    @JsonFormat(shape: JsonFormat.Shape.STRING) Duration asString;
+    @JsonFormat(pattern : "dd/MM/yyyy") LocalDate date;
+    @JsonFormat(pattern : "yyyy-MM-dd HH:mm:ss") LocalDateTime when;
+    @JsonFormat(pattern : "HH:mm") LocalTime time;
+    @JsonFormat(pattern : "yyyy-MM-dd'T'HH:mm:ss.SSSXXX") OffsetDateTime offset;
+    @JsonFormat(shape : JsonFormat.Shape.NUMBER) LocalDate epochDay;
+    @JsonFormat(shape : JsonFormat.Shape.STRING) Duration asString;
 
     this()
     {
@@ -69,8 +69,8 @@ private final class Formatted
 
     override string toString() const
     {
-        return date.toString() ~ " " ~ when.toString() ~ " " ~ time.toString() ~ " " ~ offset.toString() ~ " "
-            ~ epochDay.toString() ~ " " ~ asString.toString();
+        return date.toString() ~ " " ~ when.toString() ~ " " ~ time.toString() ~ " " ~ offset.toString()
+            ~ " " ~ epochDay.toString() ~ " " ~ asString.toString();
     }
 }
 
@@ -108,93 +108,89 @@ private JsonMapper mapper(string mode)
     return b.build();
 }
 
-// The value each `write` case of GoldenJavaTime.java serializes, and its mapper.
+// The value each `write` case of GoldenJavaTime.java serializes, by the case name after its mapper prefix.
+private struct WriteCase
+{
+    string name;
+    Any function() @safe value;
+}
+
+private Any dates() @safe
+{
+    List!LocalDate list = new ArrayList!LocalDate();
+    list.add(LocalDate.of(2010, 9, 7));
+    list.add(LocalDate.of(2024, 2, 29));
+    return Any.of(list);
+}
+
+private static immutable WriteCase[] writeCases = [
+    WriteCase("event", () => Any.of(new Event())), WriteCase("formatted",
+            () => Any.of(new Formatted())), WriteCase("list", &dates),
+    WriteCase("time_whole", () => Any.of(LocalTime.of(10, 15))),
+    WriteCase("time_seconds", () => Any.of(LocalTime.of(10, 15, 30))),
+    WriteCase("datetime_whole", () => Any.of(LocalDateTime.of(2013, 1, 1, 9, 30))),
+    WriteCase("instant_whole", () => Any.of(Instant.ofEpochSecond(1_700_000_000L))),
+    WriteCase("instant_neg", () => Any.of(Instant.ofEpochSecond(-1L, 999_999_999))),
+    WriteCase("time", () => Any.of(LocalTime.of(10, 15, 30, 123_456_789))),
+    WriteCase("neg", () => Any.of(Duration.ofMillis(-1500))),
+    WriteCase("duration_neg", () => Any.of(Duration.ofMillis(-1500))),
+    WriteCase("zero", () => Any.of(Duration.ZERO)),
+    WriteCase("nano", () => Any.of(Duration.ofNanos(1))),
+    WriteCase("instant_epoch", () => Any.of(Instant.EPOCH)),
+    WriteCase("instant_small", () => Any.of(Instant.ofEpochSecond(0, 5))),
+    WriteCase("instant_milli", () => Any.of(Instant.ofEpochSecond(0, 123_000_000))),
+    WriteCase("instant_big", () => Any.of(Instant.ofEpochSecond(253_402_300_800L))),
+    WriteCase("datetime", () => Any.of(LocalDateTime.of(2013, 1, 1, 9, 30, 0, 1_000_000))),
+];
+
+// The JSON GoldenJavaTime.java's `write` case `name` produces: its mapper prefix, then the value.
 private string written(string name)
 {
     import std.string : indexOf;
 
     const cut = name[0 .. 4] == "zone" ? 8 : name.indexOf('_');
     const mode = cut < 0 ? "boot" : name[0 .. cut];
-    auto m = mapper(mode);
-    switch (name[cut + 1 .. $])
-    {
-    case "event":
-        return m.writeValueAsString(new Event());
-    case "formatted":
-        return m.writeValueAsString(new Formatted());
-    case "list":
-        List!LocalDate list = new ArrayList!LocalDate();
-        list.add(LocalDate.of(2010, 9, 7));
-        list.add(LocalDate.of(2024, 2, 29));
-        return m.writeValueAsString(list);
-    case "time_whole":
-        return m.writeValueAsString(LocalTime.of(10, 15));
-    case "time_seconds":
-        return m.writeValueAsString(LocalTime.of(10, 15, 30));
-    case "datetime_whole":
-        return m.writeValueAsString(LocalDateTime.of(2013, 1, 1, 9, 30));
-    case "instant_whole":
-        return m.writeValueAsString(Instant.ofEpochSecond(1_700_000_000L));
-    case "instant_neg":
-        return m.writeValueAsString(Instant.ofEpochSecond(-1L, 999_999_999));
-    case "time":
-        return m.writeValueAsString(LocalTime.of(10, 15, 30, 123_456_789));
-    case "neg", "duration_neg":
-        return m.writeValueAsString(Duration.ofMillis(-1500));
-    case "zero":
-        return m.writeValueAsString(Duration.ZERO);
-    case "nano":
-        return m.writeValueAsString(Duration.ofNanos(1));
-    case "instant_epoch":
-        return m.writeValueAsString(Instant.EPOCH);
-    case "instant_small":
-        return m.writeValueAsString(Instant.ofEpochSecond(0, 5));
-    case "instant_milli":
-        return m.writeValueAsString(Instant.ofEpochSecond(0, 123_000_000));
-    case "instant_big":
-        return m.writeValueAsString(Instant.ofEpochSecond(253_402_300_800L));
-    case "datetime":
-        return m.writeValueAsString(LocalDateTime.of(2013, 1, 1, 9, 30, 0, 1_000_000));
-    default:
-        assert(false, name);
-    }
+    foreach (ref c; writeCases)
+        if (c.name == name[cut + 1 .. $])
+            return mapper(mode).writeValueAsString(c.value());
+    assert(false, name);
 }
+
+// How the read cases print a value, by its simple type name.
+private struct ShowCase
+{
+    string type;
+    string function(Any) @safe text;
+}
+
+private string textOf(T)(Any value) @safe
+{
+    return value.get!T().toString();
+}
+
+private static immutable ShowCase[] showCases = [
+    ShowCase("LocalDate", &textOf!LocalDate), ShowCase("LocalTime", &textOf!LocalTime),
+    ShowCase("LocalDateTime", &textOf!LocalDateTime), ShowCase("Instant", &textOf!Instant),
+    ShowCase("OffsetDateTime", &textOf!OffsetDateTime),
+    ShowCase("ZonedDateTime", &textOf!ZonedDateTime), ShowCase("Duration", &textOf!Duration),
+    ShowCase("ZoneOffset", &textOf!ZoneOffset), ShowCase("ZoneId", &textOf!ZoneId),
+    ShowCase("Event", &textOf!Event),
+];
 
 private string shown(Any value, string type)
 {
     if (value.isNull())
         return "null";
-    switch (type)
-    {
-    case "LocalDate":
-        return value.get!LocalDate().toString();
-    case "LocalTime":
-        return value.get!LocalTime().toString();
-    case "LocalDateTime":
-        return value.get!LocalDateTime().toString();
-    case "Instant":
-        return value.get!Instant().toString();
-    case "OffsetDateTime":
-        return value.get!OffsetDateTime().toString();
-    case "ZonedDateTime":
-        return value.get!ZonedDateTime().toString();
-    case "Duration":
-        return value.get!Duration().toString();
-    case "ZoneOffset":
-        return value.get!ZoneOffset().toString();
-    case "ZoneId":
-        return value.get!ZoneId().toString();
-    case "Event":
-        return value.get!Event().toString();
-    default:
-        return value.get!Formatted().toString();
-    }
+    foreach (ref c; showCases)
+        if (c.type == type)
+            return c.text(value);
+    return textOf!Formatted(value);
 }
 
 private string read(string type, string json)
 {
-    const fqn = type == "Event" ? descriptorOf!Event().name : type == "Formatted" ? descriptorOf!Formatted().name
-        : "flint.java.time." ~ type;
+    const fqn = type == "Event" ? descriptorOf!Event().name : type == "Formatted"
+        ? descriptorOf!Formatted().name : "flint.java.time." ~ type;
     try
         return shown(mapper("boot").readValue(json, fqn), type);
     catch (JacksonException e)

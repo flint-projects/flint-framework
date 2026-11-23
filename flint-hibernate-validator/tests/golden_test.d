@@ -6,12 +6,12 @@ module golden_test;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : DescriptorTable, descriptorOf;
 import flint.hibernate.validator : HibernateValidatorConfiguration;
-import flint.jakarta.validation : Constraint, ConstraintValidator, ConstraintValidatorContext, ConstraintViolation,
-    Valid, Validation, Validator;
+import flint.jakarta.validation : Constraint, ConstraintValidator, ConstraintValidatorContext,
+    ConstraintViolation, Valid, Validation, Validator;
 import flint.java.lang : classOf;
 import flint.jakarta.validation.constraints;
-import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime, ZoneOffset,
-    ZonedDateTime;
+import flint.java.time : Duration, Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime,
+    ZoneOffset, ZonedDateTime;
 import flint.java.util : ArrayList, List, Optional;
 import std.typecons : Nullable;
 
@@ -30,7 +30,7 @@ private final class Pet
 }
 
 /// spring-petclinic-rest's PetAgeValidation and PetAgeValidator.
-@Constraint(validatedBy: [classOf!PetAgeValidator])
+@Constraint(validatedBy : [classOf!PetAgeValidator])
 private struct PetAgeValidation
 {
     string message = "Birth date must not be in the future or older than 50 years";
@@ -38,7 +38,7 @@ private struct PetAgeValidation
 
 private final class PetAgeValidator : ConstraintValidator!(PetAgeValidation, LocalDate)
 {
-    void initialize(PetAgeValidation constraintAnnotation)
+    void initialize(PetAgeValidation)
     {
     }
 
@@ -48,8 +48,7 @@ private final class PetAgeValidator : ConstraintValidator!(PetAgeValidation, Loc
         if (birthDate.isAfter(today))
         {
             context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate("Birth date cannot be in the future")
-                .addConstraintViolation();
+            context.buildConstraintViolationWithTemplate("Birth date cannot be in the future").addConstraintViolation();
             return false;
         }
         if (birthDate.isBefore(today.minusYears(50)))
@@ -64,7 +63,7 @@ private final class PetAgeValidator : ConstraintValidator!(PetAgeValidation, Loc
 }
 
 /// A custom constraint that keeps its default violation and adds one with an attribute in its template.
-@Constraint(validatedBy: [classOf!EvenValidator])
+@Constraint(validatedBy : [classOf!EvenValidator])
 private struct Even
 {
     string message = "must be even, not ${validatedValue}";
@@ -157,7 +156,8 @@ private final class Owner
     @Size(min : 4) int[] scores = [1, 2, 3];
     @NotEmpty string[] aliases = [];
     @Size(max : 1) int[string] limits;
-    @Size(min : 1, max : 3) long[] okArray = [7];
+    @Size(min : 1, max:
+            3) long[] okArray = [7];
     @Valid Pet[] petArray;
     @Valid Optional!Pet maybePet;
     @Valid Pet[string] petsByName;
@@ -184,7 +184,6 @@ private final class Owner
 private string valueOf(Any value)
 {
     import flint.engine.aot.objects : objectToString;
-    import flint.serde.java_number : javaDoubleString;
 
     if (value.typeName().length == 0)
         return "null";
@@ -197,28 +196,39 @@ private string valueOf(Any value)
         return "null";
     if (auto o = value.asObject())
         return objectToString(o);
+    if (value.holds!(int[string])())
+        return mapText(value.get!(int[string])());
+    return scalarText(value);
+}
+
+// String.valueOf of a String, boolean, integral, java.time or floating-point value.
+private string scalarText(Any value)
+{
+    import flint.serde.java_number : javaDoubleString;
+
     if (value.holds!string())
         return value.get!string();
     if (value.holds!bool())
         return value.get!bool() ? "true" : "false";
     if (value.holds!long())
         return value.toString();
-    if (value.holds!(int[string])())
-    {
-        import std.algorithm.sorting : sort;
-        import std.conv : to;
-
-        auto map = value.get!(int[string])();
-        string text = "{";
-        foreach (k; map.keys.sort)
-            text ~= (text.length > 1 ? ", " : "") ~ k ~ "=" ~ map[k].to!string;
-        return text ~ "}";
-    }
-    static foreach (T; imported!"std.meta".AliasSeq!(Instant, LocalDate, LocalDateTime, LocalTime, OffsetDateTime,
-            ZonedDateTime))
+    static foreach (T; imported!"std.meta".AliasSeq!(Instant, LocalDate, LocalDateTime, LocalTime,
+            OffsetDateTime, ZonedDateTime))
         if (value.holds!T())
             return value.get!T().toString();
     return javaDoubleString(value.get!double());
+}
+
+// A HashMap's toString, keys sorted (the golden file sorts them too).
+private string mapText(const int[string] map)
+{
+    import std.algorithm.sorting : sort;
+    import std.conv : to;
+
+    string text = "{";
+    foreach (k; map.keys.sort)
+        text ~= (text.length > 1 ? ", " : "") ~ k ~ "=" ~ map[k].to!string;
+    return text ~ "}";
 }
 
 // Arrays.toString.

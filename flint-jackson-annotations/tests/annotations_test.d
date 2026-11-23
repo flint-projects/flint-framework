@@ -5,14 +5,17 @@ import flint.jackson.annotation;
 
 @safe:
 
-@JsonPropertyOrder(["id", "name"]) @JsonInclude(JsonInclude.Include.NON_NULL) @JsonIgnoreProperties(ignoreUnknown: true)
+@JsonPropertyOrder(["id", "name"]) @JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown : true)
 private struct Owner
 {
     @JsonProperty("owner_id") long id;
-    @JsonProperty(value: "name", access: JsonProperty.Access.READ_ONLY) string name;
+    @JsonProperty(value : "name", access:
+            JsonProperty.Access.READ_ONLY) string name;
     @JsonIgnore string password;
     @JsonAlias(["mail", "e-mail"]) string email;
-    @JsonFormat(shape: JsonFormat.Shape.STRING, pattern: "yyyy-MM-dd") string birthDate;
+    @JsonFormat(shape : JsonFormat.Shape.STRING, pattern:
+            "yyyy-MM-dd") string birthDate;
 }
 
 // The first UDA of type T on `symbol`: a value as written, or T.init for a bare type.
@@ -40,7 +43,8 @@ unittest
     static assert(JsonProperty.init.access == JsonProperty.Access.AUTO && !JsonProperty.init.required);
     static assert(JsonProperty.init.isRequired == OptBoolean.DEFAULT);
     static assert(JsonIgnore.init.value && JsonValue.init.value && JsonRawValue.init.value);
-    static assert(JsonInclude.init.value == JsonInclude.Include.ALWAYS && JsonInclude.init.content == JsonInclude.Include.ALWAYS);
+    static assert(JsonInclude.init.value == JsonInclude.Include.ALWAYS
+            && JsonInclude.init.content == JsonInclude.Include.ALWAYS);
     static assert(JsonFormat.init.shape == JsonFormat.Shape.ANY && JsonFormat.init.locale == "##default");
     static assert(JsonFormat.init.timezone == JsonFormat.DEFAULT_TIMEZONE && JsonFormat.init.radix == -1);
     static assert(JsonCreator.init.mode == JsonCreator.Mode.DEFAULT);
@@ -59,7 +63,8 @@ unittest
     static assert(first!(JsonIgnore, Owner.password).value);
     static assert(first!(JsonAlias, Owner.email).value == ["mail", "e-mail"]);
     enum format = first!(JsonFormat, Owner.birthDate);
-    static assert(format.shape == JsonFormat.Shape.STRING && format.pattern == "yyyy-MM-dd" && format.with_.length == 0);
+    static assert(format.shape == JsonFormat.Shape.STRING && format.pattern == "yyyy-MM-dd");
+    static assert(format.with_.length == 0);
 }
 
 @("type-level annotations")
