@@ -36,13 +36,21 @@ unittest
 }
 
 // ProblemDetailTests.equalsAndHashCodeWithDeserialization (gh-30294) round-trips a ProblemDetail through
-// Jackson's ObjectMapper. flint.http.converter.json writes ProblemDetail but does not read it yet, so the
-// case is kept here, compiled only when reading lands (version FlintProblemDetailRead).
+// Jackson's ObjectMapper. flint.http.converter.json writes ProblemDetail but does not read it yet, so the case
+// compiles once reading lands (version FlintProblemDetailRead).
 version (FlintProblemDetailRead)
 {
-    @("ProblemDetailTests.equalsAndHashCodeWithDeserialization")
+    @("ProblemDetailTests.equalsAndHashCodeWithDeserialization (gh-30294)")
     unittest
     {
-        static assert(false, "enable once flint.http.converter.json reads ProblemDetail");
+        import flint.jackson.databind : JsonMapper;
+
+        ProblemDetail originalDetail = ProblemDetail.forStatus(500);
+        auto mapper = JsonMapper.builder().findAndAddModules().build();
+        auto bytes = mapper.writeValueAsBytes(originalDetail);
+        ProblemDetail deserializedDetail = mapper.readValue!ProblemDetail(bytes);
+        assert(originalDetail == deserializedDetail);
+        assert(deserializedDetail == originalDetail);
+        assert(originalDetail.toHash() == deserializedDetail.toHash());
     }
 }
