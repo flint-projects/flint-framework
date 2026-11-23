@@ -399,6 +399,8 @@ final class MapperConfig
     /// The tree node factory.
     JsonNodeFactory nodeFactory;
 
+    // Introspected beans by type name. Copy-on-write: a published table is never changed, so every reactor thread
+    // reads it without a lock; a miss builds the description and publishes a larger copy under the monitor.
     private BeanDescription[string] beans;
 
     /// Whether `f` is enabled.
@@ -440,11 +442,11 @@ final class MapperConfig
     /// The introspected bean of `d`, collected once per configuration.
     BeanDescription bean(const Descriptor d)
     {
-        synchronized (this)
-        {
-            if (auto found = d.name in beans)
-                return *found;
-        }
+        // A single word read of a table published after a fence; the table it points to is immutable from then
+        // on, and reads through it depend on the loaded address (RCU-style publication).
+        auto published = beans;
+        if (auto found = d.name in published)
+            return *found;
         POJOPropertiesCollector collector;
         collector.sortAlphabetically = isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY);
         collector.sortCreatorPropertiesFirst = isEnabled(MapperFeature.SORT_CREATOR_PROPERTIES_FIRST);
@@ -454,7 +456,14 @@ final class MapperConfig
         auto collected = collector.collect(d);
         applyRealDefaults(collected);
         synchronized (this)
-            beans[d.name] = collected;
+        {
+            if (auto raced = d.name in beans)
+                return *raced;
+            auto grown = beans.dup;
+            grown[d.name] = collected;
+            imported!"core.atomic".atomicFence(); // the description and the table are complete before publication
+            beans = grown;
+        }
         return collected;
     }
 

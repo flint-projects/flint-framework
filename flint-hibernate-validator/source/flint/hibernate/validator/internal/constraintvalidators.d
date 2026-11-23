@@ -180,22 +180,31 @@ private ElValue attribute(ref const BuiltinConstraint c, string name) pure nothr
     return ElValue.init;
 }
 
-/// Compiled patterns, shared by a validator factory.
+/// Compiled patterns, shared by a validator factory and so by every reactor thread.
 final class PatternCache
 {
+    // Copy-on-write: a published table is never changed, so lookups take no lock; a miss compiles and publishes a
+    // larger copy under the monitor.
     private RuntimePattern[string] patterns;
 
     /// The compiled pattern for `regexp`, compiling it once.
     RuntimePattern get(string regexp)
     {
+        // A single word read of a table published after a fence (RCU-style publication).
+        auto published = patterns;
+        if (auto found = regexp in published)
+            return *found;
+        auto compiled = compileRuntimePattern(regexp);
         synchronized (this)
         {
-            if (auto found = regexp in patterns)
-                return *found;
-            auto compiled = compileRuntimePattern(regexp);
-            patterns[regexp] = compiled;
-            return compiled;
+            if (auto raced = regexp in patterns)
+                return *raced;
+            auto grown = patterns.dup;
+            grown[regexp] = compiled;
+            imported!"core.atomic".atomicFence(); // the pattern and the table are complete before publication
+            patterns = grown;
         }
+        return compiled;
     }
 }
 
