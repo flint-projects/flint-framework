@@ -1129,6 +1129,16 @@ private SqlValue toSqlValue(ref RequestArena arena, Any value, int index)
         return SqlValue(ValueKind.bytes, 0, 0, copy(arena, value.get!(immutable(ubyte)[])));
     if (name == "ubyte[]")
         return SqlValue(ValueKind.bytes, 0, 0, copy(arena, value.get!(ubyte[])));
+    // JDBC 4.2's java.time parameters: their ISO text, which both databases read into DATE, TIME and TIMESTAMP.
+    static foreach (pair; [
+            ["LocalDate", "date"], ["LocalTime", "time"], ["LocalDateTime", "timestamp"]
+        ])
+    {
+        if (value.holds!(__traits(getMember, imported!"flint.java.time", pair[0])))
+            return SqlValue(__traits(getMember, ValueKind, pair[1]), 0, 0, copy(arena,
+                    cast(const(ubyte)[]) value.get!(__traits(getMember,
+                    imported!"flint.java.time", pair[0])).toString()));
+    }
     if (auto object = value.asObject())
         return SqlValue(ValueKind.text, 0, 0, copy(arena, cast(const(ubyte)[]) objectToString(object)));
     throw new SQLFeatureNotSupportedException("Unsupported parameter " ~ decimal(index) ~ " of type " ~ name, "0A000");
@@ -1296,7 +1306,7 @@ final class FlintResultSet : ResultSet
             return decimal(c.integer);
         case ValueKind.float64:
             return floatText(c.floating);
-        case ValueKind.text:
+        case ValueKind.text, ValueKind.date, ValueKind.time, ValueKind.timestamp:
             return c.text;
         case ValueKind.bytes:
             return cast(string) c.bytes.idup;
@@ -1314,9 +1324,9 @@ final class FlintResultSet : ResultSet
             return c.integer != 0;
         case ValueKind.float64:
             return c.floating != 0;
-        case ValueKind.text:
-            return c.text == "1" || equalsIgnoreCase(c.text, "true")
-                || equalsIgnoreCase(c.text, "t") || equalsIgnoreCase(c.text, "yes") || equalsIgnoreCase(c.text, "y");
+        case ValueKind.text, ValueKind.date, ValueKind.time, ValueKind.timestamp:
+            return c.text == "1" || equalsIgnoreCase(c.text, "true") || equalsIgnoreCase(c.text,
+                    "t") || equalsIgnoreCase(c.text, "yes") || equalsIgnoreCase(c.text, "y");
         case ValueKind.bytes:
             throw new SQLException("Cannot convert bytes to boolean", "22018");
         }
@@ -1348,7 +1358,7 @@ final class FlintResultSet : ResultSet
             return c.integer;
         case ValueKind.float64:
             return cast(long) c.floating;
-        case ValueKind.text:
+        case ValueKind.text, ValueKind.date, ValueKind.time, ValueKind.timestamp:
             return parseLong(c.text);
         case ValueKind.bytes:
             throw new SQLException("Cannot convert bytes to a number", "22018");
@@ -1371,7 +1381,7 @@ final class FlintResultSet : ResultSet
             return cast(double) c.integer;
         case ValueKind.float64:
             return c.floating;
-        case ValueKind.text:
+        case ValueKind.text, ValueKind.date, ValueKind.time, ValueKind.timestamp:
             return parseDouble(c.text);
         case ValueKind.bytes:
             throw new SQLException("Cannot convert bytes to a number", "22018");
@@ -1403,7 +1413,7 @@ final class FlintResultSet : ResultSet
             return Any.of(c.integer);
         case ValueKind.float64:
             return Any.of(c.floating);
-        case ValueKind.text:
+        case ValueKind.text, ValueKind.date, ValueKind.time, ValueKind.timestamp:
             return Any.of(c.text);
         case ValueKind.bytes:
             return Any.of(c.bytes.idup);
@@ -1539,7 +1549,7 @@ final class FlintResultSet : ResultSet
                 return Types.BIGINT;
             case ValueKind.float64:
                 return Types.DOUBLE;
-            case ValueKind.text:
+            case ValueKind.text, ValueKind.date, ValueKind.time, ValueKind.timestamp:
                 return Types.VARCHAR;
             case ValueKind.bytes:
                 return Types.VARBINARY;

@@ -415,11 +415,11 @@ int flint_sql_operation_bind(flint_sql_operation *operation, size_t index, int k
                               int64_t integer, double floating, const void *data, size_t length)
 {
     if (!operation || index >= operation->parameter_count ||
-        kind < FLINT_SQL_NULL || kind > FLINT_SQL_BYTES || length > INT_MAX ||
+        kind < FLINT_SQL_NULL || kind > FLINT_SQL_TIMESTAMP || length > INT_MAX ||
         (length && !data) || (kind < FLINT_SQL_TEXT && length) ||
         (kind == FLINT_SQL_BOOL && integer != 0 && integer != 1) ||
         (kind == FLINT_SQL_FLOAT && !isfinite(floating)) ||
-        (kind == FLINT_SQL_TEXT && !flint_sql_utf8(data, length)))
+        ((kind == FLINT_SQL_TEXT || kind >= FLINT_SQL_DATE) && !flint_sql_utf8(data, length)))
         return FLINT_SQL_INVALID;
     flint_sql_parameter *parameter = &operation->params[index];
     if (parameter->data)

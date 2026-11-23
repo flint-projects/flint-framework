@@ -240,7 +240,7 @@ static int bind_parameter(sqlite3_stmt *statement, int index, const flint_sql_pa
         return sqlite3_bind_int64(statement, index, cell->integer);
     case FLINT_SQL_FLOAT:
         return sqlite3_bind_double(statement, index, cell->floating);
-    case FLINT_SQL_TEXT:
+    case FLINT_SQL_TEXT: case FLINT_SQL_DATE: case FLINT_SQL_TIME: case FLINT_SQL_TIMESTAMP:
         return sqlite3_bind_text64(statement, index, parameter->data, cell->length, SQLITE_STATIC, SQLITE_UTF8);
     case FLINT_SQL_BYTES:
         return sqlite3_bind_blob64(statement, index, parameter->data, cell->length, SQLITE_STATIC);

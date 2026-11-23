@@ -27,7 +27,8 @@ enum { PG_UNSENT, PG_EVICTING, PG_PREPARING, PG_QUERY };
 enum {
     OID_BOOL = 16, OID_BYTEA = 17, OID_NAME = 19, OID_INT8 = 20,
     OID_INT2 = 21, OID_INT4 = 23, OID_TEXT = 25, OID_FLOAT4 = 700,
-    OID_FLOAT8 = 701, OID_BPCHAR = 1042, OID_VARCHAR = 1043
+    OID_FLOAT8 = 701, OID_BPCHAR = 1042, OID_VARCHAR = 1043, OID_DATE = 1082, OID_TIME = 1083,
+    OID_TIMESTAMP = 1114
 };
 
 typedef struct {
@@ -268,7 +269,8 @@ static void network_store(unsigned char *bytes, uint64_t value)
 
 static Oid parameter_type(int kind)
 {
-    static const Oid types[] = {0, OID_BOOL, OID_INT8, OID_FLOAT8, OID_TEXT, OID_BYTEA};
+    static const Oid types[] = {0, OID_BOOL, OID_INT8, OID_FLOAT8, OID_TEXT, OID_BYTEA, OID_DATE, OID_TIME,
+                                OID_TIMESTAMP};
     return types[kind];
 }
 
@@ -374,6 +376,12 @@ static void write_parameter(wire_parameter *output, const flint_sql_parameter *i
         output->length = 8;
         break;
     }
+    case FLINT_SQL_DATE: case FLINT_SQL_TIME: case FLINT_SQL_TIMESTAMP:
+        /* Text format: the binary forms are day and microsecond counts, not ISO-8601 text. */
+        output->format = 0;
+        output->value = input->data;
+        output->length = (int)cell->length;
+        break;
     default:
         output->value = input->data;
         output->length = (int)cell->length;
@@ -753,6 +761,74 @@ static int decode_float(flint_sql_cell *cell, Oid type, const void *data, size_t
     return FLINT_SQL_OK;
 }
 
+/* The proleptic Gregorian date of a day count from 1970-01-01 (H. Hinnant's civil_from_days). */
+static void civil_from_days(int64_t z, int64_t *year, unsigned *month, unsigned *day)
+{
+    z += 719468;
+    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    const unsigned doe = (unsigned)(z - era * 146097);
+    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    const unsigned mp = (5 * doy + 2) / 153;
+    *day = doy - (153 * mp + 2) / 5 + 1;
+    *month = mp < 10 ? mp + 3 : mp - 9;
+    *year = (int64_t)yoe + era * 400 + (*month <= 2);
+}
+
+/* PostgreSQL's epoch, 2000-01-01, in days from 1970-01-01. */
+enum { PG_EPOCH_DAYS = 10957 };
+static const int64_t MICROS_PER_DAY = INT64_C(86400000000);
+
+/*
+ * Binary date, time and timestamp cells as ISO-8601 text, as java.time parses them. The text lives in a
+ * thread-local buffer: every cell read copies its bytes out under the gate before the next read.
+ */
+static int decode_temporal(flint_sql_cell *cell, Oid type, const void *bytes, size_t length, const void **data)
+{
+    static _Thread_local char text[48];
+    int64_t year;
+    unsigned month, day;
+    int written;
+    if (type == OID_DATE && length == 4) {
+        const int32_t days = (int32_t)(uint32_t)network_load(bytes, length);
+        if (days == INT32_MAX || days == INT32_MIN)
+            return FLINT_SQL_UNSUPPORTED; /* infinity */
+        civil_from_days((int64_t)days + PG_EPOCH_DAYS, &year, &month, &day);
+        if (year < 0 || year > 9999)
+            return FLINT_SQL_UNSUPPORTED;
+        written = snprintf(text, sizeof(text), "%04lld-%02u-%02u", (long long)year, month, day);
+    } else if ((type == OID_TIME || type == OID_TIMESTAMP) && length == 8) {
+        int64_t micros = (int64_t)network_load(bytes, length);
+        if (micros == INT64_MAX || micros == INT64_MIN)
+            return FLINT_SQL_UNSUPPORTED; /* infinity */
+        int64_t days = micros / MICROS_PER_DAY;
+        micros %= MICROS_PER_DAY;
+        if (micros < 0) {
+            micros += MICROS_PER_DAY;
+            days -= 1;
+        }
+        const unsigned seconds = (unsigned)(micros / 1000000);
+        const unsigned fraction = (unsigned)(micros % 1000000);
+        int offset = 0;
+        if (type == OID_TIMESTAMP) {
+            civil_from_days(days + PG_EPOCH_DAYS, &year, &month, &day);
+            if (year < 0 || year > 9999)
+                return FLINT_SQL_UNSUPPORTED;
+            offset = snprintf(text, sizeof(text), "%04lld-%02u-%02uT", (long long)year, month, day);
+        }
+        written = offset + snprintf(text + offset, sizeof(text) - (size_t)offset, "%02u:%02u:%02u",
+                                    seconds / 3600, seconds / 60 % 60, seconds % 60);
+        if (fraction)
+            written += snprintf(text + written, sizeof(text) - (size_t)written, ".%06u", fraction);
+    } else
+        return FLINT_SQL_IO;
+    if (written <= 0 || (size_t)written >= sizeof(text))
+        return FLINT_SQL_IO;
+    *data = text;
+    *cell = (flint_sql_cell){.kind = FLINT_SQL_TEXT, .length = (size_t)written};
+    return FLINT_SQL_OK;
+}
+
 int flint_pg_cell(const flint_sql_operation *operation, uint32_t index, flint_sql_cell *cell,
                   const void **data)
 {
@@ -787,6 +863,8 @@ int flint_pg_cell(const flint_sql_operation *operation, uint32_t index, flint_sq
         *data = bytes;
         *cell = (flint_sql_cell){.kind = FLINT_SQL_BYTES, .length = length};
         return FLINT_SQL_OK;
+    case OID_DATE: case OID_TIME: case OID_TIMESTAMP:
+        return decode_temporal(cell, type, bytes, length, data);
     default:
         return FLINT_SQL_UNSUPPORTED;
     }

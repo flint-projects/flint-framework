@@ -642,6 +642,15 @@ interface ResultSet : Wrapper, AutoCloseable
             if (value.isNull)
                 return T.init;
         }
+        else static if (is(T == struct) && __traits(compiles, T.parse("")))
+        {
+            // Java's java.time types: a null column is T.init (Java's null), and the driver's ISO text is parsed,
+            // as JDBC 4.2 drivers convert DATE, TIME and TIMESTAMP columns.
+            if (value.isNull)
+                return T.init;
+            if (!value.holds!T && value.holds!string)
+                return T.parse(value.get!string);
+        }
         return value.get!T;
     }
 

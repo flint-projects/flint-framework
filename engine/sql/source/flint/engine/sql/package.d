@@ -35,7 +35,12 @@ enum ValueKind : ubyte
     int64,
     float64,
     text,
-    bytes
+    bytes,
+    /// Parameters only: ISO-8601 text that PostgreSQL types as `date`, `time` or `timestamp` (JDBC 4.2's
+    /// `java.time` parameters); SQLite stores it as text.
+    date,
+    time, /// ditto
+    timestamp /// ditto
 }
 
 /// A value containing scalars or a byte handle in the operation's request arena.
@@ -272,7 +277,8 @@ private Status bind(ref scope Operation work, scope Parameters params, ref scope
     {
         const value = Cell(cast(int) parameter.kind, parameter.integer, parameter.floating);
         Status status;
-        if (parameter.kind == ValueKind.text || parameter.kind == ValueKind.bytes)
+        // Text, bytes and the temporal kinds carry their bytes in the arena.
+        if (parameter.kind >= ValueKind.text)
         {
             const borrowed = arena.read(parameter.bytes, (scope const(ubyte)[] bytes) @safe nothrow @nogc {
                 status = work.bind(index, value, bytes);

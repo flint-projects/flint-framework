@@ -247,6 +247,27 @@ private void exercise(Connection connection, string table)
     assert(nullable == [false, false, true, true]);
     assert(!metaData.getTables(null, null, "no_such_table", null).next());
 
+    // java.time values: a LocalDate binds as ISO text into a DATE column and reads back through getObject!LocalDate.
+    {
+        import flint.java.time : LocalDate, LocalDateTime, LocalTime;
+
+        statement.execute("DROP TABLE IF EXISTS " ~ table ~ "_dates");
+        statement.execute("CREATE TABLE " ~ table ~ "_dates (id INTEGER, born DATE, seen TIMESTAMP, at TIME)");
+        auto insertDate = connection.prepareStatement(
+                "INSERT INTO " ~ table ~ "_dates (id, born, seen, at) VALUES (?, ?, ?, ?)");
+        insertDate.setInt(1, 1);
+        insertDate.setObject(2, Any.of(LocalDate.of(2010, 9, 7)));
+        insertDate.setObject(3, Any.of(LocalDateTime.of(1999, 12, 31, 23, 59, 30, 250_000_000)));
+        insertDate.setObject(4, Any.of(LocalTime.of(8, 5, 0)));
+        assert(insertDate.executeUpdate() == 1);
+        auto born = statement.executeQuery("SELECT born, seen, at FROM " ~ table ~ "_dates WHERE born > '2010-01-01'");
+        assert(born.next() && born.getObject!LocalDate(1) == LocalDate.of(2010, 9, 7));
+        assert(born.getObject!LocalDateTime(2) == LocalDateTime.of(1999, 12, 31, 23, 59, 30,
+                250_000_000), born.getString(2));
+        assert(born.getObject!LocalTime(3) == LocalTime.of(8, 5, 0), born.getString(3));
+        statement.execute("DROP TABLE " ~ table ~ "_dates");
+    }
+
     statement.execute("DROP TABLE " ~ table);
     statement.close();
     try

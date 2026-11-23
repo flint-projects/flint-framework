@@ -9,7 +9,9 @@
 #define FLINT_SQL_ERROR 4u
 
 enum flint_sql_value_kind {
-    FLINT_SQL_NULL, FLINT_SQL_BOOL, FLINT_SQL_INT, FLINT_SQL_FLOAT, FLINT_SQL_TEXT, FLINT_SQL_BYTES
+    FLINT_SQL_NULL, FLINT_SQL_BOOL, FLINT_SQL_INT, FLINT_SQL_FLOAT, FLINT_SQL_TEXT, FLINT_SQL_BYTES,
+    /* Parameters only: ISO-8601 text that PostgreSQL types as date, time or timestamp. */
+    FLINT_SQL_DATE, FLINT_SQL_TIME, FLINT_SQL_TIMESTAMP
 };
 
 typedef struct {
