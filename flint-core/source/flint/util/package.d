@@ -311,8 +311,7 @@ private string hexString(uint value) pure nothrow
 /// notation for magnitudes in [1e-3, 1e7) and computerized scientific notation otherwise.
 private string javaFloatingText(double value, bool single)
 {
-    import std.conv : to;
-    import std.format : format;
+    import flint.engine.aot.text : scientific, tryParseDouble, tryParseFloat;
 
     if (value != value)
         return "NaN";
@@ -325,8 +324,8 @@ private string javaFloatingText(double value, bool single)
     string text;
     foreach (precision; 0 .. single ? 9 : 17)
     {
-        text = format("%.*e", precision, value);
-        if (single ? text.to!float == cast(float) value : text.to!double == value)
+        text = scientific(value, precision);
+        if (single ? tryParseFloat(text).value == cast(float) value : tryParseDouble(text).value == value)
             break;
     }
     return javaFloatingLayout(text);
@@ -335,13 +334,13 @@ private string javaFloatingText(double value, bool single)
 /// Lay out `d.ddde+XX` as Java's `Double.toString` does.
 private string javaFloatingLayout(string scientific)
 {
-    import std.conv : to;
+    import flint.engine.aot.text : decimal, tryParseInt;
 
     const negative = scientific[0] == '-';
     const 
     body = negative ? scientific[1 .. $] : scientific;
     const e = indexOfChar(body, 'e');
-    const exponent = body[e + 1 .. $].to!int;
+    const exponent = cast(int) tryParseInt(body[e + 1 .. $]).value;
     string digits;
     foreach (c; body[0 .. e])
         if (c != '.')
@@ -349,7 +348,8 @@ private string javaFloatingLayout(string scientific)
     while (digits.length > 1 && digits[$ - 1] == '0')
         digits = digits[0 .. $ - 1];
     return (negative ? "-" : "") ~ (exponent >= -3 && exponent < 7 ? plainLayout(digits,
-            exponent) : digits[0 .. 1] ~ "." ~ (digits.length > 1 ? digits[1 .. $] : "0") ~ "E" ~ exponent.to!string);
+            exponent) : digits[0 .. 1] ~ "." ~ (digits.length > 1 ? digits[1 .. $] : "0") ~ "E" ~ decimal(
+            cast(long) exponent));
 }
 
 /// `digits` with the decimal point after `exponent + 1` digits.
@@ -1734,11 +1734,11 @@ abstract class ObjectUtils
     static bool containsConstant(E)(E[] enumValues, string constant, bool caseSensitive)
             if (is(E == enum))
     {
-        import std.conv : to;
+        import flint.engine.aot.text : enumName;
 
         foreach (candidate; enumValues)
         {
-            const name = candidate.to!string;
+            const name = enumName(candidate);
             if (caseSensitive ? name == constant : equalsIgnoreCase(name, constant))
                 return true;
         }
@@ -1748,10 +1748,10 @@ abstract class ObjectUtils
     /// The constant of `enumValues` named `constant`, ignoring case. Throws `IllegalArgumentException` when none.
     static E caseInsensitiveValueOf(E)(E[] enumValues, string constant) if (is(E == enum))
     {
-        import std.conv : to;
+        import flint.engine.aot.text : enumName;
 
         foreach (candidate; enumValues)
-            if (equalsIgnoreCase(candidate.to!string, constant))
+            if (equalsIgnoreCase(enumName(candidate), constant))
                 return candidate;
         throw new IllegalArgumentException(
                 "Constant [" ~ constant ~ "] does not exist in enum type " ~ __traits(fullyQualifiedName, E));
@@ -1994,14 +1994,14 @@ abstract class ObjectUtils
 
     private static string scalarText(T)(T value)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : enumName;
 
         static if (is(T == float))
             return javaFloatingText(value, true);
         else static if (is(T == double) || is(T == real))
             return javaFloatingText(value, false);
         else static if (is(T == enum))
-            return value.to!string;
+            return enumName(value);
         else
             return valueOf(value);
     }
@@ -2985,13 +2985,13 @@ abstract class NumberUtils
     /// Java's `Byte.valueOf`/`Short.valueOf` and `Byte.decode`/`Short.decode`.
     private static long parseSmall(string trimmed, long min, long max)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
         if (isHexNumber(trimmed))
         {
             const value = decode(trimmed, int.min, int.max);
             if (value < min || value > max)
-                throw new NumberFormatException("Value " ~ value.to!string ~ " out of range from input " ~ trimmed);
+                throw new NumberFormatException("Value " ~ decimal(value) ~ " out of range from input " ~ trimmed);
             return value;
         }
         const value = parseJava(trimmed, 10, int.min, int.max);
@@ -3041,9 +3041,10 @@ abstract class NumberUtils
     /// Java's `Integer.parseInt`/`Long.parseLong` within `[min, max]`.
     private static long parseJava(string s, int radix, long min, long max)
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        const failure = "For input string: \"" ~ s ~ "\"" ~ (radix == 10 ? "" : " under radix " ~ radix.to!string);
+        const failure = "For input string: \"" ~ s ~ "\"" ~ (radix == 10 ? "" : " under radix " ~ decimal(
+                cast(long) radix));
         if (s.length == 0)
             throw new NumberFormatException(failure);
         size_t i;
@@ -3079,7 +3080,7 @@ abstract class NumberUtils
     /// Java's `Float.valueOf`/`Double.valueOf`.
     private static T parseFloating(T)(string s)
     {
-        import std.conv : ConvException, to;
+        import flint.engine.aot.text : tryParseDouble, tryParseFloat;
 
         if (s.length == 0)
             throw new NumberFormatException("empty String");
@@ -3092,12 +3093,13 @@ abstract class NumberUtils
         const unsigned = hasPrefix(body, "-") || hasPrefix(body, "+") ? body[1 .. $] : body;
         if (!isJavaFloatingSyntax(unsigned))
             throw NumberFormatException.forInputString(s);
-        T result;
-        try
-            result = body.to!T;
-        catch (ConvException)
+        static if (is(T == float))
+            const parsed = tryParseFloat(body);
+        else
+            const parsed = tryParseDouble(body);
+        if (!parsed.ok)
             throw NumberFormatException.forInputString(s);
-        return result;
+        return parsed.value;
     }
 
     /// Java's `NaN` and `Infinity`, with an optional sign and no type suffix.
@@ -3784,10 +3786,10 @@ private struct RegexParser
 
     void unsupported()
     {
-        import std.conv : to;
+        import flint.engine.aot.text : decimal;
 
-        throw new IllegalArgumentException(
-                "Unsupported regular expression syntax at index " ~ pos.to!string ~ " of \"" ~ text ~ "\"");
+        throw new IllegalArgumentException("Unsupported regular expression syntax at index " ~ decimal(
+                cast(ulong) pos) ~ " of \"" ~ text ~ "\"");
     }
 
     RegexNode[][] parseAlternatives()

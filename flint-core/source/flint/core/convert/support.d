@@ -406,15 +406,13 @@ private Any parseNumber(string text, string target)
 /// Parse an unsigned D integer (Java has none): `NumberUtils.parseNumber!long`, range-checked.
 private T parseUnsigned(T)(string text)
 {
-    import std.conv : ConvException, to;
+    import flint.engine.aot.text : tryParseULong;
 
     static if (is(T == ulong))
     {
-        try
-            return text.to!ulong;
-        catch (ConvException)
-        {
-        }
+        const parsed = tryParseULong(text);
+        if (parsed.ok)
+            return parsed.value;
     }
     const value = NumberUtils.parseNumber!long(text);
     if (value < 0 || cast(ulong) value > T.max)
