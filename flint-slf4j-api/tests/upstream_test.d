@@ -369,7 +369,7 @@ unittest
 @("MDCAdapterTestBase: a child thread neither sees nor changes the parent's MDC (Logback semantics)")
 @system unittest
 {
-    import core.thread : Thread;
+    import core.thread.osthread : Thread; // DMD on Windows resolves Thread only from its declaring module (ADR-026)
 
     auto mdc = new FiberMDCAdapter();
     scope (exit)
