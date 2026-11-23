@@ -424,3 +424,15 @@ unittest
     assert(new UncheckedIOException(io).getCause() is io);
     assert(cast(IOException) new FileNotFoundException("x") !is null);
 }
+
+unittest
+{
+    // Map!(string, Any): Spring's Map<String, Object> (model maps, error attributes) is @safe.
+    import flint.engine.aot.any : Any;
+
+    Map!(string, Any) model = new LinkedHashMap!(string, Any)();
+    model.put("status", Any.of(404));
+    model.put("error", Any.of("Not Found"));
+    assert(model.get("status").get!int == 404 && model.containsValue(Any.of("Not Found")));
+    assert(model.equals(cast(Object) new LinkedHashMap!(string, Any)(model)));
+}

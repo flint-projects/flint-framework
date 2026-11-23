@@ -113,6 +113,8 @@ final class Descriptor
     Any function() @safe create;
     /// For enums, in declaration order.
     string[] enumConstants;
+    /// Runtime extension: for integral enums, the value of each of `enumConstants`, for `Any.ofEnum`.
+    long[] enumValues;
     /// Runtime extension: the element type of an array, `Optional!T`, `List!T` or `Set!T`; a map's value type.
     string elementType;
     /// Runtime extension: the key type of a map.
@@ -223,8 +225,15 @@ Descriptor descriptorOf(T)()
     }
     static if (is(U == enum))
     {
+        // Resolved once, outside the loop: an `is(U B == enum)` per member would declare `B` once per member.
+        static if (is(U B == enum))
+            enum integral = __traits(isIntegral, B);
         static foreach (member; __traits(allMembers, U))
+        {
             d.enumConstants ~= member;
+            static if (integral)
+                d.enumValues ~= cast(long) __traits(getMember, U, member);
+        }
     }
     else static if (is(U == E[], E) && !is(U : const(char)[]))
         d.elementType = typeNameOf!E;

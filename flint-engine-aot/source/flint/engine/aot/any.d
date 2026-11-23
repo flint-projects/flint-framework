@@ -208,6 +208,31 @@ struct Any
         return result;
     }
 
+    /++
+    An integral enum value known only by its type's canonical name, as an erased converter builds one from
+    `Descriptor.enumValues`; `get!E` succeeds for that enum.
+    +/
+    static Any ofEnum(string typeName, long value) pure nothrow @nogc
+    {
+        Any result;
+        result.typeName_ = typeName;
+        result.long_ = value;
+        result.slot_ = Slot.enumeration;
+        return result;
+    }
+
+    /// The bits of an integral enum value (with `typeName`, the erased form `ofEnum` takes); 0 otherwise.
+    long enumBits() const pure nothrow @nogc
+    {
+        return slot_ == Slot.enumeration ? long_ : 0;
+    }
+
+    /// Whether this holds an integral enum value.
+    bool isEnum() const pure nothrow @nogc
+    {
+        return slot_ == Slot.enumeration;
+    }
+
     /// Whether this is `Any.init`, a null class reference or a null array.
     bool isNull() const pure nothrow @nogc
     {
@@ -356,6 +381,41 @@ struct Any
     inout(Box!T) box(T)() inout pure nothrow @nogc
     {
         return slot_ == Slot.box ? cast(inout(Box!T)) object_ : null;
+    }
+
+    /++
+    Equal type names and equal values: bits for scalars, contents for strings, identity for references and boxes
+    (which keeps `==` `@safe`; compare references by value with `flint.engine.aot.objects.objectEquals`).
+    +/
+    bool opEquals(const Any other) const pure nothrow @nogc
+    {
+        if (slot_ != other.slot_ || typeName_ != other.typeName_)
+            return false;
+        final switch (slot_)
+        {
+        case Slot.empty:
+            return true;
+        case Slot.text:
+            return string_ == other.string_;
+        case Slot.reference, Slot.box:
+            return object_ is other.object_;
+        case Slot.floating:
+            return double_ == other.double_;
+        case Slot.integral, Slot.unsigned, Slot.boolean, Slot.character, Slot.enumeration:
+            return long_ == other.long_;
+        }
+    }
+
+    /// A hash consistent with `opEquals`.
+    size_t toHash() const nothrow @safe
+    {
+        if (slot_ == Slot.text)
+            return hashOf(string_);
+        if (slot_ == Slot.floating)
+            return hashOf(double_);
+        if (slot_ == Slot.reference || slot_ == Slot.box)
+            return hashOf(typeName_);
+        return hashOf(long_) ^ hashOf(typeName_);
     }
 
     /// A short rendering for diagnostics: the value of scalars and strings, the type name otherwise.

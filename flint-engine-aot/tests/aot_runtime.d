@@ -176,6 +176,9 @@ unittest
     buffer[0] = 'z';
     assert(copied.get!string == "ab");
     assert(Any.of(Colour.blue).get!Colour == Colour.blue);
+    assert(descriptorOf!Colour.enumValues == [1, 2]);
+    assert(Any.ofEnum(typeNameOf!Colour, 2).get!Colour == Colour.blue && Any.of(Colour.red).enumBits == 1);
+    assert(Any.of(Colour.red).isEnum && !Any.of(1).isEnum);
     assert(Any.of(Shade.light).get!Shade == Shade.light);
     assert(Any.of(300).holds!int && !Any.of(300).holds!ubyte);
     assert(Any.of(-1).holds!long && !Any.of(-1).holds!ulong);
@@ -508,4 +511,14 @@ unittest
         ran = i.arguments[0].get!string;
     });
     assert(ran == "x");
+}
+
+unittest
+{
+    // Arrays of Any box @safe (web-mvc's error attributes): Box!(Any[]) hashes through Any.toHash.
+    Any[] none;
+    assert(Any.of(none).isNull && Any.of(none).holds!(Any[]));
+    auto values = Any.of([Any.of(1), Any.of("two")]);
+    assert(values.get!(Any[])[1].get!string == "two");
+    assert(Any.of(1) == Any.of(1) && Any.of(1) != Any.of(2) && Any.of("a").toHash == Any.of("a").toHash);
 }

@@ -1,6 +1,6 @@
 # Flint AOT runtime
 
-`flint:engine-aot` is the runtime half of the Flint AOT contract
+`flint:engine-aot` (`framework/engine-aot`, a Spring-layer module of `policy/framework.json` whose `sys` directory is the audited `unsafe` root) is the runtime half of the Flint AOT contract
 ([docs/spring/aot-contract.md](../../docs/spring/aot-contract.md), contract 1). Generated modules and the
 framework packages (`flint:beans`, `flint:context`, web-mvc, data) meet here. Every module is a leaf; there is no
 `package.d`.
