@@ -86,12 +86,12 @@ private struct Fixture
     Server server;
     ushort port;
 
-    void open()
+    void open(uint maxConnections = 16)
     {
         ServerOptions options;
         options.port = 0;
         options.cores = 1;
-        options.maxConnectionsPerCore = 16;
+        options.maxConnectionsPerCore = maxConnections;
         options.http2 = false;
         const started = server.start(options);
         assert(started.code == Status.ok, started.message);
@@ -317,6 +317,59 @@ unittest
     assert(!contains(head, "Content-Type"), head);
     assert(readResponse(socket, pending, head) == "ok");
     assert(head[0 .. 15] == "HTTP/1.1 200 OK");
+}
+
+/// A keep-alive `POST /echo` carrying `text`.
+private string echoRequest(string text)
+{
+    import std.conv : to;
+
+    return "POST /echo HTTP/1.1\r\nHost: localhost\r\nContent-Length: " ~ text.length.to!string ~ "\r\n\r\n" ~ text;
+}
+
+@("HTTP/1 connections past the first 64 slots stay GC roots: 100 held connections survive a collection")
+unittest
+{
+    import core.memory : GC;
+    import std.conv : to;
+
+    // The slots become GC roots in chunks of 64, then 128, as the worker reaches them; connections 64 to 99 live in
+    // the second chunk. Each keeps references (its owner, handler delegate and request state) only the slot holds.
+    enum held = 100;
+    Fixture fixture;
+    fixture.open(256);
+    scope (exit)
+        fixture.close();
+    Socket[held] sockets;
+    char[][held] pending;
+    scope (exit)
+        foreach (socket; sockets)
+            if (socket !is null)
+                socket.close();
+    foreach (index, ref socket; sockets)
+    {
+        socket = fixture.connect();
+        const text = "first " ~ index.to!string;
+        sendAll(socket, echoRequest(text));
+        string head;
+        assert(readResponse(socket, pending[index], head) == text, head);
+    }
+
+    // Collect while every connection is held, then reuse the freed memory, so a slot the GC did not scan would
+    // leave its references pointing at recycled blocks.
+    GC.collect();
+    foreach (_; 0 .. 20_000)
+        cast(void) new ubyte[64];
+    GC.collect();
+
+    foreach (index, socket; sockets)
+    {
+        const text = "second " ~ index.to!string;
+        sendAll(socket, echoRequest(text));
+        string head;
+        assert(readResponse(socket, pending[index], head) == text, head);
+        assert(head[0 .. 15] == "HTTP/1.1 200 OK", head);
+    }
 }
 
 @("HTTP/1 serves an ordinary route normally when the client offers a protocol upgrade")

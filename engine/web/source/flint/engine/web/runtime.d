@@ -17,8 +17,8 @@ import flint.engine.web.http1 : BodyLimit, Http1Reader, ReadOutcome;
 import flint.engine.web.router : Match, RouteTable, maximumTargetBytes;
 import flint.engine.web.stream : StreamEndpoint, StreamField, StreamMode, StreamRoute, StreamToken;
 import flint.engine.web.sys.fiber : invokeFiber;
-import flint.engine.web.sys.ownership : launchDriver, releaseBytes, releaseConnectionSlots,
-    reserveConnectionSlots, reserveH1;
+import flint.engine.web.sys.ownership : launchDriver, nextRootedSlots, releaseBytes,
+    releaseConnectionSlots, reserveConnectionSlots, reserveH1, rootConnectionSlots;
 import flint.engine.web.transport : TlsTransport, awaitStream, closePlain, readPlain, tlsFactory,
     wakeStream, writePlain;
 import flint.engine.web.types : ErrorAdvice, Handler, Method, Request, RequestContext, Response,
@@ -427,6 +427,9 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
     private Http2Endpoint http2;
     private TlsTransport tls;
     private Connection[] connections;
+    /// Per worker, how many of its connection slots are GC roots (`rootConnectionSlots`). Only the owner loop
+    /// raises its entry; `release` reads them after every loop has stopped.
+    private size_t[] rootedSlots;
     private WorkerLifecycle[] workers;
     private CancelSource root;
     private Context serverContext;
@@ -482,6 +485,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         if (!limits.http2PriorKnowledge)
         {
             connections = reserveConnectionSlots!Connection(cast(size_t) limits.cores * limits.maxConnectionsPerCore);
+            rootedSlots = new size_t[limits.cores];
             if (connections is null)
             {
                 release();
@@ -660,7 +664,7 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
             if (connection.phase != ConnectionPhase.free)
                 retire(&connection);
         }
-        releaseConnectionSlots(connections);
+        releaseConnectionSlots(connections, limits.maxConnectionsPerCore, rootedSlots);
         if (http2 !is null)
             http2.release();
         if (tls !is null)
@@ -686,6 +690,21 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
         return connection !is null && connection.id == id && connection.phase == expected ? connection : null;
     }
 
+    /// Make `id`'s slot, and the chunk around it, a GC root before its first write, on the owner loop.
+    private bool rootSlot(ConnectionId id) nothrow @nogc
+    {
+        auto rooted = &rootedSlots[id.ownerCore];
+        const base = cast(size_t) id.ownerCore * limits.maxConnectionsPerCore;
+        while (id.slot >= *rooted)
+        {
+            const next = nextRootedSlots(*rooted, limits.maxConnectionsPerCore);
+            if (!rootConnectionSlots(connections, base + *rooted, base + next))
+                return false;
+            *rooted = next;
+        }
+        return true;
+    }
+
     private void accepted(ConnectionId id) nothrow @nogc
     {
         auto connection = slot(id);
@@ -695,6 +714,11 @@ private final class RuntimeDriver() : StreamEndpoint, FiberEndpoint
             return;
         }
         static assert(ConnectionPhase.free == 0 && Connection.init.owner is null);
+        if (!rootSlot(id))
+        {
+            closePlain(tls, id);
+            return;
+        }
         if (connection.owner is null)
         {
             emplace(connection);
