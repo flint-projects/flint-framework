@@ -1,0 +1,8 @@
+name "probe-jackson-annotations"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-jackson-annotations"
+dflags "-preview=dip1000"
+dependency "flint:jackson-annotations" path="../../.."

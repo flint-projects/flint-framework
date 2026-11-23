@@ -1,0 +1,8 @@
+name "probe-engine-aot"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-engine-aot"
+dflags "-preview=dip1000"
+dependency "flint:engine-aot" path="../../.."

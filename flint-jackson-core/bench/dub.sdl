@@ -1,0 +1,8 @@
+name "probe-jackson-core"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-jackson-core"
+dflags "-preview=dip1000"
+dependency "flint:jackson-core" path="../../.."

@@ -1,0 +1,7 @@
+name "probe-engine-aot-baseline"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-engine-aot-baseline"
+dflags "-preview=dip1000"

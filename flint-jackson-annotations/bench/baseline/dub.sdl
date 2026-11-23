@@ -1,0 +1,7 @@
+name "probe-jackson-annotations-baseline"
+targetType "executable"
+sourcePaths "source"
+importPaths "source"
+targetPath "build"
+targetName "probe-jackson-annotations-baseline"
+dflags "-preview=dip1000"
