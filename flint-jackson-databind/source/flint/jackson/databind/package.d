@@ -583,13 +583,15 @@ class ObjectMapper
         return writeCollected(writeContext(_config.isEnabled(SerializationFeature.INDENT_OUTPUT)), value);
     }
 
-    // Serialize into a buffered generator and take its buffer: no builder, no sink closure, no copy.
+    // Serialize into a recycled buffered generator and copy the document out: one allocation, the result.
     private ubyte[] writeCollected(ObjectWriteContext context, Any value)
     {
-        auto g = _config.factory.createBufferedGenerator(context);
+        auto g = _config.factory.acquireGenerator(context, null);
         writeValue(g, value);
         g.close();
-        return g.collected();
+        auto document = g.written().dup;
+        _config.factory.releaseGenerator(g);
+        return document;
     }
 
     // The write contexts carry only the INDENT_OUTPUT choice, so one of each serves every call.
@@ -605,12 +607,14 @@ class ObjectMapper
     }
 
     /// Serialize `value` as UTF-8 JSON to `sink` (Java's `writeValue(OutputStream, Object)`, R9).
+    /// The generator, its buffer and its contexts are recycled, so a write allocates nothing of Jackson's own.
     void writeValue(OutputSink sink, Any value)
     {
-        auto g = _config.factory.createGenerator(
+        auto g = _config.factory.acquireGenerator(
                 writeContext(_config.isEnabled(SerializationFeature.INDENT_OUTPUT)), sink);
         writeValue(g, value);
         g.close();
+        _config.factory.releaseGenerator(g);
     }
 
     /// Method that can be used to serialize any Java value as JSON output, using provided `JsonGenerator`.

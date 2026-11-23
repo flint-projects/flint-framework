@@ -218,6 +218,42 @@ final class JsonFactory
         return new UTF8JsonGenerator(writeCtxt is null ? ObjectWriteContext.empty() : writeCtxt, this, sink);
     }
 
+    // Recycled generators: a bounded pool of slots taken and returned with compare-and-swap, so reactor threads
+    // never wait on each other (Jackson's BoundedPool recycles BufferRecyclers the same way; Flint keeps no
+    // thread-local state, so the factory owns the pool). A slot holds a generator, buffer and context chain included.
+    private UTF8JsonGenerator[16] _recycled;
+
+    // A generator for the mapper's own writes, which never let it escape: recycled when the pool has one.
+    package(flint.jackson) UTF8JsonGenerator acquireGenerator(ObjectWriteContext writeCtxt, OutputSink sink)
+    {
+        import core.atomic : atomicLoad, cas;
+
+        auto context = writeCtxt is null ? ObjectWriteContext.empty() : writeCtxt;
+        foreach (ref slot; _recycled)
+        {
+            auto g = atomicLoad(slot);
+            if (g !is null && cas(&slot, g, cast(UTF8JsonGenerator) null))
+            {
+                g.reuse(context, sink);
+                return g;
+            }
+        }
+        return new UTF8JsonGenerator(context, this, sink);
+    }
+
+    // Give back a closed generator from `acquireGenerator`; dropped when the pool is full or its buffer grew large.
+    package(flint.jackson) void releaseGenerator(UTF8JsonGenerator g)
+    {
+        import core.atomic : atomicLoad, cas;
+
+        if (!g.recyclable())
+            return;
+        g.forget();
+        foreach (ref slot; _recycled)
+            if (atomicLoad(slot) is null && cas(&slot, cast(UTF8JsonGenerator) null, g))
+                return;
+    }
+
     /// A generator that keeps the whole document in its own buffer, for `ObjectMapper.writeValueAsBytes` and
     /// `writeValueAsString`: no sink, no intermediate builder.
     package(flint.jackson) UTF8JsonGenerator createBufferedGenerator(ObjectWriteContext writeCtxt)
@@ -446,6 +482,20 @@ final class JsonWriteContext : TokenStreamContext
         return new JsonWriteContext(TYPE_ROOT, null);
     }
 
+    // A recycled generator's root context, as new. The child contexts are kept (and reset as they are entered), but
+    // forget the values they held, so a pooled generator keeps no request's objects alive.
+    package(flint.jackson) void resetRoot() pure nothrow @nogc
+    {
+        _type = TYPE_ROOT;
+        _index = -1;
+        _gotName = false;
+        for (auto c = this; c !is null; c = c._child)
+        {
+            c._currentName = null;
+            c._currentValue = null;
+        }
+    }
+
     /// Enter an Array, reusing the child context object.
     JsonWriteContext createChildArrayContext(Object currentValue) pure nothrow
     {
@@ -588,6 +638,39 @@ class UTF8JsonGenerator : JsonGenerator
     override ObjectWriteContext objectWriteContext()
     {
         return _objectWriteContext;
+    }
+
+    // A recycled generator, as `this(writeCtxt, factory, sink)` builds it, keeping its buffer and context chain.
+    package(flint.jackson) void reuse(ObjectWriteContext writeCtxt, OutputSink sink)
+    {
+        _objectWriteContext = writeCtxt;
+        _sink = sink;
+        _cfgPrettyPrinter = writeCtxt.getPrettyPrinter();
+        _streamWriteContext.resetRoot();
+        _outputTail = 0;
+        _closed = false;
+    }
+
+    // Drop what a finished write referenced (its context, sink and values), so the pool keeps nothing of it.
+    package(flint.jackson) void forget() pure nothrow @nogc
+    {
+        _objectWriteContext = null;
+        _sink = null;
+        _cfgPrettyPrinter = null;
+        _streamWriteContext.resetRoot();
+        _outputTail = 0;
+    }
+
+    // Whether the pool may keep this generator: a buffer grown past one flush unit is let go with it.
+    package(flint.jackson) bool recyclable() const pure nothrow @nogc
+    {
+        return _outputBuffer.length <= BYTE_BUFFER_SIZE;
+    }
+
+    /// The document so far, for a generator without a sink after `close()`: the buffer stays the generator's.
+    package(flint.jackson) const(ubyte)[] written() const pure nothrow @nogc
+    {
+        return _outputBuffer[0 .. _outputTail];
     }
 
     /// The whole document of a generator created without a sink (`JsonFactory.createBufferedGenerator`), after
