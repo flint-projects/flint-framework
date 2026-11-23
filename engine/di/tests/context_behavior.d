@@ -3,7 +3,7 @@ module context_behavior;
 
 import flint.arena : Error, Status;
 import flint.di : AppContext, AutoConfiguration, BeanRegistrar, Bind, ConditionalOnConfig,
-    ConditionalOnMissingBean, ConfiguredSections, Inject, PostConstruct, PreDestroy, Service;
+    ConditionalOnMissingBean, ConfiguredSections, Inject, Launcher, PostConstruct, PreDestroy, Service;
 
 @safe:
 
@@ -603,4 +603,26 @@ unittest
         assert(sectionPresent(sections, present), present);
     foreach (absent; ["data", "database.pools", "port", "size", "cache"])
         assert(!sectionPresent(sections, absent), absent);
+}
+
+private struct ServerLauncher
+{
+}
+
+@ConditionalOnConfig("cache") private struct CacheWarmer
+{
+}
+
+@("launchers are kept out of the beans and listed when their condition holds")
+unittest
+{
+    alias Defaults = AutoConfiguration!(Bind!(Clock, SystemClock), Launcher!ServerLauncher, Launcher!CacheWarmer);
+    alias Context = AppContext!(Defaults, ConfiguredSections!(), Reporter);
+    static assert(is(Context.Launchers[0] == ServerLauncher) && Context.Launchers.length == 1);
+    static assert(Context.Registered.length == 2);
+    alias Cached = AppContext!(Defaults, ConfiguredSections!("cache"), Reporter);
+    static assert(Cached.Launchers.length == 2 && is(Cached.Launchers[1] == CacheWarmer));
+    Context context;
+    assert(context.initialize().code == Status.ok && context.get!Reporter().clock.now() == 1);
+    context.shutdown();
 }

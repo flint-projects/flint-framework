@@ -26,7 +26,8 @@ struct ConditionalOnMissingBean
 }
 
 /// A starter's default registrations. Each entry yields to an explicit registration of the same key and honours
-/// its own `@ConditionalOnConfig`. Starters export one list, such as `flint.starter.data.DataAutoConfiguration`.
+/// its own `@ConditionalOnConfig`. Each Flint Boot auto-configuration library exports one, such as
+/// `flint.boot_autoconfigure_data.DataSourceAutoConfiguration`.
 struct AutoConfiguration(Entries...)
 {
 }
@@ -37,6 +38,13 @@ struct ConfiguredSections(Names...)
 {
     static foreach (name; Names)
         static assert(is(typeof(name) : string), "ConfiguredSections takes section names");
+}
+
+/// Not a bean: a type an application runner calls after the context starts, such as a web server launcher
+/// (ADR-028 section 8). It honours the `@ConditionalOnConfig` of `T`; `AppContext.Launchers` lists the enabled
+/// ones in order.
+struct Launcher(T)
+{
 }
 
 // An entry that came from an auto-configuration list.
@@ -58,7 +66,7 @@ private template expandDefault(T)
 {
     static if (is(T == BeanRegistrar!Entries, Entries...) || is(T == AutoConfiguration!Entries, Entries...))
         alias expandDefault = staticMap!(.expandDefault, Entries);
-    else static if (is(T == ConfiguredSections!Names, Names...))
+    else static if (is(T == ConfiguredSections!Names, Names...) || is(T == Launcher!U, U))
         alias expandDefault = T;
     else
         alias expandDefault = Default!T;
@@ -66,6 +74,7 @@ private template expandDefault(T)
 
 private enum bool isDefault(T) = is(T == Default!U, U);
 private enum bool isSections(T) = is(T == ConfiguredSections!Names, Names...);
+private enum bool isLauncher(T) = is(T == Launcher!U, U);
 
 private template unwrap(T)
 {
@@ -79,7 +88,9 @@ private template unwrap(T)
 private template Annotated(T)
 {
     alias Plain = unwrap!T;
-    static if (is(Plain == Provided!Value, Value))
+    static if (is(Plain == Launcher!Value, Value))
+        alias Annotated = Value;
+    else static if (is(Plain == Provided!Value, Value))
         alias Annotated = Value;
     else
         alias Annotated = Concrete!Plain;
@@ -243,7 +254,7 @@ template Resolved(Entries...)
     {
         alias Flat = staticMap!(expandExplicit, Entries);
         enum string[] present = declaredSections!Flat();
-        enum bool beanEntry(T) = !isSections!T;
+        enum bool beanEntry(T) = !isSections!T && !isLauncher!T;
         enum bool configured(T) = () {
             foreach (section; requiredSections!T())
             {
@@ -282,5 +293,37 @@ template Resolved(Entries...)
         }
 
         alias Resolved = select!0;
+    }
+}
+
+/// The enabled `Launcher!T` entries of a context, as their `T`, in declaration order.
+template ResolvedLaunchers(Entries...)
+{
+    static if (!conditional!Entries())
+        alias ResolvedLaunchers = AliasSeq!();
+    else
+    {
+        alias Flat = staticMap!(expandExplicit, Entries);
+        enum string[] present = declaredSections!Flat();
+        enum bool enabled(T) = () {
+            static if (!isLauncher!T)
+                return false;
+            else
+            {
+                foreach (section; requiredSections!T())
+                {
+                    if (!sectionPresent(present, section))
+                        return false;
+                }
+                return true;
+            }
+        }();
+        template target(T)
+        {
+            static if (is(T == Launcher!U, U))
+                alias target = U;
+        }
+
+        alias ResolvedLaunchers = staticMap!(target, Filter!(enabled, Flat));
     }
 }

@@ -5,7 +5,7 @@ import flint.arena : Error, Status;
 import flint.di.internal.constructors : noConstructor;
 import flint.di.internal.graph : Graph, build, maxBeans;
 import flint.di.internal.lifecycle : Hook;
-import flint.di.internal.conditions : Resolved;
+import flint.di.internal.conditions : Resolved, ResolvedLaunchers;
 import flint.di.internal.registrations : Concrete, Key, hasBinding, keyIndex, missing;
 import std.meta : staticMap;
 
@@ -174,6 +174,8 @@ struct AppContext(Beans...)
     /// The registrations after expanding registrars and auto-configuration lists and applying their conditions,
     /// for runners that bind configuration or collect controllers (ADR-028).
     alias Registered = Entries;
+    /// The enabled `Launcher!T` entries, as their `T`, for the application runner (ADR-028 section 8).
+    alias Launchers = ResolvedLaunchers!Beans;
     static assert(Entries.length <= maxBeans, "DI context exceeds the 128-bean limit");
     static if (hasBinding!Entries())
     {
