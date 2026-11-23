@@ -12,15 +12,15 @@ version (Windows)
 
     private extern (Windows) void GetSystemTimePreciseAsFileTime(FILETIME* time) nothrow @nogc @system;
 
-    /// Milliseconds since 1970-01-01T00:00Z, or -1 if the clock reads before the epoch.
+    /// 100 ns ticks since 1970-01-01T00:00Z, or -1 if the clock reads before the epoch.
     // SAFETY: GetSystemTimePreciseAsFileTime only writes into the local FILETIME.
-    @trusted long epochMillis() nothrow @nogc
+    @trusted long epochTicks() nothrow @nogc
     {
         enum ulong unixEpoch = 116_444_736_000_000_000; // 1970-01-01 in 100 ns ticks since 1601-01-01.
         FILETIME clock;
         GetSystemTimePreciseAsFileTime(&clock);
         const ticks = (cast(ulong) clock.dwHighDateTime << 32) | clock.dwLowDateTime;
-        return ticks < unixEpoch ? -1 : cast(long)((ticks - unixEpoch) / 10_000);
+        return ticks < unixEpoch ? -1 : cast(long)(ticks - unixEpoch);
     }
 }
 else
@@ -36,14 +36,14 @@ else
     else
         import core.sys.posix.time : CLOCK_REALTIME, clock_gettime, timespec;
 
-    /// Milliseconds since 1970-01-01T00:00Z, or -1 if the clock is unavailable or reads before the epoch.
+    /// 100 ns ticks since 1970-01-01T00:00Z, or -1 if the clock is unavailable or reads before the epoch.
     // SAFETY: clock_gettime only writes into the local typed timespec.
-    @trusted long epochMillis() nothrow @nogc
+    @trusted long epochTicks() nothrow @nogc
     {
         timespec clock;
         if (clock_gettime(CLOCK_REALTIME, &clock) != 0 || clock.tv_sec < 0)
             return -1;
-        return cast(long) clock.tv_sec * 1000 + cast(long) clock.tv_nsec / 1_000_000;
+        return cast(long) clock.tv_sec * 10_000_000 + cast(long) clock.tv_nsec / 100;
     }
 }
 
@@ -53,10 +53,10 @@ unittest
 
     // Positive: agrees with std.datetime's clock to within the time between the two reads.
     enum long unixEpochInHnsecs = 621_355_968_000_000_000;
-    const before = (Clock.currStdTime - unixEpochInHnsecs) / 10_000;
-    const now = epochMillis();
-    const after = (Clock.currStdTime - unixEpochInHnsecs) / 10_000;
-    assert(before <= now && now <= after + 1);
+    const before = Clock.currStdTime - unixEpochInHnsecs;
+    const now = epochTicks();
+    const after = Clock.currStdTime - unixEpochInHnsecs;
+    assert(before <= now && now <= after);
     // Negative: never the failure value on a working clock, and never decreasing between two reads.
-    assert(now != -1 && epochMillis() >= now);
+    assert(now != -1 && epochTicks() >= now);
 }

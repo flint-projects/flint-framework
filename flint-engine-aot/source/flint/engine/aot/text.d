@@ -25,6 +25,18 @@ string decimal(ulong value) pure nothrow
     return digits(value);
 }
 
+/// ditto, as `to!string(int)`; an exact match, so an `int` needs no cast to choose between `long` and `ulong`.
+string decimal(int value) pure nothrow
+{
+    return decimal(cast(long) value);
+}
+
+/// ditto, as `to!string(uint)`.
+string decimal(uint value) pure nothrow
+{
+    return digits(value);
+}
+
 private string digits(ulong value) pure nothrow
 {
     char[20] buffer;
@@ -460,6 +472,10 @@ unittest
     foreach (value; [0L, 1, -1, 42, -42, 1_234_567_890, long.max, long.min])
         assert(decimal(value) == value.to!string);
     foreach (value; [0UL, 1, 10, ulong.max])
+        assert(decimal(value) == value.to!string);
+    foreach (value; [0, 7, -7, int.max, int.min])
+        assert(decimal(value) == value.to!string);
+    foreach (value; [0U, 9, uint.max])
         assert(decimal(value) == value.to!string);
 }
 
