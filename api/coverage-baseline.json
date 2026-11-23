@@ -1,5 +1,5 @@
 {"schema":"flint.api-coverage-baseline/1",
-"unclassified":27501,
+"unclassified":26617,
 "upstreams":{
 "hibernate-validator@9.1.6.Final":{"unclassified":0,"modules":{
 "hibernate-validator":0
@@ -31,7 +31,7 @@
 "slf4j-api@2.0.20":{"unclassified":0,"modules":{
 "slf4j-api":0
 }},
-"spring-framework@v7.1.0":{"unclassified":23136,"modules":{
+"spring-framework@v7.1.0":{"unclassified":22252,"modules":{
 "spring-aop":1294,
 "spring-aspects":0,
 "spring-beans":0,
@@ -45,9 +45,9 @@
 "spring-jdbc":751,
 "spring-jms":1159,
 "spring-messaging":1987,
-"spring-orm":586,
+"spring-orm":9,
 "spring-oxm":184,
-"spring-r2dbc":307,
+"spring-r2dbc":0,
 "spring-test":3343,
 "spring-tx":198,
 "spring-web":4669,
