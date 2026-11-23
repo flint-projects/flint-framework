@@ -75,6 +75,8 @@ struct ConstructorDescriptor
     MergedAnnotation[] annotations;
     /// Create an instance from arguments in parameter order.
     Any function(scope Any[] arguments) @safe invoke;
+    /// Contract 2: whether this is a record-style canonical (field-wise) constructor.
+    bool canonical;
 }
 
 /// A method the framework dispatches to or advises.
@@ -119,6 +121,24 @@ final class Descriptor
     string elementType;
     /// Runtime extension: the key type of a map.
     string keyType;
+    /// Contract 2: the enum constant at `ordinal` (declaration order); null for non-enums.
+    Any function(long ordinal) @safe enumValue;
+    /// Erased builders (null when the type is not of that shape): arrays, `List!T` and `Set!T`.
+    size_t function(ref Any value) @safe length;
+    /// ditto
+    Any function(ref Any value, size_t index) @safe element;
+    /// ditto
+    Any function(Any[] elements) @safe fromElements;
+    /// Erased builders for maps (`V[K]`, `Map!(K, V)`): keys and values in iteration order, and construction.
+    Any[]function(ref Any value) @safe toKeys;
+    /// ditto
+    Any[]function(ref Any value) @safe toValues;
+    /// ditto
+    Any function(Any[] keys, Any[] values) @safe fromEntries;
+    /// Erased builders for `Optional!T` and `Nullable!T`: the value, or `Any.init` when empty; and back.
+    Any function(ref Any value) @safe unwrap;
+    /// ditto
+    Any function(Any value) @safe wrap;
 
     /// A descriptor with no members yet, as generated code builds one.
     this(string name, TypeKind kind) pure nothrow
@@ -246,6 +266,7 @@ Descriptor descriptorOf(T)()
         d.elementType = typeNameOf!(U.__flintElementType);
     static if (__traits(compiles, U.__flintKeyType.init))
         d.keyType = typeNameOf!(U.__flintKeyType);
+    addBuilders!U(d);
     static if (is(U == struct) || is(U == class) || is(U == interface) || is(U == enum))
         d.annotations = mergedAnnotations!(__traits(getAttributes, U))();
     static if ((is(U == struct) || is(U == class)) && !__traits(compiles, U.__flintOpaque))
@@ -258,6 +279,178 @@ Descriptor descriptorOf(T)()
         }
     }
     return d;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Erased builders. Collections outside this package opt in through static hooks:
+// `__flintElements(ref T) -> E[]`, `__flintFromElements(E[]) -> T` (lists and sets),
+// `__flintEntries(ref T, out K[], out V[])`, `__flintFromEntries(K[], V[]) -> T` (maps),
+// `__flintUnwrap(ref T) -> E[]` (empty or one element), `__flintWrap(E, bool present) -> T` (optionals).
+
+private void addBuilders(U)(Descriptor d)
+{
+    static if (is(U == enum))
+        d.enumValue = &enumAt!U;
+    else static if (is(U == E[], E) && !is(U : const(char)[]))
+    {
+        d.length = &arrayLength!U;
+        d.element = &arrayElement!U;
+        d.fromElements = &arrayFrom!U;
+    }
+    else static if (is(U == V[K], V, K))
+    {
+        d.toKeys = &aaKeys!U;
+        d.toValues = &aaValues!U;
+        d.fromEntries = &aaFrom!U;
+    }
+    else static if (__traits(compiles, U.__flintElements) && __traits(compiles, U.__flintFromElements))
+    {
+        d.length = &hookLength!U;
+        d.element = &hookElement!U;
+        d.fromElements = &hookFrom!U;
+    }
+    else static if (__traits(compiles, U.__flintEntries) && __traits(compiles, U.__flintFromEntries))
+    {
+        d.toKeys = &hookKeys!U;
+        d.toValues = &hookValues!U;
+        d.fromEntries = &hookFromEntries!U;
+    }
+    else static if (__traits(compiles, U.__flintUnwrap) && __traits(compiles, U.__flintWrap))
+    {
+        d.unwrap = &hookUnwrap!U;
+        d.wrap = &hookWrap!U;
+    }
+}
+
+private Any enumAt(E)(long ordinal) @safe
+{
+    static immutable E[] members = enumMembers!E();
+    if (ordinal < 0 || ordinal >= members.length)
+        return Any.init;
+    return Any.of(members[cast(size_t) ordinal]);
+}
+
+private E[] enumMembers(E)()
+{
+    E[] result;
+    static foreach (member; __traits(allMembers, E))
+        result ~= __traits(getMember, E, member);
+    return result;
+}
+
+private size_t arrayLength(T)(ref Any value) @safe
+{
+    return value.get!T.length;
+}
+
+private Any arrayElement(T)(ref Any value, size_t index) @safe
+{
+    return Any.of(value.get!T[index]);
+}
+
+private Any arrayFrom(T : E[], E)(Any[] elements) @safe
+{
+    E[] result;
+    result.reserve(elements.length);
+    foreach (element; elements)
+        result ~= element.get!E;
+    return Any.of(result);
+}
+
+private Any[] aaKeys(T : V[K], V, K)(ref Any value) @safe
+{
+    Any[] result;
+    foreach (key; value.get!T.byKey)
+        result ~= Any.of(key);
+    return result;
+}
+
+private Any[] aaValues(T : V[K], V, K)(ref Any value) @safe
+{
+    Any[] result;
+    foreach (key; value.get!T.byKey)
+        result ~= Any.of(value.get!T[key]);
+    return result;
+}
+
+private Any aaFrom(T : V[K], V, K)(Any[] keys, Any[] values) @safe
+{
+    T result;
+    foreach (i, key; keys)
+        result[key.get!K] = values[i].get!V;
+    return Any.of(result);
+}
+
+private size_t hookLength(T)(ref Any value) @safe
+{
+    auto self = value.get!T;
+    return T.__flintElements(self).length;
+}
+
+private Any hookElement(T)(ref Any value, size_t index) @safe
+{
+    auto self = value.get!T;
+    return Any.of(T.__flintElements(self)[index]);
+}
+
+private Any hookFrom(T)(Any[] elements) @safe
+{
+    alias E = T.__flintElementType;
+    E[] items;
+    foreach (element; elements)
+        items ~= element.get!E;
+    return Any.of(T.__flintFromElements(items));
+}
+
+private Any[] hookKeys(T)(ref Any value) @safe
+{
+    auto self = value.get!T;
+    T.__flintKeyType[] keys;
+    T.__flintElementType[] values;
+    T.__flintEntries(self, keys, values);
+    Any[] result;
+    foreach (key; keys)
+        result ~= Any.of(key);
+    return result;
+}
+
+private Any[] hookValues(T)(ref Any value) @safe
+{
+    auto self = value.get!T;
+    T.__flintKeyType[] keys;
+    T.__flintElementType[] values;
+    T.__flintEntries(self, keys, values);
+    Any[] result;
+    foreach (v; values)
+        result ~= Any.of(v);
+    return result;
+}
+
+private Any hookFromEntries(T)(Any[] keys, Any[] values) @safe
+{
+    T.__flintKeyType[] k;
+    T.__flintElementType[] v;
+    foreach (i, key; keys)
+    {
+        k ~= key.get!(T.__flintKeyType);
+        v ~= values[i].get!(T.__flintElementType);
+    }
+    return Any.of(T.__flintFromEntries(k, v));
+}
+
+private Any hookUnwrap(T)(ref Any value) @safe
+{
+    auto self = value.get!T;
+    auto inner = T.__flintUnwrap(self);
+    return inner.length ? Any.of(inner[0]) : Any.init;
+}
+
+private Any hookWrap(T)(Any value) @safe
+{
+    alias E = T.__flintElementType;
+    if (value.isNull)
+        return Any.of(T.__flintWrap(E.init, false));
+    return Any.of(T.__flintWrap(value.get!E, true));
 }
 
 private TypeKind kindOf(T)()

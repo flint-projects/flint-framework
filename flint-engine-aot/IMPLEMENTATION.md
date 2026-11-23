@@ -1,7 +1,7 @@
 # Flint AOT runtime
 
 `flint:engine-aot` (`framework/engine-aot`, a Spring-layer module of `policy/framework.json` whose `sys` directory is the audited `unsafe` root) is the runtime half of the Flint AOT contract
-([docs/spring/aot-contract.md](../../docs/spring/aot-contract.md), contract 1). Generated modules and the
+([docs/spring/aot-contract.md](../../docs/spring/aot-contract.md), contract 2, accepting contract-1 code). Generated modules and the
 framework packages (`flint:beans`, `flint:context`, web-mvc, data) meet here. Every module is a leaf; there is no
 `package.d`.
 
@@ -27,3 +27,14 @@ structs, `Any` conversions and mismatches, the registry protocol, and a proxy bu
 it, with advisor ordering, short-circuiting and Spring's self-invocation semantics. `allocateUninitialized` has a
 positive test (fields at their initial values, constructor not run) and negative tests (abstract class, null).
 `tests/flint/core/annotation.d` stands in for flint:core's leaf annotation module in this package's tests only.
+
+## Contract 2
+
+Additive fields, so contract-1 generated code still runs (`checkContractVersion` accepts 1 and 2):
+`HandlerMapping.beanType`/`typeAnnotations`, `ExceptionHandlerSpec.beanType`/`adviceAssignableTypes`/
+`adviceAnnotations`/`produces`, `ArgumentSpec.elementType`, `ConstructorDescriptor.canonical`,
+`BeanDefinition.rank`, `ConditionContext.isAutoConfigurationExcluded`, and on `Descriptor` the erased builders
+`enumValue`, `length`/`element`/`fromElements`, `toKeys`/`toValues`/`fromEntries` and `unwrap`/`wrap`.
+`descriptorOf!T` fills the builders for enums, arrays and associative arrays directly, and for other types through
+static hooks (`__flintElements`/`__flintFromElements`, `__flintEntries`/`__flintFromEntries`,
+`__flintUnwrap`/`__flintWrap`) that flint:java's collections and `Optional` declare.

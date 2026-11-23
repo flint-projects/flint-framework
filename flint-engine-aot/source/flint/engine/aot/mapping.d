@@ -37,6 +37,8 @@ struct ArgumentSpec
     string defaultValue;
     /// `@Valid` or `@Validated` on the parameter.
     bool validate;
+    /// Contract 2: the `T` of `HttpEntity!T`, `RequestEntity!T`, `List!T` or `Optional!T` parameters; empty otherwise.
+    string elementType;
     /// The parameter's merged annotations.
     MergedAnnotation[] annotations;
 }
@@ -56,6 +58,10 @@ struct HandlerMapping
 {
     /// The controller's bean name.
     string bean;
+    /// Contract 2: the controller's fully qualified type (`HandlerMethod.getBeanType`).
+    string beanType;
+    /// Contract 2: the controller class's merged annotations (class-level `@CrossOrigin` and the like).
+    MergedAnnotation[] typeAnnotations;
     /// Class and method paths, already combined.
     string[] paths;
     /// HTTP methods; empty means all.
@@ -94,6 +100,14 @@ struct ExceptionHandlerSpec
 {
     /// The bean declaring the handler.
     string bean;
+    /// Contract 2: the declaring bean's fully qualified type.
+    string beanType;
+    /// Contract 2: `@ControllerAdvice(assignableTypes)`.
+    string[] adviceAssignableTypes;
+    /// Contract 2: `@ControllerAdvice(annotations)`, fully qualified annotation names.
+    string[] adviceAnnotations;
+    /// Contract 2: `@ExceptionHandler(produces)`.
+    string[] produces;
     /// From `@ExceptionHandler`, else the exception parameter's type.
     string[] exceptionTypes;
     /// Declared in a `@ControllerAdvice`.

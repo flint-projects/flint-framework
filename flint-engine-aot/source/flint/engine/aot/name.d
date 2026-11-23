@@ -16,7 +16,8 @@ template typeNameOf(T)
 }
 
 /// Remove LDC's repeated eponymous members from template instance names, at any depth:
-/// `a.B!(C).B` becomes `a.B!(C)`, and `a.M!(string, a.O!(int).O).M` becomes `a.M!(string, a.O!(int))`.
+/// `a.B!(C).B` becomes `a.B!(C)`, `a.L!string.L` becomes `a.L!string`, and `a.M!(string, a.O!(int).O).M` becomes
+/// `a.M!(string, a.O!(int))`.
 string canonicalTypeName(string name) pure nothrow
 {
     string result;
@@ -27,35 +28,52 @@ string canonicalTypeName(string name) pure nothrow
         const c = name[i];
         if (c == '(')
         {
-            string owner;
-            if (i > 0 && name[i - 1] == '!')
-            {
-                size_t s = i - 1;
-                while (s > 0 && isIdentifierChar(name[s - 1]))
-                    s--;
-                owner = name[s .. i - 1];
-            }
-            templates ~= owner;
+            templates ~= i > 0 && name[i - 1] == '!' ? identifierBefore(name, i - 1) : null;
             result ~= c;
             i++;
-            continue;
         }
-        if (c == ')' && templates.length)
+        else if (c == ')' && templates.length)
         {
             const owner = templates[$ - 1];
             templates = templates[0 .. $ - 1];
             result ~= c;
-            i++;
-            if (owner.length && i + 1 + owner.length <= name.length && name[i] == '.'
-                    && name[i + 1 .. i + 1 + owner.length] == owner
-                    && (i + 1 + owner.length == name.length || !isIdentifierChar(name[i + 1 + owner.length])))
-                i += 1 + owner.length;
-            continue;
+            i = skipRepeated(name, i + 1, owner);
         }
-        result ~= c;
-        i++;
+        else if (c == '!' && i + 1 < name.length && isIdentifierChar(name[i + 1]))
+        {
+            const owner = identifierBefore(name, i);
+            size_t end = i + 1;
+            while (end < name.length && isIdentifierChar(name[end]))
+                end++;
+            result ~= name[i .. end];
+            i = skipRepeated(name, end, owner);
+        }
+        else
+        {
+            result ~= c;
+            i++;
+        }
     }
     return result;
+}
+
+/// The identifier ending just before `index`.
+private string identifierBefore(string name, size_t index) pure nothrow @nogc
+{
+    size_t start = index;
+    while (start > 0 && isIdentifierChar(name[start - 1]))
+        start--;
+    return name[start .. index];
+}
+
+/// `position`, moved past `.owner` when the name repeats the template's own name there.
+private size_t skipRepeated(string name, size_t position, string owner) pure nothrow @nogc
+{
+    const end = position + 1 + owner.length;
+    if (owner.length && end <= name.length && name[position] == '.' && name[position + 1 .. end] == owner
+            && (end == name.length || !isIdentifierChar(name[end])))
+        return end;
+    return position;
 }
 
 private bool isIdentifierChar(char c) pure nothrow @nogc
@@ -90,6 +108,9 @@ unittest
     assert(canonicalTypeName("app.t.Opt!(Owner)") == "app.t.Opt!(Owner)");
     assert(canonicalTypeName("app.t.Map!(string, app.t.Opt!(int).Opt).Map") == "app.t.Map!(string, app.t.Opt!(int))");
     assert(canonicalTypeName("app.t.Opt!(Owner).Optional") == "app.t.Opt!(Owner).Optional");
+    assert(canonicalTypeName("flint.java.util.List!string.List") == "flint.java.util.List!string");
+    assert(canonicalTypeName("flint.java.util.List!string") == "flint.java.util.List!string");
+    assert(canonicalTypeName("a.Map!(string, a.List!int.List).Map") == "a.Map!(string, a.List!int)");
     assert(canonicalTypeName("app.t.Opt!(Owner).Inner") == "app.t.Opt!(Owner).Inner");
     assert(canonicalTypeName("int") == "int" && canonicalTypeName("app.Owner[]") == "app.Owner[]");
     assert(simpleTypeName("app.t.Owner") == "Owner" && simpleTypeName("app.t.Opt!(a.B)") == "Opt");

@@ -15,8 +15,12 @@ import flint.engine.aot.query : DerivedQuery;
 
 @safe:
 
-/// The contract version this runtime implements.
-enum uint aotContractVersion = 1;
+/// The contract version this runtime implements. Contract 2 only added fields with defaults, so code generated
+/// for contract 1 is accepted too.
+enum uint aotContractVersion = 2;
+
+/// The oldest contract version this runtime accepts.
+enum uint oldestAotContractVersion = 1;
 
 /// Thrown by `AotRegistry.begin` implementations when generated code targets another contract version.
 class AotContractException : Exception
@@ -33,7 +37,7 @@ void checkContractVersion(uint contractVersion) pure
 {
     import std.conv : to;
 
-    if (contractVersion != aotContractVersion)
+    if (contractVersion < oldestAotContractVersion || contractVersion > aotContractVersion)
         throw new AotContractException("generated code targets Flint AOT contract " ~ contractVersion.to!string
                 ~ "; this runtime implements contract " ~ aotContractVersion.to!string ~ ". Rebuild with flint build.");
 }

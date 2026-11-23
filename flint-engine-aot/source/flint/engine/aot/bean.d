@@ -76,6 +76,8 @@ struct BeanDefinition
     void function(Object bean) @safe destroy;
     /// The definition's conditions, conjoined; null when unconditional.
     bool function(ConditionContext context) @safe condition;
+    /// Contract 2: the registry's ordering rank (definition order across modules); 0 when unranked.
+    uint rank;
     /// Wrap the target in its generated AOP proxy; null when not advised.
     Object function(Object target, BeanFactory factory) @safe proxy;
 }

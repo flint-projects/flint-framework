@@ -25,6 +25,9 @@ interface ConditionContext
     bool hasSingleCandidate(string type);
     /// Whether the application is a web application of `type`: `ANY`, `SERVLET` or `REACTIVE`.
     bool isWebApplication(string type);
+    /// Contract 2: whether the startup property `flint.autoconfigure.exclude` (alias `spring.autoconfigure.exclude`;
+    /// a comma list or an indexed list) names the auto-configuration class `type`.
+    bool isAutoConfigurationExcluded(string type);
 }
 
 /++

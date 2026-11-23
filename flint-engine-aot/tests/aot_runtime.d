@@ -466,7 +466,8 @@ private final class Recorder : AotRegistry
 unittest
 {
     // The registry installs from a module constructor in generated code; here, directly.
-    assert(aotContractVersion == 1);
+    assert(aotContractVersion == 2);
+    checkContractVersion(1); // contract 2 is additive: contract-1 code still runs
     installRegistry(&populate);
     assert(installedRegistry() is &populate);
     auto recorder = new Recorder;
@@ -476,9 +477,9 @@ unittest
 
     bool threw;
     try
-        checkContractVersion(2);
+        checkContractVersion(3);
     catch (AotContractException e)
-        threw = e.msg == "generated code targets Flint AOT contract 2; this runtime implements contract 1. "
+        threw = e.msg == "generated code targets Flint AOT contract 3; this runtime implements contract 2. "
             ~ "Rebuild with flint build.";
     assert(threw);
 }
@@ -521,4 +522,18 @@ unittest
     auto values = Any.of([Any.of(1), Any.of("two")]);
     assert(values.get!(Any[])[1].get!string == "two");
     assert(Any.of(1) == Any.of(1) && Any.of(1) != Any.of(2) && Any.of("a").toHash == Any.of("a").toHash);
+}
+
+unittest
+{
+    // Contract 2 builders: enums by ordinal, arrays, maps.
+    auto colour = descriptorOf!Colour;
+    assert(colour.enumValue(1).get!Colour == Colour.blue && colour.enumValue(9).isNull);
+    auto ints = descriptorOf!(int[]);
+    auto three = ints.fromElements([Any.of(1), Any.of(2), Any.of(3)]);
+    assert(three.get!(int[]) == [1, 2, 3] && ints.length(three) == 3 && ints.element(three, 2).get!int == 3);
+    auto aa = descriptorOf!(int[string]);
+    auto map = aa.fromEntries([Any.of("a")], [Any.of(1)]);
+    assert(map.get!(int[string])["a"] == 1 && aa.toKeys(map)[0].get!string == "a" && aa.toValues(map)[0].get!int == 1);
+    assert(descriptorOf!Pet.length is null && descriptorOf!Pet.enumValue is null);
 }
