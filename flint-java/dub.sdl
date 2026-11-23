@@ -1,0 +1,17 @@
+name "java"
+description "Java's standard types that Spring's APIs expose: flint.java.lang, flint.java.util and friends (ADR-030, rules R5 and R8-R11)"
+license "Apache-2.0"
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+dflags "-preview=dip1000"
+dependency "flint:engine-aot" version="*"
+
+configuration "library" {
+    targetType "library"
+}
+configuration "unittest" {
+    targetType "library"
+    sourcePaths "source" "tests"
+    importPaths "source" "tests"
+}

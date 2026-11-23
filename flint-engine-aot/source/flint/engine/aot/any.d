@@ -46,7 +46,10 @@ final class Box(T)
     override bool opEquals(Object other) const
     {
         auto that = cast(const Box!T) other;
-        return that !is null && that.value == value;
+        static if (__traits(compiles, (const T a, const T b) => a == b))
+            return that !is null && that.value == value;
+        else
+            return that is this;
     }
 
     override size_t toHash() const nothrow
