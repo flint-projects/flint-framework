@@ -30,9 +30,7 @@ unittest
     assert(!isValidFor(constraint, -123_456.123));
     assert(!isValidFor(constraint, -12_345.123));
     assert(!isValidFor(constraint, 12_345.123));
-    // LIKELY BUG: a float is counted from its widened double's digits (-0.2199999988079071), not Float.toString.
-    version (FlintDigitsFloatText)
-        assert(isValidFor(constraint, -0.22f)); // Float.valueOf("-000000000.22")
+    assert(isValidFor(constraint, -0.22f)); // Float.valueOf("-000000000.22")
     assert(!isValidFor(constraint, 256_874));
     assert(!isValidFor(constraint, 12.0001));
 }
@@ -46,27 +44,22 @@ unittest
     assert(!isValidFor(constraint, 500.2));
 }
 
-version (FlintConstraintAttributeChecks)
+@("DigitsValidatorForNumberTest.testNegativeIntegerLength")
+unittest
 {
-    // Gap: no initialize step rejects a negative Digits.integer.
-    @("DigitsValidatorForNumberTest.testNegativeIntegerLength")
-    unittest
-    {
-        import std.exception : collectException;
+    import std.exception : collectException;
 
-        const p = Digits("{validator.digits}", -1, 1);
-        assert(collectException!Exception(isValidFor(p, 1)) !is null);
-    }
+    const p = Digits("{validator.digits}", -1, 1);
+    assert(collectException!Exception(isValidFor(p, 1)) !is null);
+}
 
-    // Gap: no initialize step rejects a negative Digits.fraction.
-    @("DigitsValidatorForNumberTest.testNegativeFractionLength")
-    unittest
-    {
-        import std.exception : collectException;
+@("DigitsValidatorForNumberTest.testNegativeFractionLength")
+unittest
+{
+    import std.exception : collectException;
 
-        const p = Digits("{validator.digits}", 1, -1);
-        assert(collectException!Exception(isValidFor(p, 1)) !is null);
-    }
+    const p = Digits("{validator.digits}", 1, -1);
+    assert(collectException!Exception(isValidFor(p, 1)) !is null);
 }
 
 @("DigitsValidatorForNumberTest.testTrailingZerosAreTrimmed")

@@ -45,15 +45,11 @@ unittest
     assert(isValidFor(constraint, "a b c foo"));
 }
 
-version (FlintConstraintAttributeChecks)
+@("PatternValidatorTest.testInvalidRegularExpression")
+unittest
 {
-    // Gap: a malformed regular expression is not rejected; every value just fails to match.
-    @("PatternValidatorTest.testInvalidRegularExpression")
-    unittest
-    {
-        import std.exception : collectException;
+    import std.exception : collectException;
 
-        const constraint = Pattern(regexp: "(unbalanced parentheses", message: "pattern does not match");
-        assert(collectException!Exception(isValidFor(constraint, "x")) !is null);
-    }
+    const constraint = Pattern(regexp: "(unbalanced parentheses", message: "pattern does not match");
+    assert(collectException!Exception(isValidFor(constraint, "x")) !is null);
 }

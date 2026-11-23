@@ -24,8 +24,9 @@ module flint.hibernate.validator.internal.constraintvalidators;
 import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : Descriptor;
 import flint.engine.aot.name : typeNameOf;
+import flint.hibernate.validator.internal.decimal : DecimalText, javaCompare;
 import flint.hibernate.validator.internal.el : ElValue;
-import flint.jakarta.validation : UnexpectedTypeException;
+import flint.jakarta.validation : UnexpectedTypeException, ValidationException;
 import flint.jakarta.validation.constraints : AssertFalse, AssertTrue, DecimalMax, DecimalMin,
     Digits, Email, Future, FutureOrPresent, Max, Min, Negative, NegativeOrZero, NotBlank, NotEmpty,
     NotNull, Null, Past, PastOrPresent, Pattern, Positive, PositiveOrZero, Size;
@@ -204,6 +205,7 @@ bool isValid(ref const BuiltinConstraint c, ref Any value, PatternCache patterns
         const(Descriptor) described = null)
 {
     const simple = simpleName(c.annotationType);
+    initialize(c, simple, value, patterns);
     switch (simple)
     {
     case "NotNull":
@@ -295,23 +297,24 @@ private bool checkNumber(ref const BuiltinConstraint c, string simple, ref Any v
 {
     if (value.isNull())
         return true;
-    if (simple == "Past" || simple == "PastOrPresent" || simple == "Future" || simple == "FutureOrPresent")
+    if (isTemporal(simple))
         return checkTemporal(c, simple, value, propertyPath);
     const read = readNumber(value);
-    // The CharSequence validators' `new BigDecimal(value.toString())` threw NumberFormatException: invalid.
-    if (read.unparsable)
-        return false;
-    const integral = read.integral;
-    const number = read.number;
-    const whole = read.whole;
-    if (!integral && number != number && !value.holds!double())
+    if (read.kind == NumberRead.Kind.none)
         return unexpected(c, value, propertyPath);
+    // The CharSequence validators' `new BigDecimal(value.toString())` threw NumberFormatException: invalid.
+    if (read.kind == NumberRead.Kind.unparsable)
+        return false;
     if (simple == "Digits")
-        return checkDigits(value, integral, number, cast(int) attribute(c, "integer").number,
-                cast(int) attribute(c, "fraction").number);
+        return checkDigits(c, read);
     if (simple == "Min" || simple == "Max" || simple == "DecimalMin" || simple == "DecimalMax")
-        return checkBound(c, simple, integral, whole, number);
-    return checkSign(simple, number);
+        return checkBound(c, simple, read);
+    return checkSign(simple, read);
+}
+
+private bool isTemporal(string simple) pure nothrow @nogc
+{
+    return simple == "Past" || simple == "PastOrPresent" || simple == "Future" || simple == "FutureOrPresent";
 }
 
 private bool checkTemporal(ref const BuiltinConstraint c, string simple, ref Any value, string propertyPath)
@@ -354,227 +357,272 @@ private int compareWithNow(ref Any value)
     }
 }
 
-private bool checkBound(ref const BuiltinConstraint c, string simple, bool integral, long whole, double number)
+// AbstractMin/MaxValidator and AbstractDecimalMin/MaxValidator. @Min and @Max compare with the exact long bound;
+// @DecimalMin and @DecimalMax with the exact decimal one (NumberComparatorHelper, DecimalNumberComparatorHelper).
+private bool checkBound(ref const BuiltinConstraint c, string simple, ref const NumberRead read)
 {
     switch (simple)
     {
     case "Min":
-        return compareTo(integral, whole, number, attribute(c, "value").number, -1) >= 0;
+        return compareTo(read, c.annotation.get!Min().value, lessThan) >= 0;
     case "Max":
-        return compareTo(integral, whole, number, attribute(c, "value").number, 1) <= 0;
+        return compareTo(read, c.annotation.get!Max().value, greaterThan) <= 0;
     case "DecimalMin":
-        const lowest = decimal(attribute(c, "value").text);
-        return attribute(c, "inclusive").boolean ? number >= lowest : number > lowest;
+        const order = compareTo(read, decimalBound(c), lessThan);
+        return attribute(c, "inclusive").boolean ? order >= 0 : order > 0;
     default:
-        const highest = decimal(attribute(c, "value").text);
-        return attribute(c, "inclusive").boolean ? number <= highest : number < highest;
+        const order = compareTo(read, decimalBound(c), greaterThan);
+        return attribute(c, "inclusive").boolean ? order <= 0 : order < 0;
     }
 }
 
-// NumberSignHelper.signum with NaN treated as failing.
-private bool checkSign(string simple, double number) pure nothrow @nogc
+// InfinityNumberComparatorHelper's NaN treatments: LESS_THAN fails a lower bound, GREATER_THAN an upper one.
+private enum lessThan = -1, greaterThan = 1;
+
+// `new BigDecimal(value())`, which initialize has already checked.
+private DecimalText decimalBound(ref const BuiltinConstraint c) pure nothrow
 {
-    if (number != number)
+    DecimalText bound;
+    DecimalText.parse(attribute(c, "value").text, bound);
+    return bound;
+}
+
+// NumberComparatorHelper.compare against a long bound: Long.compare, Float.compare and Double.compare (after the
+// NaN and infinity checks), and BigDecimal.compareTo for a numeric String.
+private int compareTo(ref const NumberRead read, long bound, int treatNanAs) pure nothrow
+{
+    final switch (read.kind)
+    {
+    case NumberRead.Kind.integral:
+        return read.whole < bound ? -1 : read.whole > bound ? 1 : 0;
+    case NumberRead.Kind.float_:
+        return read.number != read.number ? treatNanAs
+            : javaCompare(read.number, cast(float) bound);
+    case NumberRead.Kind.double_:
+        return read.number != read.number ? treatNanAs
+            : javaCompare(read.number, cast(double) bound);
+    case NumberRead.Kind.text:
+        return read.text.compareTo(DecimalText.of(bound));
+    case NumberRead.Kind.none:
+    case NumberRead.Kind.unparsable:
+        return treatNanAs;
+    }
+}
+
+// DecimalNumberComparatorHelper.compare: BigDecimal.valueOf(long), BigDecimal.valueOf(double) (a Float widened)
+// after the NaN and infinity checks, and new BigDecimal(String).
+private int compareTo(ref const NumberRead read, const DecimalText bound, int treatNanAs) pure nothrow
+{
+    final switch (read.kind)
+    {
+    case NumberRead.Kind.integral:
+        return DecimalText.of(read.whole).compareTo(bound);
+    case NumberRead.Kind.float_:
+    case NumberRead.Kind.double_:
+        if (read.number != read.number)
+            return treatNanAs;
+        if (read.number == double.infinity || read.number == -double.infinity)
+            return read.number > 0 ? 1 : -1;
+        return DecimalText.ofDouble(read.number).compareTo(bound);
+    case NumberRead.Kind.text:
+        return read.text.compareTo(bound);
+    case NumberRead.Kind.none:
+    case NumberRead.Kind.unparsable:
+        return treatNanAs;
+    }
+}
+
+// NumberSignHelper.signum: Float/Double.compareTo(0) (so -0.0 is negative) after the NaN check, which fails
+// @Positive and @PositiveOrZero as LESS_THAN and @Negative and @NegativeOrZero as GREATER_THAN.
+private bool checkSign(string simple, ref const NumberRead read) pure nothrow @nogc
+{
+    if (read.kind == NumberRead.Kind.none || read.kind == NumberRead.Kind.unparsable)
         return false;
+    const sign = signum(read, simple == "Positive" || simple == "PositiveOrZero" ? lessThan : greaterThan);
     switch (simple)
     {
     case "Positive":
-        return number > 0;
+        return sign > 0;
     case "PositiveOrZero":
-        return number >= 0;
+        return sign >= 0;
     case "Negative":
-        return number < 0;
+        return sign < 0;
     case "NegativeOrZero":
-        return number <= 0;
+        return sign <= 0;
     default:
         return true;
     }
 }
 
+private int signum(ref const NumberRead read, int treatNanAs) pure nothrow @nogc
+{
+    if (read.kind == NumberRead.Kind.integral)
+        return read.whole < 0 ? -1 : read.whole > 0 ? 1 : 0;
+    if (read.kind == NumberRead.Kind.text)
+        return read.text.signum();
+    return read.number != read.number ? treatNanAs : javaCompare(read.number, 0.0);
+}
+
+// A number constraint's value, as the validator for its type sees it.
 private struct NumberRead
 {
-    bool integral;
-    double number = double.nan;
+    enum Kind
+    {
+        none, // no number validator for the type: HV000030
+        integral, // Byte, Short, Integer, Long
+        float_, // Float, widened into `number`
+        double_, // Double
+        text, // a CharSequence that new BigDecimal(String) reads
+        unparsable, // a CharSequence it rejects
+    }
+
+    Kind kind;
     long whole;
-    bool unparsable; // a String that is not BigDecimal syntax
+    double number = double.nan;
+    DecimalText text;
 }
 
-// Reads an integral, floating-point or numeric String value.
 private NumberRead readNumber(ref Any value)
 {
+    NumberRead read;
     if (value.holds!long() && !value.holds!bool())
     {
-        const whole = value.get!long();
-        return NumberRead(true, whole, whole);
+        read.kind = NumberRead.Kind.integral;
+        read.whole = value.get!long();
     }
-    if (value.holds!double() && !value.holds!string() && !value.holds!bool())
-        return NumberRead(false, value.get!double());
-    // Hibernate's validators for CharSequence parse a BigDecimal; an unparsable String is invalid.
-    if (value.holds!string())
+    else if (value.holds!double() && !value.holds!string() && !value.holds!bool())
     {
-        const text = stripWhite(value.get!string());
-        if (!bigDecimalSyntax(text))
-            return NumberRead(false, double.nan, 0, true);
-        return NumberRead(false, decimal(text));
+        read.kind = value.typeName() == typeNameOf!float ? NumberRead.Kind.float_ : NumberRead.Kind.double_;
+        read.number = value.get!double();
     }
-    return NumberRead.init;
+    else if (value.holds!string())
+    {
+        // Hibernate's validators for CharSequence parse `new BigDecimal(value.toString())`, which reads no
+        // whitespace.
+        read.kind = DecimalText.parse(value.get!string(), read.text) ? NumberRead.Kind.text : NumberRead
+            .Kind.unparsable;
+    }
+    return read;
 }
 
-// `new BigDecimal(String)`'s syntax: an optional sign, digits with an optional fraction (at least one digit in
-// all), and an optional exponent. No suffix, NaN or Infinity, unlike Double.parseDouble.
-private bool bigDecimalSyntax(string text) pure nothrow @nogc
+// DigitsValidatorForNumber: `new BigDecimal(num.toString()).stripTrailingZeros()` (Float.toString for a float);
+// DigitsValidatorForCharSequence: `new BigDecimal(text)`, trailing zeros kept. Integer digits are
+// precision - scale, fraction digits the scale (0 when negative).
+private bool checkDigits(ref const BuiltinConstraint c, ref const NumberRead read)
 {
-    static bool digit(char c) pure nothrow @nogc
-    {
-        return c >= '0' && c <= '9';
-    }
+    import flint.serde.java_number : javaDoubleString, javaFloatString;
 
-    size_t at = text.length && (text[0] == '+' || text[0] == '-') ? 1 : 0;
-    size_t digits;
-    for (; at < text.length && digit(text[at]); ++at)
-        ++digits;
-    if (at < text.length && text[at] == '.')
-        for (++at; at < text.length && digit(text[at]); ++at)
-            ++digits;
-    if (digits == 0)
+    DecimalText number;
+    final switch (read.kind)
+    {
+    case NumberRead.Kind.integral:
+        number = DecimalText.of(read.whole).stripTrailingZeros();
+        break;
+    case NumberRead.Kind.float_:
+    case NumberRead.Kind.double_:
+        const text = read.kind == NumberRead.Kind.float_
+            ? javaFloatString(cast(float) read.number) : javaDoubleString(read.number);
+        if (!DecimalText.parse(text, number))
+            throw notANumber(text);
+        number = number.stripTrailingZeros();
+        break;
+    case NumberRead.Kind.text:
+        number = read.text;
+        break;
+    case NumberRead.Kind.none:
+    case NumberRead.Kind.unparsable:
         return false;
-    if (at < text.length && (text[at] == 'e' || text[at] == 'E'))
-    {
-        ++at;
-        if (at < text.length && (text[at] == '+' || text[at] == '-'))
-            ++at;
-        const exponentStart = at;
-        while (at < text.length && digit(text[at]))
-            ++at;
-        if (at == exponentStart)
-            return false;
     }
-    return at == text.length;
+    const integerDigits = number.precision() - number.scale;
+    const fractionDigits = number.scale < 0 ? 0 : number.scale;
+    return integerDigits <= cast(long) attribute(c, "integer").number
+        && fractionDigits <= cast(long) attribute(c, "fraction").number;
 }
 
-@("bigDecimalSyntax accepts what new BigDecimal(String) accepts")
-unittest
+// `new BigDecimal("NaN")` (or "Infinity") inside isValid: HV000028 wrapping the NumberFormatException.
+private ValidationException notANumber(string text)
 {
-    foreach (text; ["0", "-1", "+2", "15.0", ".5", "5.", "-000000000.22", "1e3", "2.5E-4", "1E+2"])
-        assert(bigDecimalSyntax(text), text);
-    static immutable string[] invalid = [
-        "", "15l", "15f", "1d", "NaN", "Infinity", ".", "-", "1e", "1e+", "1.2.3", "0x10", "1 2"
-    ];
-    foreach (text; invalid)
-        assert(!bigDecimalSyntax(text), text);
-}
-
-private double decimal(string text) pure nothrow
-{
-    import flint.engine.aot.text : tryParseDouble;
-
-    const parsed = tryParseDouble(stripWhite(text));
-    return parsed.ok ? parsed.value : double.nan;
-}
-
-// std.string.strip without std.uni: removes leading and trailing characters that std.uni.isWhite accepts.
-private string stripWhite(string text) pure nothrow @nogc
-{
-    size_t start, end = text.length;
-    size_t width;
-    while (start < end && (width = whiteAt(text, start)) != 0)
-        start += width;
-    while (end > start)
-    {
-        size_t at = end - 1;
-        while (at > start && (text[at] & 0xC0) == 0x80)
-            --at;
-        if (whiteAt(text, at) != end - at)
-            break;
-        end = at;
-    }
-    return text[start .. end];
-}
-
-// The byte width of the std.uni.isWhite character starting at `i`, or 0 if `text[i]` does not start one.
-private size_t whiteAt(string text, size_t i) pure nothrow @nogc
-{
-    static immutable dchar[] white = [
-        ' ', '\t', '\n', '\v', '\f', '\r', 0x85, 0xA0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003,
-        0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000
-    ];
-    size_t next = i;
-    const c = decodeAt(text, next);
-    foreach (w; white)
-        if (c == w)
-            return next - i;
-    return 0;
-}
-
-// NumberComparatorHelper.compare: NaN compares as `nanAs` (-1 for @Min, 1 for @Max), so it fails both.
-private int compareTo(bool integral, long whole, double number, double bound, int nanAs) pure nothrow @nogc
-{
-    if (integral)
-    {
-        const limit = cast(long) bound;
-        return whole < limit ? -1 : whole > limit ? 1 : 0;
-    }
-    if (number != number)
-        return nanAs;
-    return number < bound ? -1 : number > bound ? 1 : 0;
-}
-
-// DigitsValidatorForNumber: BigDecimal(value.toString()).stripTrailingZeros(), integer digits = precision - scale.
-private bool checkDigits(ref Any value, bool integral, double number, int maxInteger, int maxFraction)
-{
-    import flint.engine.aot.text : decimalText = decimal;
-    import flint.serde.java_number : javaDoubleString;
-
-    string text = integral ? decimalText(value.get!long()) : value.holds!string()
-        ? value.get!string() : javaDoubleString(number);
-    long[2] digits = countDigits(text);
-    return digits[0] <= maxInteger && digits[1] <= maxFraction;
-}
-
-// The exponent after `e` in `text`, as Long.parseLong reads it; NumberFormatException otherwise.
-private long exponentOf(string text, string exponent)
-{
-    import flint.engine.aot.text : tryParseLong;
     import flint.java.lang : NumberFormatException;
 
-    const parsed = tryParseLong(exponent);
-    if (!parsed.ok)
-        throw new NumberFormatException("For input string: \"" ~ text ~ "\"");
-    return parsed.value;
+    const at = text[0] == '-' ? text[1] : text[0];
+    return new ValidationException("HV000028: Unexpected exception during isValid call.", new NumberFormatException(
+            "Character " ~ at ~ " is neither a decimal digit number, decimal point, nor"
+            ~ " \"e\" notation exponential mark."));
 }
 
-// Integer and fraction digits of a decimal text with an optional sign and exponent, trailing zeros stripped.
-private long[2] countDigits(string text)
+// Hibernate's initialize: attribute values the validator rejects before it validates anything, reported as HV000032
+// wrapping the IllegalArgumentException that names the problem.
+private void initialize(ref const BuiltinConstraint c, string simple, ref Any value, PatternCache patterns)
 {
+    import flint.java.lang : IllegalArgumentException;
 
-    if (text.length && (text[0] == '-' || text[0] == '+'))
-        text = text[1 .. $];
-    long exponent;
-    foreach (i, ch; text)
+    string problem;
+    switch (simple)
     {
-        if (ch == 'E' || ch == 'e')
-        {
-            exponent = exponentOf(text, text[i + 1 .. $]);
-            text = text[0 .. i];
-            break;
-        }
+    case "DecimalMin":
+    case "DecimalMax":
+        DecimalText bound;
+        const text = attribute(c, "value").text;
+        if (!DecimalText.parse(text, bound))
+            problem = "HV000016: " ~ text ~ " does not represent a valid BigDecimal format.";
+        break;
+    case "Digits":
+        if (attribute(c, "integer").number < 0)
+            problem = "HV000017: The length of the integer part cannot be negative.";
+        else if (attribute(c, "fraction").number < 0)
+            problem = "HV000018: The length of the fraction part cannot be negative.";
+        break;
+    case "Size":
+        const min = attribute(c, "min").number, max = attribute(c, "max").number;
+        problem = min < 0 ? "HV000019: The min parameter cannot be negative." : max < 0
+            ? "HV000020: The max parameter cannot be negative." : max < min
+            ? "HV000021: The length cannot be negative." : null;
+        break;
+    case "Pattern":
+        const error = patterns.get(attribute(c, "regexp").text).error;
+        if (error !is null)
+            problem = engineLimit(error) ? "Flint's run-time pattern engine does not support this java.util.regex"
+                ~ " pattern yet: " ~ error : "HV000022: Invalid regular expression.";
+        break;
+    default:
+        return;
     }
-    string intPart = text, fracPart;
-    foreach (i, ch; text)
+    if (problem !is null)
+        throw new ValidationException("HV000032: Unable to initialize " ~ validatorClass(simple,
+                value) ~ ".", new IllegalArgumentException(problem));
+}
+
+// Whether a run-time pattern error is a limit of Flint's automaton (size, look-around, back-references, non-ASCII
+// literals, Unicode properties other than \p{L}) rather than a java.util.regex syntax error.
+private bool engineLimit(string error) pure nothrow @nogc
+{
+    static immutable string[] limits = ["exceeds", "unsupported", "ASCII", "only \\p{L}"];
+    foreach (limit; limits)
+        foreach (i; 0 .. error.length >= limit.length ? error.length - limit.length + 1 : 0)
+            if (error[i .. i + limit.length] == limit)
+                return true;
+    return false;
+}
+
+// The name of the Hibernate validator class that would have been chosen for `value`.
+private string validatorClass(string simple, ref Any value)
+{
+    enum base = "org.hibernate.validator.internal.constraintvalidators.bv.";
+    const text = value.holds!string();
+    switch (simple)
     {
-        if (ch == '.')
-        {
-            intPart = text[0 .. i];
-            fracPart = text[i + 1 .. $];
-        }
+    case "Pattern":
+        return base ~ "PatternValidator";
+    case "Digits":
+        return base ~ "DigitsValidatorFor" ~ (text ? "CharSequence" : "Number");
+    case "Size":
+        return base ~ "size.SizeValidatorFor" ~ (text ? "CharSequence" : isArray(value)
+                ? "Array" : cast(RawMap) value.asObject() !is null ? "Map" : "Collection");
+    default:
+        const java = javaTypeName(value.typeName());
+        const boxed = java.length > 10 && java[0 .. 10] == "java.lang." ? java[10 .. $] : "Number";
+        return base ~ "number.bound.decimal." ~ simple ~ "ValidatorFor" ~ (text ? "CharSequence" : boxed);
     }
-    while (fracPart.length && fracPart[$ - 1] == '0')
-        fracPart = fracPart[0 .. $ - 1];
-    while (intPart.length > 1 && intPart[0] == '0')
-        intPart = intPart[1 .. $];
-    const integerDigits = (intPart == "0" && fracPart.length ? 0 : cast(long) intPart.length) + exponent;
-    const fractionDigits = -exponent + cast(long) fracPart.length;
-    return [integerDigits < 0 ? 0 : integerDigits, fractionDigits < 0 ? 0 : fractionDigits];
 }
 
 // SizeValidatorForCharSequence, ForCollection, ForMap and ForArray.
@@ -956,19 +1004,6 @@ unittest
         "plain", "a@b.", ".a@b", "a..b@c", "a@-b", "a@b..c", "a@[1.2.3]", "a@[1.2.3.4444]", "a b@c"
     ])
         assert(!isValidEmail(bad), bad);
-}
-
-unittest
-{
-    import std.string : strip;
-
-    static immutable texts = [
-        "", " ", "1.5", "  1.5\t\n", " 1.5　", "
-1
-", "x\u0085", " ", "1​", "  2  ", "é é", " -3 "
-    ];
-    foreach (text; texts)
-        assert(stripWhite(text) == text.strip(), text);
 }
 
 unittest

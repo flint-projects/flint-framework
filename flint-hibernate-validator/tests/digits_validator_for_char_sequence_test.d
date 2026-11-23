@@ -35,27 +35,22 @@ unittest
     assert(!isValidFor(constraint, "12.0001"));
 }
 
-version (FlintConstraintAttributeChecks)
+@("DigitsValidatorForCharSequenceTest.testNegativeIntegerLength")
+unittest
 {
-    // Gap: no initialize step rejects a negative Digits.integer.
-    @("DigitsValidatorForCharSequenceTest.testNegativeIntegerLength")
-    unittest
-    {
-        import std.exception : collectException;
+    import std.exception : collectException;
 
-        const p = Digits(integer: -1, fraction: 1);
-        assert(collectException!Exception(isValidFor(p, "1")) !is null);
-    }
+    const p = Digits(integer: -1, fraction: 1);
+    assert(collectException!Exception(isValidFor(p, "1")) !is null);
+}
 
-    // Gap: no initialize step rejects a negative Digits.fraction.
-    @("DigitsValidatorForCharSequenceTest.testNegativeFractionLength")
-    unittest
-    {
-        import std.exception : collectException;
+@("DigitsValidatorForCharSequenceTest.testNegativeFractionLength")
+unittest
+{
+    import std.exception : collectException;
 
-        const p = Digits(integer: 1, fraction: -1);
-        assert(collectException!Exception(isValidFor(p, "1")) !is null);
-    }
+    const p = Digits(integer: 1, fraction: -1);
+    assert(collectException!Exception(isValidFor(p, "1")) !is null);
 }
 
 @("DigitsValidatorForCharSequenceTest.testIsValidCharSequence")

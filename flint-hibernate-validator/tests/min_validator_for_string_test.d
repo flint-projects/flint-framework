@@ -33,17 +33,13 @@ unittest
     testMinValidator(m, true);
 }
 
-version (FlintConstraintAttributeChecks)
+@("MinValidatorForStringTest.testInitializeDecimalMaxWithInvalidValue")
+unittest
 {
-    // Gap: no initialize step rejects a DecimalMin value that is not a BigDecimal.
-    @("MinValidatorForStringTest.testInitializeDecimalMaxWithInvalidValue")
-    unittest
-    {
-        import std.exception : collectException;
+    import std.exception : collectException;
 
-        const m = DecimalMin("foobar", "{validator.min}");
-        assert(collectException!Exception(isValidFor(m, 1)) !is null);
-    }
+    const m = DecimalMin("foobar", "{validator.min}");
+    assert(collectException!Exception(isValidFor(m, 1)) !is null);
 }
 
 @("MinValidatorForStringTest.testIsValidDecimalMinExclusive")

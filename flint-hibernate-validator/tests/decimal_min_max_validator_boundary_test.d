@@ -33,17 +33,13 @@ private final class TroubleHolder
     @DecimalMax("1.2") double d;
 }
 
-// LIKELY BUG: @DecimalMin/@DecimalMax compare doubles, so the bound 0.100000000000000005 rounds to 0.1 and admits it.
-version (FlintNumericBoundPrecision)
+@("DecimalMinMaxValidatorBoundaryTest.testDecimalMinValue")
+unittest
 {
-    @("DecimalMinMaxValidatorBoundaryTest.testDecimalMinValue")
-    unittest
-    {
-        auto validator = validatorFor!MinHolder();
-        auto bean = new MinHolder();
-        bean.d = 0.1;
-        assertOnlyViolations(validator.validate(bean), typeNameOf!DecimalMin);
-    }
+    auto validator = validatorFor!MinHolder();
+    auto bean = new MinHolder();
+    bean.d = 0.1;
+    assertOnlyViolations(validator.validate(bean), typeNameOf!DecimalMin);
 }
 
 @("DecimalMinMaxValidatorBoundaryTest.testDecimalMaxValue")

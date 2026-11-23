@@ -22,29 +22,24 @@ private final class Boundary
     @Max(9_223_372_036_854_775_806L) long max;
 }
 
-// LIKELY BUG: @Min and @Max bounds pass through a double, so 2^63 - 2 and 2^63 - 1 are the same bound. The Min
-// test passes on arm64 only because the out-of-range double-to-long cast saturates there (x86-64 yields long.min).
-version (FlintNumericBoundPrecision)
+@("MinMaxValidatorBoundaryTest.testMinBoundaryValue")
+unittest
 {
-    @("MinMaxValidatorBoundaryTest.testMinBoundaryValue")
-    unittest
-    {
-        auto validator = validatorFor!Boundary();
-        auto bean = new Boundary();
-        bean.min = 9_223_372_036_854_775_806L;
-        bean.max = 0L;
-        // Current min value is smaller, should fail, but it doesn't
-        assertOnlyViolations(validator.validate(bean), typeNameOf!Min);
-    }
+    auto validator = validatorFor!Boundary();
+    auto bean = new Boundary();
+    bean.min = 9_223_372_036_854_775_806L;
+    bean.max = 0L;
+    // Current min value is smaller, should fail, but it doesn't
+    assertOnlyViolations(validator.validate(bean), typeNameOf!Min);
+}
 
-    @("MinMaxValidatorBoundaryTest.testMaxBoundaryValue")
-    unittest
-    {
-        auto validator = validatorFor!Boundary();
-        auto bean = new Boundary();
-        bean.min = long.max;
-        bean.max = 9_223_372_036_854_775_807L;
-        // Current max value is bigger, should fail, but it doesn't
-        assertOnlyViolations(validator.validate(bean), typeNameOf!Max);
-    }
+@("MinMaxValidatorBoundaryTest.testMaxBoundaryValue")
+unittest
+{
+    auto validator = validatorFor!Boundary();
+    auto bean = new Boundary();
+    bean.min = long.max;
+    bean.max = 9_223_372_036_854_775_807L;
+    // Current max value is bigger, should fail, but it doesn't
+    assertOnlyViolations(validator.validate(bean), typeNameOf!Max);
 }

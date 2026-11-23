@@ -33,17 +33,13 @@ unittest
     testMaxValidator(m, true);
 }
 
-version (FlintConstraintAttributeChecks)
+@("MaxValidatorForStringTest.testInitializeDecimalMaxWithInvalidValue")
+unittest
 {
-    // Gap: no initialize step rejects a DecimalMax value that is not a BigDecimal.
-    @("MaxValidatorForStringTest.testInitializeDecimalMaxWithInvalidValue")
-    unittest
-    {
-        import std.exception : collectException;
+    import std.exception : collectException;
 
-        const m = DecimalMax("foobar", "{validator.max}");
-        assert(collectException!Exception(isValidFor(m, 1)) !is null);
-    }
+    const m = DecimalMax("foobar", "{validator.max}");
+    assert(collectException!Exception(isValidFor(m, 1)) !is null);
 }
 
 @("MaxValidatorForStringTest.testIsValidDecimalMaxExclusive")

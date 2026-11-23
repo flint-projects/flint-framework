@@ -77,17 +77,13 @@ unittest
     assert(!isValidFor(m, double.infinity));
 }
 
-version (FlintConstraintAttributeChecks)
+@("MaxValidatorForNumberTest.testInitializeDecimalMaxWithInvalidValue")
+unittest
 {
-    // Gap: no initialize step rejects a DecimalMax value that is not a BigDecimal.
-    @("MaxValidatorForNumberTest.testInitializeDecimalMaxWithInvalidValue")
-    unittest
-    {
-        import std.exception : collectException;
+    import std.exception : collectException;
 
-        const m = DecimalMax("foobar", "{validator.max}");
-        assert(collectException!Exception(isValidFor(m, 1)) !is null);
-    }
+    const m = DecimalMax("foobar", "{validator.max}");
+    assert(collectException!Exception(isValidFor(m, 1)) !is null);
 }
 
 @("MaxValidatorForNumberTest.testIsValidDecimalMaxExclusive")
