@@ -1,7 +1,7 @@
 /// Reactor-owned HTTP request and write lifetimes.
 module flint.web.runtime;
 
-import core.atomic : atomicLoad, atomicStore, cas;
+import core.atomic : atomicLoad, atomicOp, atomicStore, cas;
 import core.lifetime : emplace, move;
 import core.thread.osthread : Thread;
 import core.time : MonoTime, dur, ticksToNSecs;
@@ -33,6 +33,8 @@ private enum DriverPhase : ubyte
 {
     prepared,
     active,
+    /// Graceful shutdown: the listener is closed and admitted requests finish (ADR-028 section 10).
+    draining,
     stopping,
     finished
 }
@@ -69,6 +71,8 @@ private struct Connection
     bool peerClosed;
     bool continuing;
     bool continueSent;
+    /// Bytes of the current request have arrived; before that a keep-alive connection is idle.
+    bool started;
     bool replyDeferred;
     /// Methods for the Allow field of a router-generated 405.
     ubyte allow;
@@ -184,7 +188,7 @@ struct Server
     /// Whether the live listener was prepared with a numeric loopback address.
     bool isLoopbackListener() const nothrow @nogc
     {
-        return driver !is null && atomicLoad(driver.phase) < DriverPhase.stopping
+        return driver !is null && atomicLoad(driver.phase) < DriverPhase.draining
             && loopbackAddress(driver.limits.address);
     }
 
@@ -225,6 +229,52 @@ struct Server
         driver.release();
         return driver.result;
     }
+
+    /// Shut down gracefully, as Spring Boot's `server.shutdown=graceful`: close the listener so new connections
+    /// are refused, close idle keep-alive connections, let admitted requests finish with `Connection: close`,
+    /// then stop. Returns `timedOut` when the absolute deadline passes and `cancelled` when `forced` is cancelled
+    /// first; either way the remaining requests are then cancelled and the server stopped (ADR-028 section 10).
+    Error drain(long deadlineNanos, Context forced = Context.init) nothrow @nogc
+    {
+        if (driver is null)
+            return Error.init;
+        if (driver.reactor.currentCore() != uint.max)
+            return Error(Status.conflict, "owner loop cannot wait for its own shutdown");
+        if (!driver.beginDrain())
+            return shutdown(deadlineNanos);
+        for (;;)
+        {
+            if (driver.drained())
+                return shutdown(deadlineNanos);
+            const interrupted = forced.cancelled();
+            if (interrupted || now() >= deadlineNanos)
+            {
+                shutdown(now() + forcedStopNanos);
+                return interrupted ? Error(Status.cancelled, "graceful shutdown forced") : Error(Status.timedOut,
+                        "graceful shutdown grace period expired");
+            }
+            Thread.sleep(dur!"msecs"(1));
+        }
+    }
+
+    /// Whether the server never started or has finished stopping.
+    bool stopped() const nothrow @nogc
+    {
+        return driver is null || atomicLoad(driver.phase) == DriverPhase.finished;
+    }
+}
+
+/// How long a forced stop waits for cancelled requests and the owner loops before giving up.
+private enum long forcedStopNanos = 2_000_000_000L;
+
+/// The idle-connection sweep of the driver whose owner loop runs on this thread. Set on admission, it lets a
+/// cross-thread task, which the reactor carries only as a function pointer, reach that driver.
+private void delegate() @safe nothrow @nogc ownerSweep;
+
+private void sweepOwner() @safe nothrow @nogc
+{
+    if (ownerSweep !is null)
+        ownerSweep();
 }
 
 private bool loopbackAddress(string address) pure nothrow @nogc
@@ -335,6 +385,14 @@ private final class RuntimeDriver() : StreamEndpoint
     private WorkerLifecycle[] workers;
     private CancelSource root;
     private Context serverContext;
+    /// Child of the server root, cancelled when draining begins: admission and HTTP/2 streams observe it, while
+    /// admitted requests keep the root as their ancestor.
+    private CancelSource drainSource;
+    private Context drainContext;
+    /// HTTP/1 connections between admission and retirement.
+    private shared uint openConnections;
+    /// Owner cores that have not yet received the drain's idle-connection sweep.
+    private uint unsweptCore;
     private shared DriverPhase phase;
     private Error result;
     private bool released;
@@ -394,6 +452,14 @@ private final class RuntimeDriver() : StreamEndpoint
         }
         move(source.value, root);
         serverContext = root.context();
+        auto drainable = CancelSource.create(serverContext, Deadline.none());
+        if (!drainable.ok())
+        {
+            release();
+            return drainable.error;
+        }
+        move(drainable.value, drainSource);
+        drainContext = drainSource.context();
         const listening = prepareListener();
         if (listening.code != Status.ok)
         {
@@ -417,7 +483,7 @@ private final class RuntimeDriver() : StreamEndpoint
         AcceptDelegate acceptH2;
         if (allowsH2(limits))
         {
-            http2 = new H2Runtime(limits, routes, serverContext);
+            http2 = new H2Runtime(limits, routes, serverContext, drainContext);
             acceptH2 = &http2.accept;
             if (limits.http2PriorKnowledge)
                 acceptedCallback = acceptH2;
@@ -482,6 +548,57 @@ private final class RuntimeDriver() : StreamEndpoint
         }
     }
 
+    /// Begin graceful shutdown on an active server: no new connection or HTTP/2 stream is admitted.
+    bool beginDrain() nothrow @nogc
+    {
+        if (!cas(&phase, DriverPhase.active, DriverPhase.draining))
+            return false;
+        // The reactor closes the listener once each owner retired its accept (ADR-028 section 7.5).
+        reactor.stopAccepting();
+        drainSource.cancel();
+        postSweeps();
+        return true;
+    }
+
+    /// Ask each owner to close its idle keep-alive connections, retrying owners whose mailbox was full.
+    private void postSweeps() nothrow @nogc
+    {
+        while (unsweptCore < limits.cores && reactor.post(unsweptCore, &sweepOwner).code == Status.ok)
+            ++unsweptCore;
+    }
+
+    /// On an owner: close each connection waiting for its next request. One that has begun to receive a request,
+    /// or is handling or answering one, finishes it and then closes, because the reply turns keep-alive off.
+    private void sweepIdle() nothrow @nogc
+    {
+        const core = reactor.currentCore();
+        if (connections is null || core >= limits.cores)
+            return;
+        const first = cast(size_t) core * limits.maxConnectionsPerCore;
+        foreach (ref connection; connections[first .. first + limits.maxConnectionsPerCore])
+        {
+            if (connection.phase == ConnectionPhase.reading && !connection.started
+                    && !connection.taskActive && !connection.writeActive && !connection.closing)
+                close(&connection);
+        }
+    }
+
+    /// Whether every admitted request has finished. Waiting for the listener to close first means no owner can
+    /// still be admitting a connection that the count has not seen.
+    bool drained() nothrow @nogc
+    {
+        if (atomicLoad(phase) == DriverPhase.finished)
+            return true;
+        postSweeps();
+        return unsweptCore == limits.cores && reactor.acceptStopped()
+            && atomicLoad(openConnections) == 0 && (http2 is null || http2.activeStreams() == 0);
+    }
+
+    private bool draining() const nothrow @nogc
+    {
+        return atomicLoad(phase) >= DriverPhase.draining;
+    }
+
     void progressStop(bool force) nothrow @nogc
     {
         if (force || http2 is null || http2.activeCount() == 0)
@@ -503,6 +620,8 @@ private final class RuntimeDriver() : StreamEndpoint
             http2.release();
         if (tls !is null)
             tls.release();
+        drainSource.close();
+        drainContext = Context.init;
         root.close();
         serverContext = Context.init;
         destroy(reactor);
@@ -525,7 +644,7 @@ private final class RuntimeDriver() : StreamEndpoint
     private void accepted(ConnectionId id) nothrow @nogc
     {
         auto connection = slot(id);
-        if (connection is null || connection.phase != ConnectionPhase.free || serverContext.cancelled())
+        if (connection is null || connection.phase != ConnectionPhase.free || drainContext.cancelled())
         {
             closePlain(tls, id);
             return;
@@ -539,6 +658,8 @@ private final class RuntimeDriver() : StreamEndpoint
         }
         connection.id = id;
         connection.phase = ConnectionPhase.reading;
+        atomicOp!"+="(openConnections, 1U);
+        ownerSweep = &sweepIdle;
         const capacity = arenaBytes + limits.maxHeaderBytes + ioBytes;
         ubyte[] payload;
         connection.owned = reserveH1(capacity, connection.parser.metadata.headers, payload);
@@ -580,6 +701,7 @@ private final class RuntimeDriver() : StreamEndpoint
         connection.request.requestId = 0;
         connection.hasHeaderDeadline = false;
         connection.continueSent = false;
+        connection.started = false;
         connection.phase = ConnectionPhase.reading;
         return true;
     }
@@ -654,6 +776,7 @@ private final class RuntimeDriver() : StreamEndpoint
 
     private void receive(Connection* connection, scope const(ubyte)[] bytes) nothrow @nogc
     {
+        connection.started = true;
         if (!connection.hasHeaderDeadline)
         {
             connection.headerDeadline = following(limits.headerTimeoutNanos);
@@ -997,6 +1120,8 @@ private final class RuntimeDriver() : StreamEndpoint
         }
         if (response.status == 204 || response.status == 304)
             response = Response(response.status, null, Buffer.init);
+        if (draining())
+            keep = false;
 
         connection.phase = ConnectionPhase.writing;
         connection.response = response.body;
@@ -1106,7 +1231,8 @@ private final class RuntimeDriver() : StreamEndpoint
             return;
         }
 
-        if (!connection.keepAlive || connection.request.arena.reset() != Status.ok || !newRequest(connection))
+        if (!connection.keepAlive || draining() || connection.request.arena.reset() != Status.ok
+                || !newRequest(connection))
         {
             close(connection);
             return;
@@ -1150,6 +1276,8 @@ private final class RuntimeDriver() : StreamEndpoint
 
     private void retire(scope Connection* connection) scope nothrow @nogc
     {
+        if (connection.phase != ConnectionPhase.free)
+            atomicOp!"-="(openConnections, 1U);
         connection.cancellation.cancel();
         connection.request.cancellation = Context.init;
         connection.cancellation.close();
@@ -1167,6 +1295,7 @@ private final class RuntimeDriver() : StreamEndpoint
         connection.peerClosed = false;
         connection.continuing = false;
         connection.continueSent = false;
+        connection.started = false;
         connection.replyDeferred = false;
         connection.allow = 0;
         connection.replyType = null;

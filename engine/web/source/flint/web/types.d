@@ -141,6 +141,29 @@ struct ServerOptions
     /// PEM private key file matching the TLS certificate chain.
     string tlsPrivateKeyFile;
 
+    /// What `serve` does when asked to stop, as Spring Boot's `server.shutdown`.
+    ShutdownMode shutdown = ShutdownMode.graceful;
+    /// How long a graceful shutdown waits for admitted requests, as Spring Boot's
+    /// `spring.lifecycle.timeout-per-shutdown-phase` (30 seconds by default).
+    long shutdownTimeoutNanos = 30_000_000_000L;
+}
+
+/// How `serve` stops on a shutdown request (ADR-028 section 10).
+enum ShutdownMode : ubyte
+{
+    /// Close the listener, let admitted requests finish within `shutdownTimeoutNanos`, then stop.
+    graceful,
+    /// Cancel admitted requests and stop at once.
+    immediate
+}
+
+/// Exit codes of `runApplication` when a graceful shutdown does not finish (ADR-028 section 10).
+enum ShutdownExit : int
+{
+    /// Requests were still running when `shutdownTimeoutNanos` expired; they were cancelled.
+    graceExpired = 124,
+    /// A second shutdown request cancelled the graceful one.
+    forced = 130
 }
 
 /// Per-request lifetime and cancellation passed to a controller.

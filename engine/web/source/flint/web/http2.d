@@ -107,19 +107,23 @@ package(flint.web) final class H2Driver() : StreamEndpoint
     private RouteTable routes;
     private TlsTransport tls;
     private Context root;
+    /// Cancelled when the server begins to drain: no new session or stream is admitted.
+    private Context drainContext;
     private Session[] connections;
     private Stream[] streams;
     private uint workerStreams;
     private size_t arenaBytes;
     private shared ulong lastRequest;
     private shared uint activeSessions;
+    private shared uint liveStreams;
 
-    this(ServerOptions options, RouteTable routes, Context root)
+    this(ServerOptions options, RouteTable routes, Context root, Context drain)
     {
         this.options = options;
         writeDone = &written;
         this.routes = routes;
         this.root = root;
+        drainContext = drain;
         const bodyCapacity = options.maxBodyBytes > options.maxStreamingRequestBytes
             ? options.maxBodyBytes : options.maxStreamingRequestBytes;
         arenaBytes = options.maxHeaderBytes + bodyCapacity + options.writeQueueBytes + 1024;
@@ -146,10 +150,16 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         return atomicLoad(activeSessions);
     }
 
+    /// Streams between admission and retirement; a draining server waits for these, not for idle sessions.
+    uint activeStreams() nothrow @nogc
+    {
+        return atomicLoad(liveStreams);
+    }
+
     void accept(ConnectionId id) nothrow @nogc
     {
         auto connection = slot(id);
-        if (connection is null || connection.id.generation != 0 || root.cancelled())
+        if (connection is null || connection.id.generation != 0 || drainContext.cancelled())
         {
             closePlain(tls, id);
             return;
@@ -182,6 +192,7 @@ package(flint.web) final class H2Driver() : StreamEndpoint
             connection.native.close();
         }
         root = Context.init;
+        drainContext = Context.init;
     }
 
     private Session* slot(ConnectionId id) return scope nothrow @nogc
@@ -209,7 +220,8 @@ package(flint.web) final class H2Driver() : StreamEndpoint
 
     private int admitStream(scope Session* connection, int number) scope nothrow @nogc
     {
-        if (number <= 0 || connection.closing || connection.peerClosing || root.cancelled())
+        // REFUSED_STREAM tells the peer the request was not processed, so it may retry elsewhere.
+        if (number <= 0 || connection.closing || connection.peerClosing || drainContext.cancelled())
             return Protocol.refused;
 
         uint* member;
@@ -262,6 +274,7 @@ package(flint.web) final class H2Driver() : StreamEndpoint
         stream.number = number;
         stream.headerDeadline = following(options.headerTimeoutNanos);
         stream.phase = StreamPhase.reading;
+        atomicOp!"+="(liveStreams, 1U);
         return true;
     }
 
@@ -959,6 +972,8 @@ package(flint.web) final class H2Driver() : StreamEndpoint
 
     private void retire(scope Stream* stream) scope nothrow @nogc
     {
+        if (stream.phase != StreamPhase.free)
+            atomicOp!"-="(liveStreams, 1U);
         stream.cancel.cancel();
         stream.request.cancellation = Context.init;
         stream.cancel.close();

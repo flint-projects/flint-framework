@@ -8,10 +8,11 @@ import flint.validate : Valid;
 import flint.web.binding : bindBody, bindPath, bindQuery, responseFor, scalar, validateBody;
 import flint.web.router : describe;
 import flint.web.runtime : Server;
+import flint.web.sys.exit : exitNow;
 import flint.web.worker : ControllerWorker;
 import flint.web.types : ApiVersion, ControllerAdvice, Delete, Get, Method, PathVariable, Post, Put,
     QueryParam, Request, RequestBody, RequestContext, RequestMapping, Response, RestController,
-    RouteRegistration, ServerOptions, WorkerController;
+    RouteRegistration, ServerOptions, ShutdownExit, ShutdownMode, WorkerController;
 import std.traits : Unqual;
 
 @safe:
@@ -674,17 +675,51 @@ Error registerAdvice(A)(ref Server server, ref A advice)
 }
 
 /// Register the application's explicit controller fields and run until cancellation or a terminal error.
+/// `shutdown` asks for a stop, graceful unless `options.shutdown` says otherwise, and `forced` cuts a graceful
+/// stop short; `flint.os.watchShutdownSignals` gives both from SIGTERM and SIGINT. The result is 0 after an
+/// orderly stop, 1 after a failure, and a `ShutdownExit` code when a graceful shutdown did not finish. When the
+/// server cannot stop even then, as with a worker-controller handler that ignores cancellation, the process
+/// exits at once with that code instead of waiting for it (ADR-028 section 10).
 int runApplication(App)(ref App app, ServerOptions options = ServerOptions.init,
-        scope Error delegate(ref Server) @safe configure = null)
+        scope Error delegate(ref Server) @safe configure = null, Context shutdown = Context.init,
+        Context forced = Context.init)
 {
-    const served = serve(app, options, configure);
-    return served.code == Status.ok || served.code == Status.cancelled ? 0 : 1;
+    const outcome = serveUntil(app, options, configure, shutdown, forced);
+    const code = exitCode(outcome.error, forced);
+    if (outcome.running && code != 0)
+        exitNow(code);
+    return code;
+}
+
+private int exitCode(Error served, ref const Context forced) nothrow @nogc
+{
+    if (served.code == Status.ok)
+        return 0;
+    if (served.code == Status.cancelled)
+        return forced.cancelled() ? ShutdownExit.forced : 0;
+    return served.code == Status.timedOut ? ShutdownExit.graceExpired : 1;
 }
 
 /// Serve `app` like `runApplication`, returning why serving stopped: `Error.init` or `cancelled` after an orderly
 /// stop, otherwise the failure with its message, such as a listener that could not bind (ADR-028 section 7).
+/// After `shutdown` is cancelled a graceful drain returns `Error.init`, `timedOut` when its grace period expired,
+/// or `cancelled` when `forced` was cancelled first (ADR-028 section 10).
 Error serve(App)(ref App app, ServerOptions options = ServerOptions.init,
-        scope Error delegate(ref Server) @safe configure = null)
+        scope Error delegate(ref Server) @safe configure = null, Context shutdown = Context.init,
+        Context forced = Context.init)
+{
+    return serveUntil(app, options, configure, shutdown, forced).error;
+}
+
+/// Why serving stopped, and whether the server is still running because a forced stop could not finish.
+private struct Outcome
+{
+    Error error;
+    bool running;
+}
+
+private Outcome serveUntil(App)(ref App app, ServerOptions options,
+        scope Error delegate(ref Server) @safe configure, Context shutdown, Context forced)
 {
     static assert(applicationRouteCount!App() != 0, "HTTP application requires explicit controller fields");
     static assert(adviceCount!App() <= 1, "HTTP application has more than one @ControllerAdvice");
@@ -692,16 +727,24 @@ Error serve(App)(ref App app, ServerOptions options = ServerOptions.init,
     Server server;
     const started = server.start(options);
     if (started.code != Status.ok)
-        return started;
-    scope (exit)
+        return Outcome(started);
+    auto served = registerApplication(server, app);
+    if (served.code == Status.ok && configure !is null)
+        served = configure(server);
+    auto polled = Polled(served);
+    if (served.code == Status.ok)
+        polled = pollUntil(server, options, shutdown, forced);
+    // A drain has already stopped the server, or given up on it within its own bounds.
+    if (!polled.drained && !server.stopped())
         server.shutdown(Deadline.afterMillis(5_000).monotonicNanoseconds);
+    return Outcome(polled.error, !server.stopped());
+}
 
+/// Register the application's controllers and its advice: the application itself or its fields.
+private Error registerApplication(App)(ref Server server, ref App app)
+{
     static if (isController!App())
-    {
-        const registered = registerController(server, app);
-        if (registered.code != Status.ok)
-            return registered;
-    }
+        return registerController(server, app);
     else
     {
         static foreach (position, Field; typeof(App.tupleof))
@@ -723,18 +766,32 @@ Error serve(App)(ref App app, ServerOptions options = ServerOptions.init,
                 }
             }
         }
+        return Error.init;
     }
-    if (configure !is null)
-    {
-        const configured = configure(server);
-        if (configured.code != Status.ok)
-            return configured;
-    }
+}
+
+/// Why polling stopped, and whether a graceful drain ran.
+private struct Polled
+{
+    Error error;
+    bool drained;
+}
+
+/// Poll until a terminal error or `shutdown`, then drain unless `options.shutdown` is immediate.
+private Polled pollUntil(ref Server server, ServerOptions options, ref Context shutdown, Context forced) nothrow @nogc
+{
     Context cancellation;
     for (;;)
     {
+        if (shutdown.cancelled())
+        {
+            if (options.shutdown == ShutdownMode.immediate)
+                return Polled(Error(Status.cancelled, "HTTP server stopped"));
+            const deadline = Deadline.afterMillis(0).monotonicNanoseconds + options.shutdownTimeoutNanos;
+            return Polled(server.drain(deadline, forced), true);
+        }
         const error = server.poll(cancellation);
         if (error.code != Status.ok)
-            return error;
+            return Polled(error);
     }
 }

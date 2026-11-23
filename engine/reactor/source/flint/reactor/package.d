@@ -1,6 +1,6 @@
 module flint.reactor;
 
-import core.atomic : atomicLoad, atomicStore, cas;
+import core.atomic : atomicLoad, atomicOp, atomicStore, cas;
 import core.bitop : bsf;
 import core.lifetime : move;
 import core.memory : GC;
@@ -451,6 +451,21 @@ struct Reactor
             return Error(Status.unsupported, "native descriptor watches require Linux or macOS");
     }
 
+    /// Stop admission and close the listener, from any thread, while admitted connections keep running.
+    /// Each owner retires its accept first: io_uring holds the listener until its pending accept completes,
+    /// so the last owner closes it only after every cancelled accept has (ADR-028 sections 7.5 and 10).
+    void stopAccepting() nothrow @nogc
+    {
+        if (runtime !is null)
+            atomicStore(runtime.acceptStopping, true);
+    }
+
+    /// Whether every owner retired its accept and the listener is closed, so new connections are refused.
+    bool acceptStopped() const nothrow @nogc
+    {
+        return runtime !is null && atomicLoad(runtime.acceptRetired) == runtime.workers.length;
+    }
+
     /// Return the port selected by a successful listen.
     Result!ushort localPort() const nothrow @nogc
     {
@@ -487,6 +502,9 @@ private struct Runtime
     ushort port;
     AcceptFn accept;
     AcceptDelegate acceptDelegate;
+    /// Set by `stopAccepting`; each owner then retires its accept and counts itself in `acceptRetired`.
+    shared bool acceptStopping;
+    shared uint acceptRetired;
 
     @disable this(this);
 
@@ -730,6 +748,8 @@ private struct Worker
     /// Monotonic time before which this worker leaves pending connections in the backlog after
     /// descriptor exhaustion, or zero while accepting.
     long acceptResumeAt;
+    /// This owner no longer touches the listener: `stopAccepting` retired its accept.
+    bool acceptClosed;
     /// Earliest wake of a suspended fiber, long.min when one may be due, or long.max when none waits.
     long nextWake = long.max;
     /// Last task lifetime issued on this worker.
@@ -1000,6 +1020,8 @@ private struct Worker
             processTimers();
             if (atomicLoad(runtime.state) != State.running)
                 break;
+            if (!acceptClosed && atomicLoad(runtime.acceptStopping))
+                retireAccept();
             advanceOperations();
             const wait = loopWaitMillis();
             version (ReactorReadinessOnly)
@@ -1146,9 +1168,47 @@ private struct Worker
         runtime.stop();
     }
 
+    /// Stop this owner's accepting. A completion owner waits for its cancelled accept to complete before it
+    /// counts itself; the last owner to retire closes the listener so the kernel refuses new connections.
+    private void retireAccept() nothrow @nogc
+    {
+        version (ReactorReadinessOnly)
+        {
+        }
+        else
+        {
+            if (acceptPending)
+            {
+                if (!acceptCancelSent)
+                    cancelInFlight(listenToken, acceptCancelSent);
+                return;
+            }
+        }
+        version (Posix)
+        {
+            // A paused owner already dropped its readiness interest.
+            if (readiness.valid && runtime.listener.valid && acceptResumeAt == 0
+                    && setInterest(readiness, runtime.listener, listenToken, Interest.read, Interest.none) != Status.ok)
+                fail(Error(Status.ioError, "could not retire listener readiness"));
+        }
+        acceptResumeAt = 0;
+        acceptClosed = true;
+        if (atomicOp!"+="(runtime.acceptRetired, 1U) != runtime.workers.length)
+            return;
+        // Every other owner has stopped reading the listener. Windows keeps the socket until release,
+        // because closing it also gives up the process's Winsock reference.
+        version (Windows)
+        {
+        }
+        else
+            closeSocket(runtime.listener);
+    }
+
     /// Leave connections in the backlog for one loop budget instead of stopping on transient exhaustion.
     private void pauseAccept() nothrow @nogc
     {
+        if (acceptClosed)
+            return;
         acceptResumeAt = Deadline.afterMillis(waitBudgetMillis).monotonicNanoseconds;
         version (Posix)
         {
@@ -1162,6 +1222,8 @@ private struct Worker
     /// Whether the accept backoff has elapsed. Rearms readiness listeners when it has.
     private bool acceptResumed() nothrow @nogc
     {
+        if (acceptClosed)
+            return false;
         if (acceptResumeAt == 0)
             return true;
         if (Deadline.afterMillis(0).monotonicNanoseconds < acceptResumeAt)
@@ -1178,7 +1240,7 @@ private struct Worker
 
     private void admit(Socket incoming) nothrow @nogc
     {
-        if (nextFree == noSlot || atomicLoad(runtime.state) != State.running)
+        if (nextFree == noSlot || atomicLoad(runtime.state) != State.running || atomicLoad(runtime.acceptStopping))
         {
             closeSocket(incoming);
             return;
@@ -1448,7 +1510,7 @@ private struct Worker
 
         private void waitForReadiness(uint millis) nothrow @nogc
         {
-            if (runtime.listener.valid)
+            if (!acceptClosed && runtime.listener.valid)
                 acceptResumed();
             ReadyEvent[64] events;
             const budget = runtime.options.completionsPerTick;
@@ -1490,6 +1552,8 @@ private struct Worker
 
         private void acceptReady() nothrow @nogc
         {
+            if (acceptClosed)
+                return;
             auto incoming = acceptConnection(runtime.listener);
             if (incoming.ok)
                 admit(incoming.value);
@@ -1542,7 +1606,8 @@ private struct Worker
     {
         private void advanceAccept() nothrow @nogc
         {
-            if (acceptPending || !runtime.listener.valid || !acceptResumed())
+            if (acceptPending || acceptClosed || atomicLoad(runtime.acceptStopping)
+                    || !runtime.listener.valid || !acceptResumed())
                 return;
             version (Windows)
             {
@@ -1621,7 +1686,8 @@ private struct Worker
                     admit(event.accepted);
                 else if (event.status == Status.resourceExhausted)
                     pauseAccept();
-                else if (event.status != Status.unavailable && atomicLoad(runtime.state) == State.running)
+                else if (event.status != Status.unavailable
+                        && atomicLoad(runtime.state) == State.running && !atomicLoad(runtime.acceptStopping))
                     fail(Error(event.status, "asynchronous accept failed"));
                 return;
             }
