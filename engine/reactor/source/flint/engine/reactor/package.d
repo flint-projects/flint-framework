@@ -1688,14 +1688,18 @@ private struct Worker
             }
             return;
         }
+        bool starting;
         if (!work.started)
         {
             const status = operations.start(id);
             assert(status == Status.ok);
             work.started = true;
+            starting = true;
         }
         version (ReactorReadinessOnly)
         {
+            if (starting && writeNow(id))
+                return;
             refreshInterest(work.connection.slot);
         }
         else
@@ -1708,7 +1712,11 @@ private struct Worker
             else
             {
                 version (Posix)
+                {
+                    if (starting && writeNow(id))
+                        return;
                     refreshInterest(work.connection.slot);
+                }
             }
         }
     }
@@ -1762,6 +1770,23 @@ private struct Worker
         private ulong readinessToken(uint slot) const nothrow @nogc
         {
             return (connections[slot].generation << 16) | slot;
+        }
+
+        /// A write that has just started is sent at once, as Go's netpoller does: a socket is nearly always
+        /// writable, so waiting for EPOLLOUT costs a whole loop pass and two epoll_ctl calls per response.
+        /// Returns true when the operation is finished (delivered); false when it must wait for readiness, after
+        /// EAGAIN or a partial write. Reads still wait for readiness: the peer has usually not sent yet.
+        private bool writeNow(OperationId id) nothrow @nogc
+        {
+            auto work = &workItems[id.slot];
+            if (work.callbacks.reading)
+                return false;
+            auto socket = connections[work.connection.slot].socket;
+            const result = transmit(socket, operationBuffer(id.slot)[work.offset .. work.length]);
+            if (result.error.code == Status.unavailable)
+                return false;
+            completeIo(id, result.error.code, result.value);
+            return workItems[id.slot].id != id;
         }
 
         private void refreshInterest(uint slot) nothrow @nogc
