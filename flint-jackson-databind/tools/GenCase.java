@@ -46,7 +46,8 @@ public class GenCase {
     static void table(StringBuilder b, String name, List<int[]> runs) {
         b.append("private static immutable CaseRun[").append(runs.size()).append("] ").append(name).append(" = [\n");
         for (int[] r : runs)
-            b.append(String.format("    CaseRun(0x%X, 0x%X, %d, %d),%n", r[0], r[1], r[2], r[3]));
+            b.append(String.format("    CaseRun(0x%X, 0x%X, %s, %d),%n", r[0], r[1],
+                    String.format("%,d", r[2]).replace(',', '_'), r[3]));
         b.append("];\n\n");
     }
 
