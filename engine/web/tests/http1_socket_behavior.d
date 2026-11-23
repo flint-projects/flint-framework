@@ -483,23 +483,11 @@ unittest
             resumed) ~ " times in " ~ decimalText(rounds) ~ " rounds against 2 per echo");
     // Spinning for 200 µs of every wait costs at least 40 ms of CPU over these rounds.
     const cpuText = "delayed echoes used " ~ cpu.toString() ~ " of CPU in " ~ elapsed.toString() ~ " against 30 ms";
-    static if (unoptimizedCpuLane)
-        reportUnoptimizedCpu(cpu < dur!"msecs"(30), cpuText);
+    version (Windows)
+        reportCoarseCpu(cpu < dur!"msecs"(30), cpuText);
     else
         assertWallClock(cpu < dur!"msecs"(30), cpuText);
 }
-
-/// DMD's unoptimized code on Windows costs about as much CPU as the spin signature this bound detects, so that
-/// lane cannot tell the two apart. It reports the measurement, and the Windows Gate 6 lane (LDC) enforces it (ADR-026).
-version (Windows)
-{
-    version (DigitalMars)
-        private enum unoptimizedCpuLane = true;
-    else
-        private enum unoptimizedCpuLane = false;
-}
-else
-    private enum unoptimizedCpuLane = false;
 
 private string decimalText(ulong value) @safe pure nothrow
 {
@@ -514,12 +502,14 @@ private string decimalText(ulong value) @safe pure nothrow
     return digits[first .. $].idup;
 }
 
-/// Report a CPU bound that this lane does not enforce, as FLINT_EMULATED reports wall-clock bounds.
-private void reportUnoptimizedCpu(bool within, string measurement)
+/// Report a CPU bound on Windows, as FLINT_EMULATED reports wall-clock bounds. GetProcessTimes charges CPU in
+/// 15.625 ms scheduler ticks, so a 30 ms bound is under two ticks and a reading is quantized luck, not a
+/// measurement. The resumption count above proves the property there (ADR-026).
+private void reportCoarseCpu(bool within, string measurement)
 {
     import std.stdio : writeln;
 
-    writeln("FLINT-UNOPTIMIZED cpu bound ", within ? "met" : "not met", ": ", measurement);
+    writeln("FLINT-COARSE-CPU cpu bound ", within ? "met" : "not met", ": ", measurement);
 }
 
 /// Return a response field's value, matching the name case-insensitively.
