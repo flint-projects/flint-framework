@@ -188,6 +188,9 @@ struct Row
 /// Consumes a single row synchronously on the caller's thread or fiber.
 alias RowConsumer = Error delegate(ref Row row) @safe nothrow @nogc;
 
+/// Consumes a single row and may allocate on the GC: the user-boundary form for `Connection.queryRows`.
+alias RowCopier = Error delegate(ref Row row) @safe nothrow;
+
 /// One exclusive generation-checked lease.
 struct Connection
 {
@@ -209,7 +212,7 @@ struct Connection
     Result!ulong execute(scope const(char)[] sql, scope const(SqlValue)[] params,
             ref scope RequestArena arena, ref Context context) nothrow @nogc
     {
-        return perform(identity(), sql, params, arena, context, null);
+        return perform!RowConsumer(identity(), sql, params, arena, context, null);
     }
 
     /// Run a complete startup SQL program on this exclusive lease.
@@ -219,7 +222,7 @@ struct Connection
         if (startup.code != Status.ok)
             return startup;
         scope RequestArena unused;
-        return perform(identity(), sql, [], unused, context, null, true).error;
+        return perform!RowConsumer(identity(), sql, [], unused, context, null, true).error;
     }
 
     /// The failure the driver reported for this lease's last statement, if any. JDBC-level code reads it
@@ -244,7 +247,19 @@ struct Connection
     {
         if (consume is null)
             return Error(Status.invalidArgument, "SQL query requires a row consumer");
-        return perform(identity(), sql, params, arena, context, consume).error;
+        return perform!RowConsumer(identity(), sql, params, arena, context, consume).error;
+    }
+
+    /++
+    Like `query`, for a consumer that may allocate on the GC, such as a JDBC driver copying each row into GC
+    memory at the user boundary. The engine itself still allocates nothing; the consumer stays `nothrow`.
+    +/
+    Error queryRows(scope const(char)[] sql, scope const(SqlValue)[] params, ref scope RequestArena arena,
+            ref Context context, scope RowCopier copy) nothrow
+    {
+        if (copy is null)
+            return Error(Status.invalidArgument, "SQL query requires a row consumer");
+        return perform!RowCopier(identity(), sql, params, arena, context, copy).error;
     }
 }
 
@@ -273,8 +288,10 @@ private Status bind(ref scope Operation work, scope Parameters params, ref scope
     return Status.ok;
 }
 
-private Execution perform(Identity lease, scope const(char)[] sql, scope const(SqlValue)[] params,
-        ref scope RequestArena arena, ref Context context, scope RowConsumer consume, bool script = false) nothrow @nogc
+// Generic over the row consumer: RowConsumer keeps the whole path nothrow @nogc; a RowCopier may allocate.
+private Execution perform(Consumer)(Identity lease, scope const(char)[] sql,
+        scope const(SqlValue)[] params, ref scope RequestArena arena, ref Context context,
+        scope Consumer consume, bool script = false)
 {
     const ownership = admit();
     if (ownership.code != Status.ok)
@@ -301,7 +318,7 @@ private Execution perform(Identity lease, scope const(char)[] sql, scope const(S
     return drain(operation, lease.slot, context, consume);
 }
 
-private Error consumeRow(ref scope Operation operation, ulong slot, scope RowConsumer consumer) nothrow @nogc
+private Error consumeRow(Consumer)(ref scope Operation operation, ulong slot, scope Consumer consumer)
 {
     const generation = operation.publishRow();
     if (generation == 0)
@@ -310,7 +327,7 @@ private Error consumeRow(ref scope Operation operation, ulong slot, scope RowCon
     return consumer(row);
 }
 
-private Execution drain(ref scope Operation work, ulong slot, ref Context context, scope RowConsumer sink) nothrow @nogc
+private Execution drain(Consumer)(ref scope Operation work, ulong slot, ref Context context, scope Consumer sink)
 {
     Error terminal;
     Deadline cleanup;
