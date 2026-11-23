@@ -5,6 +5,8 @@ write	ints	-	[4,5]
 write	bytes_empty	-	""
 write	optional_empty	-	null
 write	snaked	-	{"Explicit":"kept","first_name":"Ann","zip_code":53703}
+write	unwrapping	-	{"count":2,"deep_level":3,"deep_in_code":"UP","deep_in_description":"ok","x_code_y":"UP","x_description_y":"ok","code":"UP","description":"ok"}
+write	renamed	-	{"name":"n","status":"UP"}
 write	kebab	-	{"home-town":"Madison","area-code":608}
 write	kebab_over_global	-	{"home-town":"Madison","area-code":608}
 read	Color	"GREEN"	GREEN

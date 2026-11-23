@@ -329,21 +329,53 @@ void writeBean(MapperConfig config, BeanDescription bean, ref Any value, JsonGen
         throw new InvalidDefinitionException("No serializer found for class " ~ bean.descriptor.name
                 ~ " and no properties discovered to create BeanSerializer", bean.descriptor.name);
     g.writeStartObject();
-    foreach (p; bean.properties)
+    writeFields(config, bean, value, g, null, null);
+    g.writeEndObject();
+}
+
+// The properties of a bean, each name wrapped in `prefix` and `suffix` (an @JsonUnwrapped property's renaming).
+// As Jackson's BeanSerializer orders them: the regular properties, then the unwrapped ones, then the any-getter.
+private void writeFields(MapperConfig config, BeanDescription bean, ref Any value, JsonGenerator g,
+        string prefix, string suffix)
+{
+    foreach (unwrappedPass; [false, true])
+        foreach (p; bean.properties)
+            if (p.unwrapped == unwrappedPass)
+                writeField(config, bean, p, value, g, prefix, suffix);
+    if (bean.anyGetter !is null)
+        writeAnyGetter(config, bean, value, g);
+}
+
+private void writeField(MapperConfig config, BeanDescription bean, BeanPropertyDefinition p,
+        ref Any value, JsonGenerator g, string prefix, string suffix)
+{
     {
         if (!p.isReadable())
-            continue;
+            return;
         auto v = p.accessor.get(value);
         if (!include(config, bean, p, v))
-            continue;
-        g.writeName(p.name);
+            return;
         withPath(Reference(p.name, -1, null, bean.descriptor.name), () {
+            if (p.unwrapped)
+                return writeUnwrapped(config, p, v, g, prefix ~ p.unwrapPrefix, p.unwrapSuffix ~ suffix);
+            g.writeName(prefix.length || suffix.length ? prefix ~ p.name ~ suffix : p.name);
             writeProperty(config, p, v, g);
         });
     }
-    if (bean.anyGetter !is null)
-        writeAnyGetter(config, bean, value, g);
-    g.writeEndObject();
+}
+
+// UnwrappingBeanSerializer: a null value writes nothing; a bean writes its properties into the enclosing object.
+private void writeUnwrapped(MapperConfig config, BeanPropertyDefinition p, ref Any v, JsonGenerator g,
+        string prefix, string suffix)
+{
+    if (v.isNull())
+        return;
+    const type = v.typeName().length ? v.typeName() : p.type;
+    const d = config.descriptor(type);
+    if (d is null || (d.kind != TypeKind.struct_ && d.kind != TypeKind.class_))
+        throw new InvalidDefinitionException("@JsonUnwrapped property `" ~ p.internalName
+                ~ "` of type " ~ type ~ " is not a bean with a Flint AOT descriptor", type);
+    writeFields(config, config.bean(d), v, g, prefix, suffix);
 }
 
 // AnyGetterWriter: the map's entries, in its iteration order, as further properties; nothing for a null map.

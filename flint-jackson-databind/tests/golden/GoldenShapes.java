@@ -11,7 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import tools.jackson.core.JacksonException;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.annotation.JsonNaming;
 import tools.jackson.databind.json.JsonMapper;
@@ -49,6 +51,32 @@ public class GoldenShapes {
     @JsonNaming(PropertyNamingStrategies.KebabCaseStrategy.class)
     public record Kebab(String homeTown, int areaCode) {}
 
+    public static class Status {
+        public String code = "UP";
+        public String description = "ok";
+    }
+
+    public static class Inner {
+        @JsonUnwrapped(prefix = "in_") public Status status = new Status();
+        public int level = 3;
+    }
+
+    // Boot's HealthDescriptor shape: unwrapped values, a prefixed and suffixed one, a nested one and a null one.
+    public static class Unwrapping {
+        @JsonUnwrapped public Status status = new Status();
+        public int count = 2;
+        @JsonUnwrapped(prefix = "x_", suffix = "_y") public Status other = new Status();
+        @JsonUnwrapped(prefix = "deep_") public Inner inner = new Inner();
+        @JsonUnwrapped public Status none = null;
+    }
+
+    // An ignored getter and another property renamed to the ignored one's name (Boot's getStatus/getStatusCode).
+    public static class Renamed {
+        @JsonIgnore public String getStatus() { return "ignored"; }
+        @JsonProperty("status") public String getStatusCode() { return "UP"; }
+        public String getName() { return "n"; }
+    }
+
     static void write(JsonMapper mapper, String name, Object value) {
         lines.add("write\t" + name + "\t-\t" + mapper.writeValueAsString(value));
     }
@@ -84,6 +112,8 @@ public class GoldenShapes {
         write(boot, "bytes_empty", new byte[0]);
         write(boot, "optional_empty", Optional.empty());
         write(boot, "snaked", new Snaked());
+        write(boot, "unwrapping", new Unwrapping());
+        write(boot, "renamed", new Renamed());
         write(boot, "kebab", new Kebab("Madison", 608));
         write(JsonMapper.builder().findAndAddModules().propertyNamingStrategy(PropertyNamingStrategies.UPPER_CAMEL_CASE)
             .build(), "kebab_over_global", new Kebab("Madison", 608));

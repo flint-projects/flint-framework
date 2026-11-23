@@ -22,9 +22,10 @@ import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, MergedAn
     PropertyDescriptor, TypeKind, findAnnotation;
 import flint.engine.aot.name : typeNameOf;
 import std.traits : isDynamicArray;
-import flint.jackson.annotation : JsonAlias, JsonAnyGetter, JsonCreator, JsonFormat, JsonGetter,
-    JsonIgnore, JsonIgnoreProperties,
-    JsonInclude, JsonIncludeProperties, JsonProperty, JsonPropertyOrder, JsonRawValue, JsonSetter, JsonValue;
+import flint.jackson.annotation : JsonAlias, JsonAnyGetter, JsonCreator, JsonUnwrapped, JsonFormat,
+    JsonGetter, JsonIgnore,
+    JsonIgnoreProperties, JsonInclude, JsonIncludeProperties, JsonProperty, JsonPropertyOrder,
+    JsonRawValue, JsonSetter, JsonValue;
 import flint.jackson.databind.annotation : JsonNaming;
 import flint.jackson.databind.exc : InvalidDefinitionException;
 
@@ -77,6 +78,12 @@ final class BeanPropertyDefinition
     bool jsonValue;
     /// `@JsonAnyGetter`: a map whose entries are written as properties of the containing object.
     bool anyGetter;
+    /// `@JsonUnwrapped`: the value's properties are written inline, renamed with `unwrapPrefix`/`unwrapSuffix`.
+    bool unwrapped;
+    /// ditto
+    string unwrapPrefix;
+    /// ditto
+    string unwrapSuffix;
     /// `@JsonProperty(required)`.
     bool required;
     /// `@JsonProperty(index)`.
@@ -231,6 +238,13 @@ struct POJOPropertiesCollector
         def.jsonValue = annotation(annotations, value) && value.value;
         JsonAnyGetter any;
         def.anyGetter = annotation(annotations, any) && any.enabled;
+        JsonUnwrapped unwrap;
+        if (annotation(annotations, unwrap) && unwrap.enabled)
+        {
+            def.unwrapped = true;
+            def.unwrapPrefix = unwrap.prefix;
+            def.unwrapSuffix = unwrap.suffix;
+        }
     }
 
     private static void rename(BeanPropertyDefinition def, string name)
@@ -354,11 +368,18 @@ struct POJOPropertiesCollector
         JsonIncludeProperties include;
         const including = annotation(d.annotations, include);
         BeanPropertyDefinition[] kept;
+        string[] ignoredAccessors;
         foreach (p; bean.properties)
         {
+            // @JsonIgnore removes its own accessor's property; another property explicitly named the same stays
+            // (Jackson's ignoral is by accessor; @JsonIgnoreProperties ignores by name).
             JsonIgnore ignored;
-            if ((annotation(p.annotations, ignored) && ignored.value) || p.name in bean.ignoredNames
-                    || (including && !contains(include.value, p.name)))
+            if (annotation(p.annotations, ignored) && ignored.value)
+            {
+                ignoredAccessors ~= p.name;
+                continue;
+            }
+            if (p.name in bean.ignoredNames || (including && !contains(include.value, p.name)))
             {
                 bean.ignoredNames[p.name] = true;
                 continue;
@@ -366,6 +387,9 @@ struct POJOPropertiesCollector
             kept ~= p;
         }
         bean.properties = kept;
+        foreach (name; ignoredAccessors)
+            if (bean.findForInput(name) is null)
+                bean.ignoredNames[name] = true;
     }
 
     // A class's @JsonNaming overrides the mapper's strategy.

@@ -7,7 +7,7 @@ import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, DescriptorTable, ParameterDescriptor,
     descriptorOf;
 import flint.jackson.core : JacksonException;
-import flint.jackson.annotation : JsonProperty;
+import flint.jackson.annotation : JsonIgnore, JsonProperty, JsonUnwrapped;
 import flint.jackson.databind : JsonMapper, PropertyNamingStrategies;
 import flint.jackson.databind.annotation : JsonNaming;
 import flint.jackson.databind.deser : compactKeyOrder;
@@ -93,6 +93,41 @@ private Descriptor kebabDescriptor()
     return d;
 }
 
+private struct Status
+{
+    string code = "UP";
+    string description = "ok";
+}
+
+private final class StatusClass
+{
+    string code = "UP";
+}
+
+private struct Inner
+{
+    @JsonUnwrapped(prefix : "in_") Status status;
+    int level = 3;
+}
+
+/// Boot's HealthDescriptor shape: unwrapped values, a prefixed and suffixed one, a nested one and a null one.
+private final class Unwrapping
+{
+    @JsonUnwrapped Status status;
+    int count = 2;
+    @JsonUnwrapped(prefix : "x_", suffix : "_y") Status other;
+    @JsonUnwrapped(prefix : "deep_") Inner inner;
+    @JsonUnwrapped StatusClass none;
+}
+
+/// An ignored property and another renamed to the ignored one's name (Boot's getStatus/getStatusCode).
+private final class Renamed
+{
+    @JsonIgnore string status = "ignored";
+    @JsonProperty("status") string statusCode = "UP";
+    string name = "n";
+}
+
 private Any invokePoint(scope Any[] arguments) @safe
 {
     return Any.of(Point(arguments[0].get!int(), arguments[1].get!int(), arguments[2].get!string()));
@@ -117,7 +152,8 @@ private DescriptorTable table()
             descriptorOf!(string[])(), descriptorOf!(byte[])(), descriptorOf!(double[])(),
             descriptorOf!(Optional!string)(), descriptorOf!(Optional!int)(), descriptorOf!(int[string])(),
             descriptorOf!(List!Color)(), descriptorOf!(ArrayList!Color)(), descriptorOf!(Point[])(),
-            descriptorOf!Snaked(), kebabDescriptor()
+            descriptorOf!Snaked(), kebabDescriptor(), descriptorOf!Status(), descriptorOf!Inner(), descriptorOf!StatusClass(),
+            descriptorOf!Unwrapping(), descriptorOf!Renamed()
         ])
         t.add(d);
     return t;
@@ -149,6 +185,10 @@ private string written(string name)
         return m.writeValueAsString(new Snaked());
     case "kebab":
         return m.writeValueAsString(Kebab("Madison", 608));
+    case "unwrapping":
+        return m.writeValueAsString(new Unwrapping());
+    case "renamed":
+        return m.writeValueAsString(new Renamed());
     case "kebab_over_global":
         return JsonMapper.builder().findAndAddModules().descriptors(table())
             .propertyNamingStrategy(PropertyNamingStrategies.UPPER_CAMEL_CASE()).build()
@@ -257,7 +297,7 @@ unittest
         assert(got == expected, row[1] ~ " " ~ row[2] ~ "\nflint:   " ~ got ~ "\njackson: " ~ expected);
         ++(row[0] == "write" ? writes : reads);
     }
-    assert(writes == 9 && reads == 20);
+    assert(writes == 11 && reads == 20);
 }
 
 @("CompactStringObjectMap key order: primary slots, then secondary slots, then the spill area")
