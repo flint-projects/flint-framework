@@ -9,6 +9,19 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(__APPLE__)
+#include <mach/mach.h>
+
+/* Darwin has no /proc: the task's resident size, as VmRSS reports it on Linux (ADR-024). */
+static size_t rss_kib(void)
+{
+    mach_task_basic_info_data_t info;
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    const kern_return_t status = task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count);
+    assert(status == KERN_SUCCESS && info.resident_size > 0);
+    return (size_t)(info.resident_size / 1024);
+}
+#else
 static size_t rss_kib(void)
 {
     FILE *status = fopen("/proc/self/status", "r");
@@ -19,6 +32,7 @@ static size_t rss_kib(void)
     assert(fclose(status) == 0 && rss > 0);
     return rss;
 }
+#endif
 
 int main(int count, char **args)
 {
