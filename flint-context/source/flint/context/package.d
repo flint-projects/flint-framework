@@ -207,6 +207,20 @@ interface ApplicationEventPublisher
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// Messages
+
+/// An object resolvable to a message: codes tried in order, arguments, and a default message.
+interface MessageSourceResolvable
+{
+    /// The codes to resolve this message with, in the order they should be tried; null for none.
+    string[] getCodes();
+    /// The arguments to resolve this message with; null for none.
+    Any[] getArguments();
+    /// The default message; null when there is none.
+    string getDefaultMessage();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Contexts
 
 /// Exception thrown during application context initialization.

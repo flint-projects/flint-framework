@@ -66,6 +66,104 @@ import flint.util : Assert, StringUtils, StringValueResolver;
 @safe:
 
 // ---------------------------------------------------------------------------------------------------------------
+// DefaultMessageSourceResolvable
+
+/// Spring's default implementation of `MessageSourceResolvable`.
+class DefaultMessageSourceResolvable : imported!"flint.context".MessageSourceResolvable
+{
+    private string[] codes;
+    private Any[] arguments;
+    private string defaultMessage;
+
+    /// A resolvable for one code.
+    this(string code)
+    {
+        this([code], null, null);
+    }
+
+    /// A resolvable for `codes`, `arguments` and `defaultMessage` (each may be null).
+    this(string[] codes, Any[] arguments = null, string defaultMessage = null) pure nothrow @nogc
+    {
+        this.codes = codes;
+        this.arguments = arguments;
+        this.defaultMessage = defaultMessage;
+    }
+
+    /// A copy of `resolvable`.
+    this(imported!"flint.context".MessageSourceResolvable resolvable)
+    {
+        this(resolvable.getCodes(), resolvable.getArguments(), resolvable.getDefaultMessage());
+    }
+
+    /// The last code (the most generic), or null.
+    string getCode() const pure nothrow @nogc
+    {
+        return codes.length ? codes[$ - 1] : null;
+    }
+
+    /// The codes.
+    string[] getCodes()
+    {
+        return codes;
+    }
+
+    /// The arguments.
+    Any[] getArguments()
+    {
+        return arguments;
+    }
+
+    /// The default message.
+    string getDefaultMessage()
+    {
+        return defaultMessage;
+    }
+
+    /// Whether the default message must be rendered as a message (Spring's default: true).
+    bool shouldRenderDefaultMessage()
+    {
+        return true;
+    }
+
+    /// `codes [a,b]; arguments [x]; default message [m]`.
+    protected final string resolvableToString()
+    {
+        string result = "codes [" ~ join(codes) ~ "]; arguments [";
+        foreach (i, argument; arguments)
+            result ~= (i ? "," : "") ~ argument.toString();
+        return result ~ "]; default message [" ~ (defaultMessage is null ? "null" : defaultMessage) ~ "]";
+    }
+
+    private static string join(string[] values)
+    {
+        string result;
+        foreach (i, value; values)
+            result ~= (i ? "," : "") ~ value;
+        return result;
+    }
+
+    /// Equal codes, arguments and default messages.
+    override bool opEquals(Object other)
+    {
+        auto that = cast(DefaultMessageSourceResolvable) other;
+        return that !is null && typeid(that) is typeid(this) && that.codes == codes
+            && that.arguments == arguments && that.defaultMessage == defaultMessage;
+    }
+
+    /// Hash of the codes and default message.
+    override size_t toHash() nothrow
+    {
+        return hashOf(codes) ^ hashOf(defaultMessage);
+    }
+
+    /// `ClassName: codes [...]; arguments [...]; default message [...]`.
+    override string toString()
+    {
+        return canonicalTypeName(typeid(this).name) ~ ": " ~ resolvableToString();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // AbstractApplicationContext
 
 /// Abstract implementation of `ConfigurableApplicationContext`: the refresh and close template.

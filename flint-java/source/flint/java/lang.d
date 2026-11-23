@@ -424,6 +424,8 @@ string valueOf(T)(T value)
         return floatToString(value);
     else static if (__traits(isFloating, T))
         return doubleToString(value);
+    else static if (is(T == struct) && is(typeof(value.toString()) : string))
+        return value.toString(); // not std.conv, whose struct path instantiates all of std.format
     else
         return value.to!string;
 }
