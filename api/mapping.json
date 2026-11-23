@@ -13493,6 +13493,8 @@
 "tools.jackson.databind.annotation.JsonAppend.Attr**":{"status":"excluded","category":"deferred","phase":"2"},
 "tools.jackson.databind.annotation.JsonAppend.Prop**":{"status":"excluded","category":"deferred","phase":"2"},
 "tools.jackson.databind.annotation.JsonDeserialize**":{"status":"excluded","category":"deferred","phase":"2"},
+"tools.jackson.databind.annotation.JsonNaming":{"status":"ported","d":"flint.jackson.databind.annotation.JsonNaming"},
+"tools.jackson.databind.annotation.JsonNaming#value":{"status":"ported","d":"flint.jackson.databind.annotation.JsonNaming.value"},
 "tools.jackson.databind.annotation.JsonNaming**":{"status":"excluded","category":"deferred","phase":"2"},
 "tools.jackson.databind.annotation.JsonPOJOBuilder**":{"status":"excluded","category":"deferred","phase":"2"},
 "tools.jackson.databind.annotation.JsonPOJOBuilder.Value**":{"status":"excluded","category":"deferred","phase":"2"},

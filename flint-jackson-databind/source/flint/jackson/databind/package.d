@@ -46,6 +46,23 @@ abstract class PropertyNamingStrategy
     abstract string nameForProperty(string defaultName);
 }
 
+// The strategy a @JsonNaming class names, for the standard strategies (Jackson instantiates the class).
+private NameTranslator standardNaming(string strategyClass) @safe
+{
+    alias S = PropertyNamingStrategies;
+    static foreach (T; imported!"std.meta".AliasSeq!(S.LowerCamelCaseStrategy, S.UpperCamelCaseStrategy,
+            S.SnakeCaseStrategy, S.UpperSnakeCaseStrategy, S.LowerCaseStrategy,
+            S.KebabCaseStrategy, S.LowerDotCaseStrategy))
+    {
+        if (strategyClass == typeNameOf!T)
+        {
+            PropertyNamingStrategy strategy = new T();
+            return (string name) => strategy.nameForProperty(name);
+        }
+    }
+    return null;
+}
+
 /// Container for standard `PropertyNamingStrategy` implementations and singleton instances.
 final class PropertyNamingStrategies
 {
@@ -316,6 +333,7 @@ class ObjectMapper
         config.descriptors = DescriptorTable.withBuiltins();
         config.factory = new JsonFactory();
         config.nodeFactory = JsonNodeFactory.instance();
+        config.classNaming = &standardNaming;
         return config;
     }
 

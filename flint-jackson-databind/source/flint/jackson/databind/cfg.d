@@ -384,6 +384,8 @@ final class MapperConfig
     ulong enums = defaultFeatures!EnumFeature();
     /// The naming strategy applied to implicit names, or null.
     NameTranslator naming;
+    /// The strategy a `@JsonNaming` class names, or null when it has no binding.
+    NameTranslator function(string strategyClass) @safe classNaming;
     /// Default inclusion of property values (`JsonInclude.Include.ALWAYS`).
     JsonInclude.Include defaultInclusion = JsonInclude.Include.ALWAYS;
     /// Default inclusion of map and collection contents.
@@ -448,6 +450,7 @@ final class MapperConfig
         collector.sortCreatorPropertiesFirst = isEnabled(MapperFeature.SORT_CREATOR_PROPERTIES_FIRST);
         collector.implicitCreators = !constructorDetector.requireCtorAnnotation;
         collector.naming = naming;
+        collector.classNaming = classNaming;
         auto collected = collector.collect(d);
         synchronized (this)
             beans[d.name] = collected;
@@ -464,6 +467,7 @@ final class MapperConfig
         c.dateTime = dateTime;
         c.enums = enums;
         c.naming = naming;
+        c.classNaming = classNaming;
         c.defaultInclusion = defaultInclusion;
         c.defaultContentInclusion = defaultContentInclusion;
         c.constructorDetector = constructorDetector;

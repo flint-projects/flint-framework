@@ -1,4 +1,4 @@
-/// Jackson 3.1.8 under Spring Boot 4.2's default mapper on arrays, byte[], Optional, maps, enums and records: each
+/// Jackson 3.1.8 under Spring Boot 4.2's default mapper on arrays, byte[], Optional, maps, enums, records and @JsonNaming: each
 /// case is the D twin of a case in tests/golden/GoldenShapes.java, whose results the real Jackson wrote to
 /// tests/golden/shapes.tsv. Java's nested class names (`GoldenShapes$Color`) read as this module's (`shapes_test.Color`).
 module shapes_test;
@@ -7,8 +7,11 @@ import flint.engine.aot.any : Any;
 import flint.engine.aot.descriptor : ConstructorDescriptor, Descriptor, DescriptorTable, ParameterDescriptor,
     descriptorOf;
 import flint.jackson.core : JacksonException;
-import flint.jackson.databind : JsonMapper;
+import flint.jackson.annotation : JsonProperty;
+import flint.jackson.databind : JsonMapper, PropertyNamingStrategies;
+import flint.jackson.databind.annotation : JsonNaming;
 import flint.jackson.databind.deser : compactKeyOrder;
+import flint.java.lang : classOf;
 import flint.java.util : ArrayList, List, Optional;
 
 @safe:
@@ -54,6 +57,42 @@ private final class Shapes
     }
 }
 
+@JsonNaming(classOf!(PropertyNamingStrategies.SnakeCaseStrategy))
+private final class Snaked
+{
+    string firstName = "Ann";
+    int zipCode = 53_703;
+    @JsonProperty("Explicit") string renamed = "kept";
+
+    override string toString() const
+    {
+        import std.conv : to;
+
+        return firstName ~ " " ~ zipCode.to!string ~ " " ~ renamed;
+    }
+}
+
+@JsonNaming(classOf!(PropertyNamingStrategies.KebabCaseStrategy))
+private struct Kebab
+{
+    string homeTown;
+    int areaCode;
+}
+
+private Any invokeKebab(scope Any[] arguments) @safe
+{
+    return Any.of(Kebab(arguments[0].get!string(), arguments[1].get!int()));
+}
+
+private Descriptor kebabDescriptor()
+{
+    auto d = descriptorOf!Kebab();
+    d.constructors = ConstructorDescriptor([
+        ParameterDescriptor("homeTown", "string"), ParameterDescriptor("areaCode", "int")
+    ], null, &invokeKebab, true) ~ d.constructors;
+    return d;
+}
+
 private Any invokePoint(scope Any[] arguments) @safe
 {
     return Any.of(Point(arguments[0].get!int(), arguments[1].get!int(), arguments[2].get!string()));
@@ -77,7 +116,8 @@ private DescriptorTable table()
             descriptorOf!Shapes(), pointDescriptor(), descriptorOf!Color(), descriptorOf!(int[])(),
             descriptorOf!(string[])(), descriptorOf!(byte[])(), descriptorOf!(double[])(),
             descriptorOf!(Optional!string)(), descriptorOf!(Optional!int)(), descriptorOf!(int[string])(),
-            descriptorOf!(List!Color)(), descriptorOf!(ArrayList!Color)(), descriptorOf!(Point[])()
+            descriptorOf!(List!Color)(), descriptorOf!(ArrayList!Color)(), descriptorOf!(Point[])(),
+            descriptorOf!Snaked(), kebabDescriptor()
         ])
         t.add(d);
     return t;
@@ -105,6 +145,14 @@ private string written(string name)
         return m.writeValueAsString(cast(byte[])[]);
     case "optional_empty":
         return m.writeValueAsString(Optional!string.init);
+    case "snaked":
+        return m.writeValueAsString(new Snaked());
+    case "kebab":
+        return m.writeValueAsString(Kebab("Madison", 608));
+    case "kebab_over_global":
+        return JsonMapper.builder().findAndAddModules().descriptors(table())
+            .propertyNamingStrategy(PropertyNamingStrategies.UPPER_CAMEL_CASE()).build()
+            .writeValueAsString(Kebab("Madison", 608));
     default:
         assert(false, name);
     }
@@ -181,6 +229,11 @@ private string read(string type, string json)
             return list(m.readValue!(byte[])(json));
         case "Point":
             return point(m.readValue!Point(json));
+        case "Snaked":
+            return m.readValue!Snaked(json).toString();
+        case "Kebab":
+            const k = m.readValue!Kebab(json);
+            return "Kebab[homeTown=" ~ k.homeTown ~ ", areaCode=" ~ k.areaCode.to!string ~ "]";
         default:
             return shapes(m.readValue!Shapes(json));
         }
@@ -204,7 +257,7 @@ unittest
         assert(got == expected, row[1] ~ " " ~ row[2] ~ "\nflint:   " ~ got ~ "\njackson: " ~ expected);
         ++(row[0] == "write" ? writes : reads);
     }
-    assert(writes == 6 && reads == 18);
+    assert(writes == 9 && reads == 20);
 }
 
 @("CompactStringObjectMap key order: primary slots, then secondary slots, then the spill area")

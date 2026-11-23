@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import tools.jackson.core.JacksonException;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 import tools.jackson.databind.json.JsonMapper;
 
 public class GoldenShapes {
@@ -34,6 +37,17 @@ public class GoldenShapes {
         public Point point = new Point(1, 2, "p");
         public Point[] points = {new Point(3, 4, null)};
     }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static class Snaked {
+        public String firstName = "Ann";
+        public int zipCode = 53703;
+        @JsonProperty("Explicit") public String renamed = "kept";
+        public String toString() { return firstName + " " + zipCode + " " + renamed; }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.KebabCaseStrategy.class)
+    public record Kebab(String homeTown, int areaCode) {}
 
     static void write(JsonMapper mapper, String name, Object value) {
         lines.add("write\t" + name + "\t-\t" + mapper.writeValueAsString(value));
@@ -69,6 +83,10 @@ public class GoldenShapes {
         write(boot, "ints", new int[] {4, 5});
         write(boot, "bytes_empty", new byte[0]);
         write(boot, "optional_empty", Optional.empty());
+        write(boot, "snaked", new Snaked());
+        write(boot, "kebab", new Kebab("Madison", 608));
+        write(JsonMapper.builder().findAndAddModules().propertyNamingStrategy(PropertyNamingStrategies.UPPER_CAMEL_CASE)
+            .build(), "kebab_over_global", new Kebab("Madison", 608));
 
         read(boot, "Color", new tools.jackson.core.type.TypeReference<Color>() {}, "\"GREEN\"");
         read(boot, "Color", new tools.jackson.core.type.TypeReference<Color>() {}, "2");
@@ -90,6 +108,10 @@ public class GoldenShapes {
         read(boot, "Shapes", new tools.jackson.core.type.TypeReference<Shapes>() {},
             "{\"present\":null,\"absent\":\"now\",\"color\":\"RED\",\"palette\":[\"GREEN\"],\"scores\":{\"bob\":1},"
             + "\"counts\":[],\"points\":[{\"x\":9,\"y\":8,\"label\":\"r\"}]}");
+        read(boot, "Snaked", new tools.jackson.core.type.TypeReference<Snaked>() {},
+            "{\"first_name\":\"Bo\",\"zip_code\":1,\"Explicit\":\"x\",\"firstName\":\"ignored\"}");
+        read(boot, "Kebab", new tools.jackson.core.type.TypeReference<Kebab>() {},
+            "{\"home-town\":\"Verona\",\"area-code\":608}");
         Files.writeString(Path.of(args[0]), String.join("\n", lines) + "\n");
     }
 }

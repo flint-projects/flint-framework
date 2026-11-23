@@ -4,6 +4,9 @@ write	point	-	{"x":5,"y":6,"label":"q"}
 write	ints	-	[4,5]
 write	bytes_empty	-	""
 write	optional_empty	-	null
+write	snaked	-	{"Explicit":"kept","first_name":"Ann","zip_code":53703}
+write	kebab	-	{"home-town":"Madison","area-code":608}
+write	kebab_over_global	-	{"home-town":"Madison","area-code":608}
 read	Color	"GREEN"	GREEN
 read	Color	2	BLUE
 read	Color	"PURPLE"	!Cannot deserialize value of type `GoldenShapes$Color` from String "PURPLE": not one of the values accepted for Enum class: [RED, BLUE, GREEN]
@@ -22,3 +25,5 @@ read	Point	{"x":1}	!Cannot map `null` into type `int` (set `DeserializationFeatu
 read	Point	{"x":null,"y":1}	!Cannot map `null` into type `int` (set `DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` to 'false' to allow)
 read	Shapes	{"absent":null,"bytes":"AQID/w==","color":"GREEN","counts":[1,2,3],"empty":[],"names":["a","b"],"number":7,"palette":["BLUE","RED"],"point":{"x":1,"y":2,"label":"p"},"points":[{"x":3,"y":4,"label":null}],"present":"here","scores":{"ann":3}}	[1, 2, 3] [a, b] [1, 2, 3, -1] [] Optional[here] Optional.empty Optional[7] {ann=3} GREEN [BLUE, RED] Point[x=1, y=2, label=p] [Point[x=3, y=4, label=null]]
 read	Shapes	{"present":null,"absent":"now","color":"RED","palette":["GREEN"],"scores":{"bob":1},"counts":[],"points":[{"x":9,"y":8,"label":"r"}]}	[] [a, b] [1, 2, 3, -1] [] Optional.empty Optional[now] Optional[7] {bob=1} RED [GREEN] Point[x=1, y=2, label=p] [Point[x=9, y=8, label=r]]
+read	Snaked	{"first_name":"Bo","zip_code":1,"Explicit":"x","firstName":"ignored"}	Bo 1 x
+read	Kebab	{"home-town":"Verona","area-code":608}	Kebab[homeTown=Verona, areaCode=608]

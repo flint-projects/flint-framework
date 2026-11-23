@@ -24,6 +24,8 @@ import flint.engine.aot.name : typeNameOf;
 import std.traits : isDynamicArray;
 import flint.jackson.annotation : JsonAlias, JsonCreator, JsonFormat, JsonGetter, JsonIgnore, JsonIgnoreProperties,
     JsonInclude, JsonIncludeProperties, JsonProperty, JsonPropertyOrder, JsonRawValue, JsonSetter, JsonValue;
+import flint.jackson.databind.annotation : JsonNaming;
+import flint.jackson.databind.exc : InvalidDefinitionException;
 
 @safe:
 
@@ -152,6 +154,8 @@ struct POJOPropertiesCollector
     bool implicitCreators = true;
     /// The naming strategy, or null.
     NameTranslator naming;
+    /// The strategy a `@JsonNaming` class names, or null when it has no binding.
+    NameTranslator function(string strategyClass) @safe classNaming;
 
     /// Collect the logical properties of the type `d` describes.
     BeanDescription collect(const Descriptor d)
@@ -349,13 +353,24 @@ struct POJOPropertiesCollector
         bean.properties = kept;
     }
 
+    // A class's @JsonNaming overrides the mapper's strategy.
     private void rename(BeanDescription bean)
     {
-        if (naming is null)
+        auto translator = naming;
+        JsonNaming named;
+        if (annotation(bean.descriptor.annotations, named) && named.value.name.length)
+        {
+            translator = classNaming is null ? null : classNaming(named.value.name);
+            if (translator is null)
+                throw new InvalidDefinitionException("Cannot construct naming strategy `" ~ named.value.name ~ "` for `"
+                        ~ bean.descriptor.name ~ "`: Flint binds the standard PropertyNamingStrategies only",
+                        bean.descriptor.name);
+        }
+        if (translator is null)
             return;
         foreach (p; bean.properties)
             if (!p.explicitName)
-                p.name = naming(p.name);
+                p.name = translator(p.name);
     }
 
     // _sortProperties: @JsonPropertyOrder names, then indexed properties, then creator properties in creator
